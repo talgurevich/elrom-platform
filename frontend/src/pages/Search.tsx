@@ -1,5 +1,39 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type FailureMode, type RetrievalDebugRow, type SearchResponse } from "../lib/api";
+
+// Approximate timings of the real pipeline. The label advances on a timer
+// that loosely tracks the typical request profile — embedding (~0.5s) →
+// retrieval (~1-2s) → rerank (~1s) → Claude (~5-10s). We don't know exactly
+// where we are server-side, but the order is right.
+const PIPELINE_STAGES: { at: number; label: string; icon: string }[] = [
+  { at: 0, label: "מנתח את השאלה", icon: "🔎" },
+  { at: 700, label: "מחפש בארכיון", icon: "📚" },
+  { at: 2200, label: "מדרג מקורות", icon: "🎯" },
+  { at: 4000, label: "מנסח תשובה", icon: "✍️" },
+  { at: 12000, label: "כמעט מוכן", icon: "⌛" },
+];
+
+function useStageLabel(loading: boolean): { label: string; icon: string } | null {
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    if (!loading) {
+      setStage(0);
+      return;
+    }
+    const start = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - start;
+      let next = 0;
+      for (let i = 0; i < PIPELINE_STAGES.length; i++) {
+        if (elapsed >= PIPELINE_STAGES[i].at) next = i;
+      }
+      setStage(next);
+    }, 200);
+    return () => clearInterval(id);
+  }, [loading]);
+  if (!loading) return null;
+  return PIPELINE_STAGES[stage];
+}
 
 const confidenceColors: Record<string, string> = {
   confident: "bg-emerald-50 text-emerald-900 border-emerald-200",
@@ -112,6 +146,8 @@ export default function Search() {
   const [promoted, setPromoted] = useState(false);
   const [promoting, setPromoting] = useState(false);
 
+  const stage = useStageLabel(loading);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
@@ -187,13 +223,36 @@ export default function Search() {
             className="w-full px-4 py-3 bg-white border border-stone-300 rounded-xl shadow-soft focus:border-accent focus:ring-4 focus:ring-accent/15 outline-none text-base resize-none transition"
           />
         </div>
-        <button
-          type="submit"
-          disabled={loading || !question.trim()}
-          className="mt-3 px-6 py-2.5 bg-brand-gradient text-white font-semibold rounded-full shadow-soft hover:shadow-lift disabled:opacity-50 disabled:shadow-none transition"
-        >
-          {loading ? "מחפש..." : "שאל"}
-        </button>
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <button
+            type="submit"
+            disabled={loading || !question.trim()}
+            className="px-6 py-2.5 bg-brand-gradient text-white font-semibold rounded-full shadow-soft hover:shadow-lift disabled:opacity-50 disabled:shadow-none transition min-w-[110px]"
+          >
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-full bg-white/80 animate-pulse" />
+                <span>חושב</span>
+              </span>
+            ) : (
+              "שאל"
+            )}
+          </button>
+          {stage && (
+            <div
+              key={stage.label}
+              className="flex items-center gap-2 text-sm text-ink-soft animate-fade-up"
+            >
+              <span className="text-base leading-none">{stage.icon}</span>
+              <span>{stage.label}</span>
+              <span className="inline-block">
+                <span className="inline-block animate-pulse">.</span>
+                <span className="inline-block animate-pulse [animation-delay:200ms]">.</span>
+                <span className="inline-block animate-pulse [animation-delay:400ms]">.</span>
+              </span>
+            </div>
+          )}
+        </div>
       </form>
 
       {error && (
