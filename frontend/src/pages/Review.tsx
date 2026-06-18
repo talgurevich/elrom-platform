@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type QueryListItem } from "../lib/api";
+import { api, type QueryListItem, type SearchResponse } from "../lib/api";
 
 export default function Review() {
   const [queries, setQueries] = useState<QueryListItem[]>([]);
@@ -10,6 +10,8 @@ export default function Review() {
   const [editText, setEditText] = useState("");
   const [editNote, setEditNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [retries, setRetries] = useState<Record<string, SearchResponse>>({});
+  const [retrying, setRetrying] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -43,6 +45,19 @@ export default function Review() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const retry = async (q: QueryListItem) => {
+    setRetrying(q.id);
+    setError(null);
+    try {
+      const result = await api.search(q.question);
+      setRetries((cur) => ({ ...cur, [q.id]: result }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRetrying(null);
     }
   };
 
@@ -157,60 +172,103 @@ export default function Review() {
                   </div>
                 )}
 
-                {q.reviewer_action ? (
-                  <div className="text-xs text-ink-soft italic">פעולה כבר נרשמה.</div>
-                ) : (
-                  <div className="flex gap-2 text-sm">
-                    {isEditing ? (
-                      <>
-                        <button
-                          onClick={() => approve(q, true)}
-                          disabled={busy || !editText.trim()}
-                          className="px-3 py-1.5 bg-accent text-white rounded disabled:opacity-50"
-                        >
-                          ערוך + אשר
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingId(null);
-                            setEditText("");
-                            setEditNote("");
-                          }}
-                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
-                        >
-                          ביטול
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => approve(q, false)}
-                          disabled={busy || !q.answer}
-                          className="px-3 py-1.5 bg-emerald-600 text-white rounded disabled:opacity-50"
-                        >
-                          ✓ אשר
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingId(q.id);
-                            setEditText(q.answer || "");
-                          }}
-                          disabled={busy}
-                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
-                        >
-                          ערוך + אשר
-                        </button>
-                        <button
-                          onClick={() => reject(q)}
-                          disabled={busy}
-                          className="px-3 py-1.5 bg-red-50 text-red-900 border border-red-200 hover:bg-red-100 rounded mr-auto"
-                        >
-                          ✕ דחה
-                        </button>
-                      </>
+                {retries[q.id] && (
+                  <div className="mt-3 mb-4 p-4 bg-sky-50 border border-sky-200 rounded-lg">
+                    <div className="text-[10px] uppercase tracking-wider text-sky-900 font-bold mb-2 flex items-center gap-2">
+                      <span>🔁 תשובה חדשה</span>
+                      <span className="text-sky-700 font-mono">
+                        {retries[q.id].confidence}
+                      </span>
+                    </div>
+                    <div className="text-ink text-sm whitespace-pre-wrap leading-relaxed mb-3">
+                      {retries[q.id].answer}
+                    </div>
+                    {retries[q.id].references && retries[q.id].references.length > 0 && (
+                      <div className="space-y-1">
+                        {retries[q.id].references.map((r, i) => (
+                          <div
+                            key={`${q.id}-r-${i}`}
+                            className="text-[11px] text-ink-soft"
+                          >
+                            <span className="font-semibold text-sky-900">{r.title}</span>
+                            {r.section_number && (
+                              <span className="font-mono"> · סעיף {r.section_number}</span>
+                            )}
+                            {r.excerpt && (
+                              <span className="block italic mt-0.5 pr-3 border-r-2 border-sky-300">
+                                "{r.excerpt}"
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
+
+                <div className="flex gap-2 text-sm flex-wrap">
+                  <button
+                    onClick={() => retry(q)}
+                    disabled={retrying === q.id}
+                    className="px-3 py-1.5 bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 rounded disabled:opacity-50"
+                    title="הרץ את השאלה שוב מול המערכת העדכנית"
+                  >
+                    {retrying === q.id ? "מריץ..." : retries[q.id] ? "🔁 הרץ שוב" : "🔁 הרץ שוב"}
+                  </button>
+
+                  {q.reviewer_action ? (
+                    <div className="text-xs text-ink-soft italic self-center">
+                      פעולה כבר נרשמה.
+                    </div>
+                  ) : isEditing ? (
+                    <>
+                      <button
+                        onClick={() => approve(q, true)}
+                        disabled={busy || !editText.trim()}
+                        className="px-3 py-1.5 bg-accent text-white rounded disabled:opacity-50"
+                      >
+                        ערוך + אשר
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditText("");
+                          setEditNote("");
+                        }}
+                        className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
+                      >
+                        ביטול
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => approve(q, false)}
+                        disabled={busy || !q.answer}
+                        className="px-3 py-1.5 bg-emerald-600 text-white rounded disabled:opacity-50"
+                      >
+                        ✓ אשר
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingId(q.id);
+                          setEditText(q.answer || "");
+                        }}
+                        disabled={busy}
+                        className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
+                      >
+                        ערוך + אשר
+                      </button>
+                      <button
+                        onClick={() => reject(q)}
+                        disabled={busy}
+                        className="px-3 py-1.5 bg-red-50 text-red-900 border border-red-200 hover:bg-red-100 rounded mr-auto"
+                      >
+                        ✕ דחה
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
