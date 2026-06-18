@@ -25,7 +25,11 @@ DEFAULT_MODEL = "prebuilt-read"
 # Azure Free F0 limit is 4 MB. We split anything above 3.5 MB to leave headroom.
 MAX_FILE_BYTES = 3_500_000
 # Target pages per split chunk when we have to split.
-PAGES_PER_CHUNK = 8
+PAGES_PER_CHUNK = 4
+# Even small files get split when they exceed this many pages — Azure DI
+# silently truncates long scanned PDFs (observed: 12-page file returned only
+# page-1 text in a single call but full content when split into 4-page batches).
+MAX_PAGES_PER_CALL = 4
 
 
 @lru_cache(maxsize=1)
@@ -107,10 +111,16 @@ def ocr_pdf(path: Path, model: str = DEFAULT_MODEL) -> str:
     If the file exceeds the Azure Free tier 4 MB limit, splits into smaller
     page batches and concatenates the OCR results.
     """
-    size = path.stat().st_size
-    log.info("ocr.start", path=str(path), model=model, file_bytes=size)
+    import pymupdf
 
-    if size <= MAX_FILE_BYTES:
+    size = path.stat().st_size
+    with pymupdf.open(path) as _probe:
+        page_count = _probe.page_count
+    log.info("ocr.start", path=str(path), model=model, file_bytes=size, pages=page_count)
+
+    # Single-call only when both small enough AND short enough. Long PDFs get
+    # silently truncated by Azure DI on a single call.
+    if size <= MAX_FILE_BYTES and page_count <= MAX_PAGES_PER_CALL:
         text, n_para = _ocr_single(path, model)
         log.info("ocr.done", path=str(path), chars=len(text), paragraphs=n_para)
         return text
