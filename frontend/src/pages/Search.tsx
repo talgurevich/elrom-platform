@@ -309,31 +309,66 @@ export default function Search() {
             </div>
           )}
 
-          {result.sources.length > 0 && (
+          {result.references && result.references.length > 0 && (
             <div>
               <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
-                מקורות
+                סימוכין
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2">
+                {result.references.map((r, i) => (
+                  <div
+                    key={`${r.title}-${r.section_number}-${i}`}
+                    className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
+                  >
+                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                      <span className="font-semibold text-accent">{r.title}</span>
+                      {r.section_number && (
+                        <span className="text-sm text-ink font-mono">
+                          סעיף {r.section_number}
+                        </span>
+                      )}
+                      {r.source_type && (
+                        <span className="text-[10px] tracking-widest uppercase text-ink-soft mr-auto">
+                          {r.source_type}
+                        </span>
+                      )}
+                    </div>
+                    {r.excerpt && (
+                      <blockquote className="text-sm text-ink-soft leading-relaxed border-r-2 border-accent/30 pr-3 italic">
+                        "{r.excerpt}"
+                      </blockquote>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {result.sources.length > 0 && (
+            <details className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-soft">
+              <summary className="px-4 py-3 cursor-pointer hover:bg-stone-50 text-sm font-semibold text-ink-soft">
+                קטעי טקסט שנשלפו ({result.sources.length})
+              </summary>
+              <div className="px-4 py-3 border-t border-stone-200 space-y-3 bg-stone-50/50">
                 {result.sources.map((s, i) => (
                   <details
                     key={s.chunk_id}
-                    className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-soft"
+                    className="bg-white border border-stone-200 rounded-lg overflow-hidden"
                   >
-                    <summary className="px-4 py-3 cursor-pointer hover:bg-stone-50 text-sm">
+                    <summary className="px-3 py-2 cursor-pointer hover:bg-stone-50 text-sm">
                       <span className="font-semibold text-accent">[{i + 1}]</span>{" "}
                       <span className="text-ink">{s.document_filename}</span>
                       {s.section_path && (
                         <span className="text-ink-soft mr-2">⋅ {s.section_path}</span>
                       )}
                     </summary>
-                    <div className="px-4 py-3 border-t border-stone-200 text-sm leading-relaxed whitespace-pre-wrap bg-stone-50">
+                    <div className="px-3 py-2 border-t border-stone-200 text-xs leading-relaxed whitespace-pre-wrap bg-stone-50">
                       {s.text}
                     </div>
                   </details>
                 ))}
               </div>
-            </div>
+            </details>
           )}
 
           {result.retrieval_debug && <DebugPanel debug={result.retrieval_debug} />}

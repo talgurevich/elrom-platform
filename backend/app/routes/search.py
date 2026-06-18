@@ -38,6 +38,13 @@ class SourceCitation(BaseModel):
     text: str
 
 
+class StructuredReference(BaseModel):
+    title: str
+    section_number: str
+    source_type: str
+    excerpt: str
+
+
 class NearMiss(BaseModel):
     authoritative_answer_id: UUID
     canonical_question: str
@@ -51,6 +58,7 @@ class SearchResponse(BaseModel):
     answer: str
     confidence: str  # confident | uncertain | refused
     sources: list[SourceCitation]
+    references: list[StructuredReference] = []
     llm_used: bool
     served_from: str  # "hitl_cache" | "llm" | "no_documents"
     retrieval_debug: dict | None = None
@@ -196,12 +204,23 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
     db.commit()
     db.refresh(query_log)
 
+    references = [
+        StructuredReference(
+            title=r.title,
+            section_number=r.section_number,
+            source_type=r.source_type,
+            excerpt=r.excerpt,
+        )
+        for r in llm_result.references
+    ]
+
     return SearchResponse(
         query_id=query_log.id,
         question=req.question,
         answer=llm_result.answer,
         confidence=llm_result.confidence,
         sources=sources,
+        references=references,
         llm_used=True,
         served_from="llm",
         retrieval_debug=debug_dict,

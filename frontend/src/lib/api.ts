@@ -44,6 +44,13 @@ export type RetrievalDebug = {
   reranked: RetrievalDebugRow[];
 };
 
+export type StructuredReference = {
+  title: string;
+  section_number: string;
+  source_type: string;
+  excerpt: string;
+};
+
 export type NearMiss = {
   authoritative_answer_id: string;
   canonical_question: string;
@@ -57,6 +64,7 @@ export type SearchResponse = {
   answer: string;
   confidence: "confident" | "uncertain" | "refused";
   sources: Source[];
+  references: StructuredReference[];
   llm_used: boolean;
   served_from: "hitl_cache" | "llm" | "no_documents";
   retrieval_debug: RetrievalDebug | null;
