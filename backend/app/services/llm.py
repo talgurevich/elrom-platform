@@ -42,15 +42,30 @@ class LLMResult:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-def answer_with_citations(*, question: str, chunks: list[Chunk]) -> LLMResult:
-    """Ask Claude to produce a cited answer based on retrieved chunks."""
+def answer_with_citations(
+    *,
+    question: str,
+    chunks: list[Chunk],
+    lexicon_block: str = "",
+) -> LLMResult:
+    """Ask Claude to produce a cited answer based on retrieved chunks.
+
+    lexicon_block: optional domain-term expansions to include before the sources.
+    """
     sources_block = "\n\n".join(
         f"[{i + 1}] (מקור: {c.document.filename}{(' / ' + c.section_path) if c.section_path else ''})\n{c.text}"
         for i, c in enumerate(chunks)
     )
 
+    lexicon_section = (
+        f"מילון מונחים רלוונטי (להתבסס עליו כשמופיע מונח כזה):\n{lexicon_block}\n\n"
+        if lexicon_block
+        else ""
+    )
+
     user_message = (
         f"שאלה: {question}\n\n"
+        f"{lexicon_section}"
         f"קטעי הקשר ממסמכי הקיבוץ:\n\n{sources_block}\n\n"
         f"ענה בהתאם לכללים, בפורמט ה-JSON הנדרש."
     )

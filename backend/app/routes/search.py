@@ -17,6 +17,7 @@ from app.db import get_db
 from app.models import AuthoritativeAnswer, Chunk, Query, Tenant
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer
+from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
 from app.services.retrieval import hybrid_retrieve
 
@@ -139,8 +140,12 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
             served_from="no_documents",
         )
 
-    # 3. Generate answer with Claude
-    llm_result = answer_with_citations(question=req.question, chunks=retrieved)
+    # 3. Generate answer with Claude — include lexicon expansions if any
+    lexicon_entries = find_relevant_terms(db, tenant_id=tenant_id, question=req.question)
+    lexicon_block = format_lexicon_block(lexicon_entries)
+    llm_result = answer_with_citations(
+        question=req.question, chunks=retrieved, lexicon_block=lexicon_block
+    )
 
     sources = [
         SourceCitation(

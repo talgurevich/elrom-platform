@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AuthoritativeAnswer, Query, Tenant
+from app.models import AuthoritativeAnswer, Lexicon, Query, Tenant
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -226,4 +226,123 @@ def update_authoritative(
 
     db.commit()
     log.info("reviewer.authoritative_updated", auth_id=str(auth_id))
+    return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Lexicon — per-tenant domain term expansions
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class LexiconItem(BaseModel):
+    id: UUID
+    term: str
+    expansion: str
+    notes: str | None
+    updated_at: str
+
+
+class CreateLexiconRequest(BaseModel):
+    term: str
+    expansion: str
+    notes: str | None = None
+    tenant_id: UUID | None = None
+
+
+class UpdateLexiconRequest(BaseModel):
+    term: str | None = None
+    expansion: str | None = None
+    notes: str | None = None
+
+
+@router.get("/lexicon", response_model=list[LexiconItem])
+def list_lexicon(
+    db: Session = Depends(get_db),
+    tenant_id: UUID | None = QParam(None),
+) -> list[LexiconItem]:
+    """List lexicon entries for a tenant."""
+    if tenant_id is None:
+        tenant = db.query(Tenant).first()
+        if not tenant:
+            raise HTTPException(400, "No tenant exists.")
+        tenant_id = tenant.id
+
+    rows = (
+        db.query(Lexicon)
+        .filter(Lexicon.tenant_id == tenant_id)
+        .order_by(Lexicon.term)
+        .all()
+    )
+    return [
+        LexiconItem(
+            id=r.id,
+            term=r.term,
+            expansion=r.expansion,
+            notes=r.notes,
+            updated_at=r.updated_at.isoformat() if r.updated_at else "",
+        )
+        for r in rows
+    ]
+
+
+@router.post("/lexicon", response_model=LexiconItem)
+def create_lexicon(req: CreateLexiconRequest, db: Session = Depends(get_db)) -> LexiconItem:
+    """Add a new lexicon entry."""
+    tenant_id = req.tenant_id
+    if tenant_id is None:
+        tenant = db.query(Tenant).first()
+        if not tenant:
+            raise HTTPException(400, "No tenant exists.")
+        tenant_id = tenant.id
+
+    if not req.term.strip() or not req.expansion.strip():
+        raise HTTPException(400, "term and expansion are required")
+
+    entry = Lexicon(
+        tenant_id=tenant_id,
+        term=req.term.strip(),
+        expansion=req.expansion.strip(),
+        notes=req.notes,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    log.info("lexicon.created", term=entry.term)
+    return LexiconItem(
+        id=entry.id,
+        term=entry.term,
+        expansion=entry.expansion,
+        notes=entry.notes,
+        updated_at=entry.updated_at.isoformat() if entry.updated_at else "",
+    )
+
+
+@router.patch("/lexicon/{lex_id}")
+def update_lexicon(
+    lex_id: UUID, req: UpdateLexiconRequest, db: Session = Depends(get_db)
+) -> dict:
+    """Edit a lexicon entry."""
+    entry = db.get(Lexicon, lex_id)
+    if entry is None:
+        raise HTTPException(404, "Lexicon entry not found")
+    if req.term is not None:
+        entry.term = req.term.strip()
+    if req.expansion is not None:
+        entry.expansion = req.expansion.strip()
+    if req.notes is not None:
+        entry.notes = req.notes
+    db.commit()
+    log.info("lexicon.updated", lex_id=str(lex_id))
+    return {"status": "ok"}
+
+
+@router.delete("/lexicon/{lex_id}")
+def delete_lexicon(lex_id: UUID, db: Session = Depends(get_db)) -> dict:
+    """Delete a lexicon entry."""
+    entry = db.get(Lexicon, lex_id)
+    if entry is None:
+        raise HTTPException(404, "Lexicon entry not found")
+    db.delete(entry)
+    db.commit()
+    log.info("lexicon.deleted", lex_id=str(lex_id))
     return {"status": "ok"}
