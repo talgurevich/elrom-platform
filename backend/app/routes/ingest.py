@@ -50,28 +50,33 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
     db.add(doc)
     db.flush()  # get the id without committing
 
-    chunk_texts = chunk_document(req.text)
-    if not chunk_texts:
+    structural_chunks = chunk_document(req.text)
+    if not structural_chunks:
         raise HTTPException(400, "Document produced no chunks.")
 
-    embeddings = embed_texts(chunk_texts)
+    embeddings = embed_texts([sc.text for sc in structural_chunks])
 
-    for i, (chunk_text, embedding) in enumerate(zip(chunk_texts, embeddings, strict=True)):
+    for sc, embedding in zip(structural_chunks, embeddings, strict=True):
         chunk = Chunk(
             document_id=doc.id,
             tenant_id=tenant_id,
-            position=i,
-            text=chunk_text,
+            position=sc.position,
+            section_path=sc.section_path,
+            text=sc.text,
             embedding=embedding,
         )
         db.add(chunk)
         db.flush()
-        # Populate text_search via Postgres FTS (basic for now; lemmatization comes later)
         db.execute(
             text("UPDATE chunks SET text_search = to_tsvector('simple', text) WHERE id = :cid"),
             {"cid": chunk.id},
         )
 
     db.commit()
-    log.info("ingest.complete", document_id=str(doc.id), chunks=len(chunk_texts))
-    return IngestResponse(document_id=doc.id, chunks_created=len(chunk_texts))
+    log.info(
+        "ingest.complete",
+        document_id=str(doc.id),
+        chunks=len(structural_chunks),
+        with_section_path=sum(1 for c in structural_chunks if c.section_path),
+    )
+    return IngestResponse(document_id=doc.id, chunks_created=len(structural_chunks))

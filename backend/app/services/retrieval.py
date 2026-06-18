@@ -1,14 +1,18 @@
-"""Retrieval service — hybrid (vector + BM25) lookup over chunks.
+"""Retrieval service — hybrid (vector + BM25) lookup over chunks + Cohere rerank.
 
-MVP scope: combine vector similarity and Postgres full-text search results.
-A reranker layer (Cohere Rerank) is added in Week 2.
+Pipeline:
+  1. Pull top ~4*K candidates by vector cosine similarity
+  2. Pull top ~4*K candidates by Postgres FTS (BM25-ish)
+  3. Reciprocal-rank fusion to get a unified ranking
+  4. Cohere Rerank to tighten the final top_k
 """
 from uuid import UUID
 
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Chunk
+from app.services.reranker import rerank
 
 
 def hybrid_retrieve(
@@ -19,7 +23,7 @@ def hybrid_retrieve(
     query_embedding: list[float],
     top_k: int = 5,
 ) -> list[Chunk]:
-    """Return top-k chunks by hybrid score (vector + keyword)."""
+    """Return top-k chunks by hybrid score + rerank."""
     vector_results = (
         db.query(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("dist"))
         .filter(Chunk.tenant_id == tenant_id)
@@ -58,15 +62,25 @@ def hybrid_retrieve(
     for i, (chunk_id, _) in enumerate(bm25_sorted):
         combined[chunk_id] = combined.get(chunk_id, 0.0) + 1.0 / (i + 60)
 
-    top_ids = [cid for cid, _ in sorted(combined.items(), key=lambda kv: kv[1], reverse=True)[:top_k]]
+    # Take a larger candidate set for the reranker to work with
+    candidate_n = max(top_k * 4, 12)
+    top_ids = [
+        cid for cid, _ in sorted(combined.items(), key=lambda kv: kv[1], reverse=True)[:candidate_n]
+    ]
 
     if not top_ids:
         return []
 
-    # Re-fetch with relationship loaded so the route can read filename without N+1
-    return (
+    candidates = (
         db.query(Chunk)
         .filter(Chunk.id.in_(top_ids))
         .options(joinedload(Chunk.document))
         .all()
     )
+
+    # Preserve the hybrid order before reranking
+    order_map = {cid: i for i, cid in enumerate(top_ids)}
+    candidates.sort(key=lambda c: order_map.get(c.id, 1_000_000))
+
+    # Cohere Rerank tightens the final top_k
+    return rerank(query, candidates, top_n=top_k)
