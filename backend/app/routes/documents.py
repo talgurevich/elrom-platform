@@ -247,6 +247,37 @@ def classify_documents(
     )
 
 
+class ChunkPreview(BaseModel):
+    position: int
+    section_path: str | None
+    chars: int
+    text: str
+
+
+@router.get("/{document_id}/chunks", response_model=list[ChunkPreview])
+def get_chunks(document_id: UUID, db: Session = Depends(get_db)) -> list[ChunkPreview]:
+    """Return all chunks of a document with their text. For debugging chunking
+    + OCR quality."""
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(404, "Document not found")
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == document_id)
+        .order_by(Chunk.position)
+        .all()
+    )
+    return [
+        ChunkPreview(
+            position=c.position,
+            section_path=c.section_path,
+            chars=len(c.text or ""),
+            text=c.text or "",
+        )
+        for c in chunks
+    ]
+
+
 @router.delete("/{document_id}")
 def delete_document(document_id: UUID, db: Session = Depends(get_db)) -> dict:
     """Delete a document and its chunks (queries that reference its chunks become orphaned but stay)."""
