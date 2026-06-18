@@ -346,3 +346,23 @@ def delete_lexicon(lex_id: UUID, db: Session = Depends(get_db)) -> dict:
     db.commit()
     log.info("lexicon.deleted", lex_id=str(lex_id))
     return {"status": "ok"}
+
+
+class LexiconSuggestion(BaseModel):
+    term: str
+    expansion: str
+    why: str
+    source_question: str
+    source_query_id: str
+
+
+@router.post("/lexicon/suggestions", response_model=list[LexiconSuggestion])
+def lexicon_suggestions(db: Session = Depends(get_db)) -> list[LexiconSuggestion]:
+    """Propose lexicon entries from recent failed queries (Claude Haiku-driven)."""
+    from app.services.lexicon import suggest_lexicon_entries_from_failures
+
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        raise HTTPException(400, "No tenant exists.")
+    items = suggest_lexicon_entries_from_failures(db, tenant_id=tenant.id, limit=10)
+    return [LexiconSuggestion(**i) for i in items]

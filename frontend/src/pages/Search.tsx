@@ -204,6 +204,32 @@ export default function Search() {
 
       {result && (
         <div className="space-y-6 animate-fade-up">
+          {result.near_misses && result.near_misses.length > 0 && (
+            <div className="p-4 border border-amber-300 bg-amber-50 rounded-xl shadow-soft">
+              <div className="text-xs font-bold text-amber-900 tracking-wide mb-2 flex items-center gap-2">
+                <span>⚡</span>
+                <span>קיימת תשובה מאושרת קרובה בארכיון</span>
+              </div>
+              <div className="space-y-2">
+                {result.near_misses.map((nm) => (
+                  <details
+                    key={nm.authoritative_answer_id}
+                    className="bg-white border border-amber-200 rounded-lg"
+                  >
+                    <summary className="px-3 py-2 cursor-pointer text-sm">
+                      <span className="text-amber-900 font-semibold">
+                        {Math.round(nm.similarity * 100)}% דמיון:
+                      </span>{" "}
+                      <span className="text-ink">{nm.canonical_question}</span>
+                    </summary>
+                    <div className="px-3 py-2 border-t border-amber-200 text-sm leading-relaxed whitespace-pre-wrap text-ink-soft">
+                      {nm.answer}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
           <div className={`p-5 border rounded-xl shadow-soft ${confidenceColors[result.confidence] || ""}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs tracking-wider uppercase font-bold">

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import AuthoritativeAnswer, Chunk, Query, Tenant
 from app.services.embedding import embed_texts
-from app.services.hitl import find_cached_answer
+from app.services.hitl import find_cached_answer, find_near_misses
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
 from app.services.retrieval import hybrid_retrieve
@@ -38,6 +38,13 @@ class SourceCitation(BaseModel):
     text: str
 
 
+class NearMiss(BaseModel):
+    authoritative_answer_id: UUID
+    canonical_question: str
+    answer: str
+    similarity: float
+
+
 class SearchResponse(BaseModel):
     query_id: UUID
     question: str
@@ -47,6 +54,7 @@ class SearchResponse(BaseModel):
     llm_used: bool
     served_from: str  # "hitl_cache" | "llm" | "no_documents"
     retrieval_debug: dict | None = None
+    near_misses: list[NearMiss] = []
 
 
 def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
@@ -150,6 +158,19 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
         question=req.question, chunks=retrieved, lexicon_block=lexicon_block
     )
 
+    near_miss_rows = find_near_misses(
+        db, tenant_id=tenant_id, question_embedding=question_embedding
+    )
+    near_misses = [
+        NearMiss(
+            authoritative_answer_id=a.id,
+            canonical_question=a.canonical_question,
+            answer=a.answer,
+            similarity=round(sim, 3),
+        )
+        for a, sim in near_miss_rows
+    ]
+
     sources = [
         SourceCitation(
             chunk_id=c.id,
@@ -184,6 +205,7 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
         llm_used=True,
         served_from="llm",
         retrieval_debug=debug_dict,
+        near_misses=near_misses,
     )
 
 

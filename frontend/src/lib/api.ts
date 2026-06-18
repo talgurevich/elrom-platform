@@ -44,6 +44,13 @@ export type RetrievalDebug = {
   reranked: RetrievalDebugRow[];
 };
 
+export type NearMiss = {
+  authoritative_answer_id: string;
+  canonical_question: string;
+  answer: string;
+  similarity: number;
+};
+
 export type SearchResponse = {
   query_id: string;
   question: string;
@@ -53,6 +60,15 @@ export type SearchResponse = {
   llm_used: boolean;
   served_from: "hitl_cache" | "llm" | "no_documents";
   retrieval_debug: RetrievalDebug | null;
+  near_misses: NearMiss[];
+};
+
+export type LexiconSuggestion = {
+  term: string;
+  expansion: string;
+  why: string;
+  source_question: string;
+  source_query_id: string;
 };
 
 export type FailureMode = "retrieval_miss" | "wrong_generation" | "other";
@@ -242,6 +258,8 @@ export const api = {
 
   // Lexicon
   listLexicon: () => request<LexiconItem[]>("/api/reviewer/lexicon"),
+  suggestLexicon: () =>
+    request<LexiconSuggestion[]>("/api/reviewer/lexicon/suggestions", { method: "POST" }),
   createLexicon: (body: { term: string; expansion: string; notes?: string }) =>
     request<LexiconItem>("/api/reviewer/lexicon", {
       method: "POST",
