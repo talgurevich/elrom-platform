@@ -46,15 +46,33 @@ def hybrid_retrieve(
     """Return (top-k chunks, per-stage debug payload)."""
     debug = RetrievalDebug()
 
-    vector_results = (
+    # Pull a much larger raw pool, then apply per-document diversity *before*
+    # any downstream stage. Without this, an oversized document (e.g.
+    # תקנון בנים נסמכים at 83 chunks) saturates the candidate set and
+    # starves smaller-but-equally-relevant bylaws from ever being considered.
+    VECTOR_RAW = top_k * 8
+    VECTOR_PER_DOC_CAP = 3
+
+    raw_vector = (
         db.query(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("dist"))
         .filter(Chunk.tenant_id == tenant_id)
         .filter(Chunk.embedding.isnot(None))
         .order_by("dist")
-        .limit(top_k * 4)
+        .limit(VECTOR_RAW)
         .options(joinedload(Chunk.document))
         .all()
     )
+
+    vector_results: list = []
+    vector_per_doc: dict[UUID, int] = {}
+    for c, dist in raw_vector:
+        n = vector_per_doc.get(c.document_id, 0)
+        if n >= VECTOR_PER_DOC_CAP:
+            continue
+        vector_per_doc[c.document_id] = n + 1
+        vector_results.append((c, dist))
+        if len(vector_results) >= top_k * 4:
+            break
     debug.vector = [
         {
             "chunk_id": str(c.id),
