@@ -46,6 +46,13 @@ def extract_text(path: Path) -> str:
         return "\n\n".join(parts)
 
     if suffix == ".pdf":
+        # Hebrew PDF extraction has known issues with all tooling. pdfplumber
+        # returns BiDi-visual order (each word is character-reversed at the
+        # display level) but preserves coherent line/paragraph structure, and
+        # Cohere multilingual embeddings handle the reversed form well enough
+        # for retrieval. PyMuPDF gets direction right but fragments into
+        # syllables which is worse. For scanned PDFs neither works — see
+        # the OCR pipeline (todo).
         import pdfplumber  # type: ignore[import-not-found]
 
         pages: list[str] = []

@@ -27,6 +27,7 @@ httpx==0.28.1
 # Document extraction (for ingest_file.py)
 python-docx==1.1.2
 pdfplumber==0.11.5
+pymupdf==1.27.2.3
 
 # Dev
 pytest==8.3.4

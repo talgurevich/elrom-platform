@@ -35,7 +35,15 @@ class StructuralChunk:
 # Matches a line beginning with a structural marker. Group 1 captures the
 # marker label (e.g. "סעיף 4א").
 SECTION_RE = re.compile(
-    r"^(סעיף\s+[֐-׿0-9א-ת]+(?:[א-ת]?)|פרק\s+[א-ת0-9]+|נוהל\s+[א-ת0-9]+|החלטה(?:\s+מספר)?\s+[א-ת0-9./\-]+)",
+    r"^("
+    r"סעיף\s+\d[\dא-ת./\-]*"                             # סעיף 4, סעיף 4א, סעיף 4.2
+    r"|פרק\s+(?:[א-ת]{1,3}|\d[\dא-ת./\-]*)"              # פרק א, פרק 1
+    r"|נוהל\s+(?:[א-ת]{1,3}|\d[\dא-ת./\-]*)"             # נוהל א, נוהל 1
+    r"|החלטה\s+(?:מספר\s+)?\d[\dא-ת./\-]*"               # החלטה 5, החלטה מספר 5/2024
+    r"|פרוטוקול\s+(?:מספר\s+)?\d[\dא-ת./\-]*"            # פרוטוקול 12
+    r"|\d+(?:\.\d+){1,3}(?=\s+[א-ת])"                    # dotted decimal: 1.1, 2.13, 3.4.2 — only if followed by Hebrew text
+    r"|\d+\.(?=\s+[א-ת])"                                # top-level numbered: 1.  כותרת
+    r")",
     re.MULTILINE,
 )
 
