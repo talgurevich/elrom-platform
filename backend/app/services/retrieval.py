@@ -142,7 +142,35 @@ def hybrid_retrieve(
         for c in candidates[:8]
     ]
 
-    final = rerank(query, candidates, top_n=top_k)
+    # Rerank a larger pool so we have headroom for the diversity filter.
+    reranked = rerank(query, candidates, top_n=max(top_k * 3, 12))
+
+    # Per-document diversity: cap each document at MAX_PER_DOC chunks. Prevents
+    # a single oversized document (e.g. תקנון בנים נסמכים at 83 chunks) from
+    # monopolizing the final top-K and starving other relevant bylaws.
+    MAX_PER_DOC = 2
+    per_doc: dict[UUID, int] = {}
+    final: list[Chunk] = []
+    for c in reranked:
+        n = per_doc.get(c.document_id, 0)
+        if n >= MAX_PER_DOC:
+            continue
+        per_doc[c.document_id] = n + 1
+        final.append(c)
+        if len(final) >= top_k:
+            break
+
+    # If the diversity filter starved the result (shouldn't happen in practice),
+    # fall back to filling with the next reranked items regardless of source.
+    if len(final) < top_k:
+        seen = {c.id for c in final}
+        for c in reranked:
+            if c.id in seen:
+                continue
+            final.append(c)
+            if len(final) >= top_k:
+                break
+
     debug.reranked = [
         {
             "chunk_id": str(c.id),
