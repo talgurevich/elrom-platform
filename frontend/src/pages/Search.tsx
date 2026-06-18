@@ -109,6 +109,8 @@ export default function Search() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<"positive" | "negative" | null>(null);
   const [failureMode, setFailureMode] = useState<FailureMode | null>(null);
+  const [promoted, setPromoted] = useState(false);
+  const [promoting, setPromoting] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +120,7 @@ export default function Search() {
     setResult(null);
     setFeedback(null);
     setFailureMode(null);
+    setPromoted(false);
     try {
       setResult(await api.search(question));
     } catch (err) {
@@ -135,6 +138,19 @@ export default function Search() {
     } catch (err) {
       setFeedback(null);
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const promoteToGolden = async () => {
+    if (!result) return;
+    setPromoting(true);
+    try {
+      await api.promoteQueryToGolden(result.query_id);
+      setPromoted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPromoting(false);
     }
   };
 
@@ -225,6 +241,14 @@ export default function Search() {
                   }`}
                 >
                   👎 לא
+                </button>
+                <button
+                  onClick={promoteToGolden}
+                  disabled={promoting || promoted}
+                  className="px-3 py-1 text-sm rounded-full bg-white border border-current/30 hover:bg-stone-100 disabled:opacity-60"
+                  title="הפוך לשאלת זהב להרצה חוזרת"
+                >
+                  {promoted ? "✓ נשמר כזהב" : promoting ? "..." : "⭐ קבע כשאלת זהב"}
                 </button>
               </div>
             )}

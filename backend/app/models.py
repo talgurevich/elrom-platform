@@ -102,6 +102,24 @@ class AuthoritativeAnswer(Base):
     similarity_threshold: Mapped[float] = mapped_column(Float, default=0.92)
 
 
+class GoldenQuestion(Base):
+    __tablename__ = "golden_questions"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_doc_filenames: Mapped[list[str] | None] = mapped_column(ARRAY(String))
+    expected_keywords: Mapped[list[str] | None] = mapped_column(ARRAY(String))
+    expected_answer: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    source_query_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("queries.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_score: Mapped[float | None] = mapped_column(Float)
+    last_retrieval_score: Mapped[float | None] = mapped_column(Float)
+    last_keyword_score: Mapped[float | None] = mapped_column(Float)
+    last_confidence: Mapped[str | None] = mapped_column(String)
+
+
 class Lexicon(Base):
     __tablename__ = "lexicon"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)

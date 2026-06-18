@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Authoritative from "./pages/Authoritative";
+import Eval from "./pages/Eval";
 import Lexicon from "./pages/Lexicon";
 import Login from "./pages/Login";
 import Review from "./pages/Review";
@@ -7,7 +8,7 @@ import Search from "./pages/Search";
 import Upload from "./pages/Upload";
 import { useAuth } from "./lib/auth";
 
-type Tab = "search" | "upload" | "review" | "authoritative" | "lexicon";
+type Tab = "search" | "upload" | "review" | "authoritative" | "lexicon" | "eval";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "search", label: "חיפוש" },
@@ -15,6 +16,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "review", label: "תור בדיקה" },
   { id: "authoritative", label: "תשובות מאושרות" },
   { id: "lexicon", label: "מילון" },
+  { id: "eval", label: "הערכה" },
 ];
 
 function InitialAvatar({ name }: { name: string }) {
@@ -120,6 +122,7 @@ export default function App() {
         {tab === "review" && <Review />}
         {tab === "authoritative" && <Authoritative />}
         {tab === "lexicon" && <Lexicon />}
+        {tab === "eval" && <Eval />}
       </main>
     </div>
   );

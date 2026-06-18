@@ -57,6 +57,51 @@ export type SearchResponse = {
 
 export type FailureMode = "retrieval_miss" | "wrong_generation" | "other";
 
+export type Golden = {
+  id: string;
+  question: string;
+  expected_doc_filenames: string[] | null;
+  expected_keywords: string[] | null;
+  expected_answer: string | null;
+  notes: string | null;
+  source_query_id: string | null;
+  created_at: string;
+  last_run_at: string | null;
+  last_score: number | null;
+  last_retrieval_score: number | null;
+  last_keyword_score: number | null;
+  last_confidence: string | null;
+};
+
+export type GoldenInput = {
+  question: string;
+  expected_doc_filenames?: string[];
+  expected_keywords?: string[];
+  expected_answer?: string;
+  notes?: string;
+};
+
+export type EvalRunResult = {
+  golden_id: string;
+  question: string;
+  score: number;
+  retrieval_score: number | null;
+  keyword_score: number | null;
+  confidence: string;
+  retrieved_filenames: string[];
+  missing_filenames: string[];
+  missing_keywords: string[];
+};
+
+export type EvalSummary = {
+  total: number;
+  avg_score: number;
+  avg_retrieval: number | null;
+  avg_keyword: number | null;
+  confidence_counts: Record<string, number>;
+  results: EvalRunResult[];
+};
+
 export type QueryListItem = {
   id: string;
   question: string;
@@ -140,6 +185,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ failure_mode: failureMode }),
     }),
+
+  // Eval / goldens
+  listGoldens: () => request<Golden[]>("/api/eval/goldens"),
+  createGolden: (body: GoldenInput) =>
+    request<Golden>("/api/eval/goldens", { method: "POST", body: JSON.stringify(body) }),
+  promoteQueryToGolden: (queryId: string, body?: Partial<GoldenInput>) =>
+    request<Golden>(`/api/eval/goldens/from-query/${queryId}`, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    }),
+  deleteGolden: (id: string) =>
+    request<{ status: string }>(`/api/eval/goldens/${id}`, { method: "DELETE" }),
+  runEval: () => request<EvalSummary>("/api/eval/run", { method: "POST" }),
 
   // Reviewer queue
   listQueries: (params?: { needs_review?: boolean; feedback_only?: boolean }) => {
