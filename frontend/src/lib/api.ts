@@ -163,6 +163,25 @@ export type DocumentItem = {
   chunks: number;
   chars: number;
   ingested_at: string;
+  summary?: string | null;
+  ai_classified?: boolean;
+};
+
+export type ClassifyResult = {
+  document_id: string;
+  old_filename: string;
+  new_filename: string;
+  doc_type: string | null;
+  summary: string | null;
+  skipped: boolean;
+  reason?: string;
+};
+
+export type ClassifySummary = {
+  total: number;
+  classified: number;
+  skipped: number;
+  results: ClassifyResult[];
 };
 
 export type CurrentUser = {
@@ -251,6 +270,11 @@ export const api = {
   listDocuments: () => request<DocumentItem[]>("/api/documents"),
   deleteDocument: (id: string) =>
     request<{ status: string }>(`/api/documents/${id}`, { method: "DELETE" }),
+  classifyDocuments: (force = false) =>
+    request<ClassifySummary>(
+      `/api/documents/classify${force ? "?force=true" : ""}`,
+      { method: "POST" }
+    ),
   uploadDocument: async (file: File, docType?: string): Promise<UploadResponse> => {
     const fd = new FormData();
     fd.append("file", file);

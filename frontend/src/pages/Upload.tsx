@@ -121,6 +121,24 @@ export default function Upload() {
     }
   };
 
+  const [classifying, setClassifying] = useState(false);
+  const [classifyMsg, setClassifyMsg] = useState<string | null>(null);
+
+  const classify = async (force = false) => {
+    setClassifying(true);
+    setClassifyMsg(null);
+    setError(null);
+    try {
+      const r = await api.classifyDocuments(force);
+      setClassifyMsg(`סווגו ${r.classified} מסמכים מתוך ${r.total}. ${r.skipped} דולגו.`);
+      await loadDocs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setClassifying(false);
+    }
+  };
+
   const queuedCount = queue.filter((e) => e.status.kind === "queued").length;
 
   return (
@@ -276,9 +294,38 @@ export default function Upload() {
 
       {/* Existing documents */}
       <section>
-        <h2 className="text-sm font-bold text-accent uppercase tracking-wider mb-2">
-          מסמכים במאגר
-        </h2>
+        <div className="flex items-end justify-between mb-3 flex-wrap gap-2">
+          <h2 className="text-sm font-bold text-accent uppercase tracking-wider">
+            מסמכים במאגר
+          </h2>
+          {docs.length > 0 && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => classify(false)}
+                disabled={classifying}
+                className="px-3 py-1.5 bg-white border border-stone-300 hover:border-accent text-xs rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
+                title="קרא את תוכן כל מסמך עם Claude, תן לו כותרת ותקציר"
+              >
+                {classifying ? "מסווג..." : "✨ סווג מסמכים חדשים"}
+              </button>
+              <button
+                onClick={() => classify(true)}
+                disabled={classifying}
+                className="px-3 py-1.5 text-xs text-ink-soft hover:text-ink rounded-full disabled:opacity-50"
+                title="סווג מחדש את כל המסמכים, כולל כאלה שכבר סווגו"
+              >
+                סווג הכל מחדש
+              </button>
+            </div>
+          )}
+        </div>
+
+        {classifyMsg && (
+          <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-900 text-sm">
+            {classifyMsg}
+          </div>
+        )}
+
         {loadingDocs ? (
           <div className="text-ink-soft text-sm">טוען...</div>
         ) : docs.length === 0 ? (
@@ -290,23 +337,41 @@ export default function Upload() {
             {docs.map((d) => (
               <div
                 key={d.id}
-                className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded text-sm"
+                className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink truncate">{d.filename}</div>
-                  <div className="text-xs text-ink-soft flex gap-3">
-                    <span>{d.chunks} קטעים</span>
-                    <span>{formatChars(d.chars)}</span>
-                    {d.doc_type && <span>{d.doc_type}</span>}
-                    <span>{new Date(d.ingested_at).toLocaleString("he-IL")}</span>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-semibold text-ink text-base">{d.filename}</span>
+                      {d.ai_classified && (
+                        <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full">
+                          ✨ סווג AI
+                        </span>
+                      )}
+                      {d.doc_type && (
+                        <span className="text-[10px] px-2 py-0.5 bg-stone-100 text-ink-soft rounded-full">
+                          {d.doc_type}
+                        </span>
+                      )}
+                    </div>
+                    {d.summary && (
+                      <div className="text-sm text-ink-soft mt-1.5 leading-relaxed">
+                        {d.summary}
+                      </div>
+                    )}
+                    <div className="text-xs text-ink-soft mt-2 flex gap-3 flex-wrap">
+                      <span>{d.chunks} קטעים</span>
+                      <span>{formatChars(d.chars)}</span>
+                      <span>{new Date(d.ingested_at).toLocaleString("he-IL")}</span>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => deleteDoc(d)}
+                    className="text-xs px-2 py-1 text-red-700 hover:bg-red-50 rounded shrink-0"
+                  >
+                    מחק
+                  </button>
                 </div>
-                <button
-                  onClick={() => deleteDoc(d)}
-                  className="text-xs px-2 py-1 text-red-700 hover:bg-red-50 rounded"
-                >
-                  מחק
-                </button>
               </div>
             ))}
           </div>
