@@ -8,6 +8,13 @@ from app.models import Tenant, User
 
 router = APIRouter()
 
+# Bootstrap admin emails — added on every /admin/seed-tenant call. Idempotent.
+BOOTSTRAP_ADMINS = [
+    ("dev@elrom.local", "Dev Admin"),
+    ("tal.gurevich@gmail.com", "Tal Gurevich"),
+    ("noam@elrom.tv", "Noam"),
+]
+
 
 @router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict:
@@ -18,18 +25,32 @@ def health(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/admin/seed-tenant")
 def seed_tenant(db: Session = Depends(get_db)) -> dict:
-    existing = db.query(Tenant).first()
-    if existing:
-        return {"status": "exists", "tenant_id": str(existing.id)}
-    tenant = Tenant(name="קיבוץ רביבים (dev)", segment="kibbutz_shitufi")
-    db.add(tenant)
-    db.flush()
-    admin = User(
-        tenant_id=tenant.id,
-        email="dev@elrom.local",
-        display_name="Dev Admin",
-        role="admin",
-    )
-    db.add(admin)
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        tenant = Tenant(name="קיבוץ רביבים (dev)", segment="kibbutz_shitufi")
+        db.add(tenant)
+        db.flush()
+
+    added: list[str] = []
+    for email, display_name in BOOTSTRAP_ADMINS:
+        email_norm = email.lower().strip()
+        existing = db.query(User).filter(User.email == email_norm).first()
+        if existing:
+            continue
+        db.add(
+            User(
+                tenant_id=tenant.id,
+                email=email_norm,
+                display_name=display_name,
+                role="admin",
+            )
+        )
+        added.append(email_norm)
     db.commit()
-    return {"status": "created", "tenant_id": str(tenant.id)}
+
+    return {
+        "status": "ok",
+        "tenant_id": str(tenant.id),
+        "admins_added": added,
+        "admins_total": db.query(User).count(),
+    }
