@@ -67,8 +67,18 @@ def answer_with_citations(*, question: str, chunks: list[Chunk]) -> LLMResult:
 
     import json
 
+    # Claude sometimes emits literal newlines inside JSON string values, which is
+    # invalid per spec. strict=False lets us decode anyway. We also strip code
+    # fences if the model wraps in ```json ... ```.
+    cleaned = raw
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned
+        if cleaned.endswith("```"):
+            cleaned = cleaned.rsplit("```", 1)[0]
+        cleaned = cleaned.strip()
+
     try:
-        parsed = json.loads(raw)
+        parsed = json.JSONDecoder(strict=False).decode(cleaned)
         return LLMResult(
             answer=str(parsed.get("answer", "")).strip(),
             confidence=str(parsed.get("confidence", "uncertain")).strip(),

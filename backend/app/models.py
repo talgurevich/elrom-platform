@@ -80,6 +80,8 @@ class Query(Base):
     authoritative_answer_id: Mapped[UUID | None] = mapped_column(
         SQLUUID(as_uuid=True), ForeignKey("authoritative_answers.id")
     )
+    feedback: Mapped[str | None] = mapped_column(String)  # positive | negative — from secretary 👍/👎
+    reviewer_action: Mapped[str | None] = mapped_column(String)  # approved | edited | rejected
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
