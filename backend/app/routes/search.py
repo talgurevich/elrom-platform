@@ -46,6 +46,7 @@ class SearchResponse(BaseModel):
     sources: list[SourceCitation]
     llm_used: bool
     served_from: str  # "hitl_cache" | "llm" | "no_documents"
+    retrieval_debug: dict | None = None
 
 
 def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
@@ -56,7 +57,6 @@ def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
         .filter(Chunk.id.in_(chunk_ids))
         .all()
     )
-    # Preserve order
     by_id = {c.id: c for c in chunks}
     return [
         SourceCitation(
@@ -109,14 +109,15 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
             served_from="hitl_cache",
         )
 
-    # 2. Hybrid retrieve (embed with corpus input_type for similarity to stored embeddings)
-    retrieved = hybrid_retrieve(
+    # 2. Hybrid retrieve
+    retrieved, debug = hybrid_retrieve(
         db,
         tenant_id=tenant_id,
         query=req.question,
         query_embedding=embed_texts([req.question], input_type="search_query")[0],
         top_k=req.top_k,
     )
+    debug_dict = debug.to_dict()
 
     if not retrieved:
         query_log = Query(
@@ -126,6 +127,7 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
             answer="לא נמצאו מסמכים רלוונטיים במאגר.",
             confidence="refused",
             llm_used=False,
+            retrieval_debug=debug_dict,
         )
         db.add(query_log)
         db.commit()
@@ -138,9 +140,10 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
             sources=[],
             llm_used=False,
             served_from="no_documents",
+            retrieval_debug=debug_dict,
         )
 
-    # 3. Generate answer with Claude — include lexicon expansions if any
+    # 3. Generate answer with Claude
     lexicon_entries = find_relevant_terms(db, tenant_id=tenant_id, question=req.question)
     lexicon_block = format_lexicon_block(lexicon_entries)
     llm_result = answer_with_citations(
@@ -166,6 +169,7 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
         source_chunk_ids=[c.id for c in retrieved],
         confidence=llm_result.confidence,
         llm_used=True,
+        retrieval_debug=debug_dict,
     )
     db.add(query_log)
     db.commit()
@@ -179,6 +183,7 @@ def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
         sources=sources,
         llm_used=True,
         served_from="llm",
+        retrieval_debug=debug_dict,
     )
 
 
@@ -199,5 +204,27 @@ def submit_feedback(
         raise HTTPException(404, "Query not found")
 
     query.feedback = req.feedback
+    db.commit()
+    return {"status": "ok"}
+
+
+class FailureModeRequest(BaseModel):
+    failure_mode: str  # retrieval_miss | wrong_generation | other
+
+
+@router.post("/{query_id}/failure-mode")
+def tag_failure_mode(
+    query_id: UUID, req: FailureModeRequest, db: Session = Depends(get_db)
+) -> dict:
+    """Tag *why* an answer was wrong, so we can route the fix correctly."""
+    valid = {"retrieval_miss", "wrong_generation", "other"}
+    if req.failure_mode not in valid:
+        raise HTTPException(400, f"failure_mode must be one of {valid}")
+    query = db.get(Query, query_id)
+    if query is None:
+        raise HTTPException(404, "Query not found")
+    query.failure_mode = req.failure_mode
+    if not query.feedback:
+        query.feedback = "negative"
     db.commit()
     return {"status": "ok"}

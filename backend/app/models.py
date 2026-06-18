@@ -82,6 +82,8 @@ class Query(Base):
     )
     feedback: Mapped[str | None] = mapped_column(String)  # positive | negative — from secretary 👍/👎
     reviewer_action: Mapped[str | None] = mapped_column(String)  # approved | edited | rejected
+    failure_mode: Mapped[str | None] = mapped_column(String)  # retrieval_miss | wrong_generation | other
+    retrieval_debug: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

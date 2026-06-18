@@ -27,6 +27,23 @@ export type Source = {
   text: string;
 };
 
+export type RetrievalDebugRow = {
+  chunk_id: string;
+  document_filename: string;
+  section_path: string | null;
+  cosine_similarity?: number;
+  ts_rank?: number;
+  fusion_score?: number;
+  rank?: number;
+};
+
+export type RetrievalDebug = {
+  vector: RetrievalDebugRow[];
+  bm25: RetrievalDebugRow[];
+  fused: RetrievalDebugRow[];
+  reranked: RetrievalDebugRow[];
+};
+
 export type SearchResponse = {
   query_id: string;
   question: string;
@@ -35,7 +52,10 @@ export type SearchResponse = {
   sources: Source[];
   llm_used: boolean;
   served_from: "hitl_cache" | "llm" | "no_documents";
+  retrieval_debug: RetrievalDebug | null;
 };
+
+export type FailureMode = "retrieval_miss" | "wrong_generation" | "other";
 
 export type QueryListItem = {
   id: string;
@@ -113,6 +133,12 @@ export const api = {
     request<{ status: string }>(`/api/search/${queryId}/feedback`, {
       method: "POST",
       body: JSON.stringify({ feedback }),
+    }),
+
+  tagFailureMode: (queryId: string, failureMode: FailureMode) =>
+    request<{ status: string }>(`/api/search/${queryId}/failure-mode`, {
+      method: "POST",
+      body: JSON.stringify({ failure_mode: failureMode }),
     }),
 
   // Reviewer queue
