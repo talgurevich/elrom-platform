@@ -20,64 +20,18 @@ import sys
 from pathlib import Path
 from urllib import request
 
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".docx", ".pdf"}
+from app.services.extraction import SUPPORTED_EXTENSIONS
+from app.services.extraction import extract_text as _extract_via_service
 
 
 def extract_text(path: Path) -> str:
-    suffix = path.suffix.lower()
-
-    if suffix in {".txt", ".md"}:
-        return path.read_text(encoding="utf-8")
-
-    if suffix == ".docx":
-        from docx import Document  # type: ignore[import-not-found]
-
-        doc = Document(path)
-        parts: list[str] = []
-        for para in doc.paragraphs:
-            if para.text.strip():
-                parts.append(para.text)
-        # Also extract tables (common in protocols / bylaws)
-        for table in doc.tables:
-            for row in table.rows:
-                row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
-                if row_text:
-                    parts.append(row_text)
-        return "\n\n".join(parts)
-
-    if suffix == ".pdf":
-        # First try pdfplumber. It returns BiDi-visual Hebrew (word-reversed)
-        # but preserves paragraph structure, and Cohere embeddings handle it.
-        # If we get 0 chars (likely scanned) we fall back to Azure OCR which
-        # returns logical-order Hebrew.
-        import pdfplumber  # type: ignore[import-not-found]
-
-        pages: list[str] = []
-        scanned_pages = 0
-        with pdfplumber.open(path) as pdf:
-            for i, page in enumerate(pdf.pages, 1):
-                text = page.extract_text() or ""
-                if text.strip():
-                    pages.append(text)
-                else:
-                    scanned_pages += 1
-
-        combined = "\n\n".join(pages)
-        if combined.strip():
-            if scanned_pages:
-                print(f"  ⚠ {scanned_pages} page(s) had no native text", file=sys.stderr)
-            return combined
-
-        # Native extraction failed entirely — try Azure OCR
-        print(f"  ⓘ PDF has no extractable text — falling back to Azure OCR…", file=sys.stderr)
-        from app.services.ocr import is_configured, ocr_pdf
-
-        if not is_configured():
-            print(f"  ✗ Azure OCR not configured (set AZURE_DI_ENDPOINT/KEY in .env)", file=sys.stderr)
-            return ""
-        return ocr_pdf(path)
-
-    raise ValueError(f"Unsupported file type: {suffix}")
+    """Thin wrapper around the extraction service so this script stays a one-liner."""
+    result = _extract_via_service(path)
+    if result.note:
+        print(f"  ⓘ {result.note}", file=sys.stderr)
+    if result.used_ocr:
+        print(f"  ⓘ used Azure OCR (extractor={result.extractor})", file=sys.stderr)
+    return result.text
 
 
 def ingest_one(path: Path, *, doc_type: str, tenant_id: str | None, api: str, dry_run: bool) -> None:

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routes import health, ingest, reviewer, search
+from app.routes import documents, health, ingest, reviewer, search
 
 log = structlog.get_logger()
 
@@ -26,6 +26,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(ingest.router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(reviewer.router, prefix="/api/reviewer", tags=["reviewer"])
+app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 
 
 @app.on_event("startup")

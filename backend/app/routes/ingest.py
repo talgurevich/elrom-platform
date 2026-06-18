@@ -1,8 +1,10 @@
-"""Ingest endpoint — accepts a document, chunks it, embeds, stores in pgvector."""
+"""Ingest endpoints — text body or file upload, both share the same indexing path."""
+import tempfile
+from pathlib import Path
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from app.db import get_db
 from app.models import Chunk, Document, Tenant
 from app.services.chunking import chunk_document
 from app.services.embedding import embed_texts
+from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -26,6 +29,9 @@ class IngestRequest(BaseModel):
 class IngestResponse(BaseModel):
     document_id: UUID
     chunks_created: int
+    used_ocr: bool = False
+    extractor: str | None = None
+    note: str | None = None
 
 
 @router.post("", response_model=IngestResponse)
@@ -80,3 +86,90 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
         with_section_path=sum(1 for c in structural_chunks if c.section_path),
     )
     return IngestResponse(document_id=doc.id, chunks_created=len(structural_chunks))
+
+
+@router.post("/upload", response_model=IngestResponse)
+async def ingest_upload(
+    file: UploadFile = File(...),
+    tenant_id: UUID | None = Form(None),
+    doc_type: str | None = Form(None),
+    db: Session = Depends(get_db),
+) -> IngestResponse:
+    """Accept a file upload (txt/md/docx/pdf), extract text (with OCR fallback for scanned PDFs),
+    chunk + embed + store. Returns chunks_created + extractor metadata.
+    """
+    filename = file.filename or "uploaded"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            400, f"Unsupported file type: {suffix}. Supported: {sorted(SUPPORTED_EXTENSIONS)}"
+        )
+
+    resolved_tenant = tenant_id
+    if resolved_tenant is None:
+        tenant = db.query(Tenant).first()
+        if not tenant:
+            raise HTTPException(400, "No tenant exists. Create one first.")
+        resolved_tenant = tenant.id
+
+    # Save to a temp file so the existing extraction service can use Path-based APIs
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        contents = await file.read()
+        tmp.write(contents)
+        tmp_path = Path(tmp.name)
+
+    try:
+        extraction = extract_file(tmp_path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+    if not extraction.text.strip():
+        raise HTTPException(
+            400,
+            extraction.note or "No text could be extracted from the file.",
+        )
+
+    doc = Document(tenant_id=resolved_tenant, filename=filename, doc_type=doc_type)
+    db.add(doc)
+    db.flush()
+
+    structural_chunks = chunk_document(extraction.text)
+    if not structural_chunks:
+        raise HTTPException(400, "Document produced no chunks.")
+
+    embeddings = embed_texts([sc.text for sc in structural_chunks])
+
+    for sc, embedding in zip(structural_chunks, embeddings, strict=True):
+        chunk = Chunk(
+            document_id=doc.id,
+            tenant_id=resolved_tenant,
+            position=sc.position,
+            section_path=sc.section_path,
+            text=sc.text,
+            embedding=embedding,
+        )
+        db.add(chunk)
+        db.flush()
+        db.execute(
+            text("UPDATE chunks SET text_search = to_tsvector('simple', text) WHERE id = :cid"),
+            {"cid": chunk.id},
+        )
+
+    db.commit()
+    log.info(
+        "ingest.upload_complete",
+        document_id=str(doc.id),
+        chunks=len(structural_chunks),
+        extractor=extraction.extractor,
+        used_ocr=extraction.used_ocr,
+    )
+    return IngestResponse(
+        document_id=doc.id,
+        chunks_created=len(structural_chunks),
+        used_ocr=extraction.used_ocr,
+        extractor=extraction.extractor,
+        note=extraction.note,
+    )

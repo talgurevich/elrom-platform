@@ -66,6 +66,23 @@ export type LexiconItem = {
   updated_at: string;
 };
 
+export type DocumentItem = {
+  id: string;
+  filename: string;
+  doc_type: string | null;
+  chunks: number;
+  chars: number;
+  ingested_at: string;
+};
+
+export type UploadResponse = {
+  document_id: string;
+  chunks_created: number;
+  used_ocr: boolean;
+  extractor: string | null;
+  note: string | null;
+};
+
 // ─── Endpoints ─────────────────────────────────────────────────────────
 export const api = {
   search: (question: string) =>
@@ -103,6 +120,19 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+
+  // Documents
+  listDocuments: () => request<DocumentItem[]>("/api/documents"),
+  deleteDocument: (id: string) =>
+    request<{ status: string }>(`/api/documents/${id}`, { method: "DELETE" }),
+  uploadDocument: async (file: File, docType?: string): Promise<UploadResponse> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (docType) fd.append("doc_type", docType);
+    const r = await fetch(`${BASE}/api/ingest/upload`, { method: "POST", body: fd });
+    if (!r.ok) throw new ApiError(r.status, (await r.text()) || r.statusText);
+    return r.json();
+  },
 
   // Lexicon
   listLexicon: () => request<LexiconItem[]>("/api/reviewer/lexicon"),

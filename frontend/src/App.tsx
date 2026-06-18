@@ -3,11 +3,13 @@ import Search from "./pages/Search";
 import Review from "./pages/Review";
 import Authoritative from "./pages/Authoritative";
 import Lexicon from "./pages/Lexicon";
+import Upload from "./pages/Upload";
 
-type Tab = "search" | "review" | "authoritative" | "lexicon";
+type Tab = "search" | "upload" | "review" | "authoritative" | "lexicon";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "search", label: "חיפוש" },
+  { id: "upload", label: "מסמכים" },
   { id: "review", label: "תור בדיקה" },
   { id: "authoritative", label: "תשובות מאושרות" },
   { id: "lexicon", label: "מילון" },
@@ -41,6 +43,7 @@ export default function App() {
 
       <main className="max-w-4xl mx-auto px-6 py-8">
         {tab === "search" && <Search />}
+        {tab === "upload" && <Upload />}
         {tab === "review" && <Review />}
         {tab === "authoritative" && <Authoritative />}
         {tab === "lexicon" && <Lexicon />}
