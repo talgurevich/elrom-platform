@@ -247,6 +247,76 @@ def classify_documents(
     )
 
 
+_HEBREW_RE = re.compile(r"[֐-׿]")
+_LTR_TOKEN = re.compile(r"[0-9A-Za-z\.\-_/]+")
+
+
+def _fix_rtl_line(line: str) -> str:
+    """Reverse a visually-LTR-ordered RTL line back to logical order.
+
+    Azure OCR sometimes emits Hebrew PDFs in visual order: each line is read
+    left-to-right character-by-character, so the Hebrew words end up reversed.
+    Embedded LTR runs (digits, Latin, punctuation) are also visually reversed
+    by the OCR, so after we flip the whole line we re-reverse those runs.
+    """
+    reversed_line = line[::-1]
+    reversed_line = _LTR_TOKEN.sub(lambda m: m.group(0)[::-1], reversed_line)
+    reversed_line = re.sub(r" +", " ", reversed_line).strip()
+    return reversed_line
+
+
+def _fix_rtl_text(text: str) -> str:
+    return "\n".join(_fix_rtl_line(line) for line in text.split("\n"))
+
+
+class FixRtlSummary(BaseModel):
+    document_id: UUID
+    chunks_fixed: int
+    sample_before: str
+    sample_after: str
+
+
+@router.post("/{document_id}/fix-rtl", response_model=FixRtlSummary)
+def fix_rtl(document_id: UUID, db: Session = Depends(get_db)) -> FixRtlSummary:
+    """Repair an RTL-reversed document in place: reverse each line of every
+    chunk's text, then re-embed so the chunks become findable in search."""
+    from app.services.embedding import embed_texts
+
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(404, "Document not found")
+
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == document_id)
+        .order_by(Chunk.position)
+        .all()
+    )
+    if not chunks:
+        raise HTTPException(400, "Document has no chunks")
+
+    sample_before = chunks[0].text[:200]
+    new_texts: list[str] = []
+    for c in chunks:
+        fixed = _fix_rtl_text(c.text or "")
+        c.text = fixed
+        new_texts.append(fixed)
+
+    # Re-embed with the corpus input type so retrieval matches future query
+    # embeddings correctly.
+    new_embeddings = embed_texts(new_texts, input_type="search_document")
+    for c, emb in zip(chunks, new_embeddings, strict=True):
+        c.embedding = emb
+
+    db.commit()
+    return FixRtlSummary(
+        document_id=doc.id,
+        chunks_fixed=len(chunks),
+        sample_before=sample_before,
+        sample_after=chunks[0].text[:200],
+    )
+
+
 class ChunkPreview(BaseModel):
     position: int
     section_path: str | None
