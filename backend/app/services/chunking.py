@@ -19,7 +19,9 @@ import re
 from dataclasses import dataclass
 
 TARGET_CHUNK_CHARS = 1500
-MIN_CHUNK_CHARS = 80   # don't drop short legal clauses
+MIN_HEADER_CHARS = 80   # only keep doc preamble if it's substantial
+MIN_SECTION_CHARS = 25  # keep short legal clauses — they're often meaningful
+MIN_PARAGRAPH_CHARS = 80
 MAX_CHUNK_CHARS = 3500 # split oversized sections
 
 
@@ -58,14 +60,14 @@ def chunk_document(text: str) -> list[StructuralChunk]:
     # Header / pre-section content (title, preamble)
     if matches[0].start() > 0:
         header = text[: matches[0].start()].strip()
-        if len(header) >= MIN_CHUNK_CHARS:
+        if len(header) >= MIN_HEADER_CHARS:
             chunks.append(StructuralChunk(text=header, section_path=None, position=len(chunks)))
 
     # Each detected section
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         section_text = text[m.start() : end].strip()
-        if len(section_text) < MIN_CHUNK_CHARS:
+        if len(section_text) < MIN_SECTION_CHARS:
             continue
         section_path = m.group(1).strip()
         if len(section_text) <= MAX_CHUNK_CHARS:
@@ -99,7 +101,7 @@ def _paragraph_chunks(text: str) -> list[StructuralChunk]:
     if buffer:
         out.append(StructuralChunk(text=buffer, section_path=None, position=len(out)))
 
-    return [c for c in out if len(c.text) >= MIN_CHUNK_CHARS or len(out) == 1]
+    return [c for c in out if len(c.text) >= MIN_PARAGRAPH_CHARS or len(out) == 1]
 
 
 def _split_long_section(text: str) -> list[str]:
