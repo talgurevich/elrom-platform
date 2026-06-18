@@ -141,7 +141,7 @@ SYSTEM_PROMPT = """אתה יועץ תקנון של קיבוץ אל-רום. תפ�
 3. **משפט אחד (אופציונלי) — סייג רלוונטי או הפניה לנושא נוסף שאינו במאגר.** "אם רלוונטי, ראה גם תקנון בנים נסמכים." בלי לפרט אם השאלה לא הזכירה זאת.
 
 **אסור:**
-- כותרות מודגשות באמצע התשובה כמו `**יחידות ההשתתפות:**` או `**הבית:**`. כתוב טקסט רץ.
+- 🚨 כותרות מודגשות באמצע התשובה. אסור `**יחידות ההשתתפות:**`, אסור `**הבית:**`, אסור `**X:**` כלשהו, אסור גם כותרות בלי הדגשה כמו "יחידות ההשתתפות:" בתחילת שורה. **כל הטקסט הוא פסקה אחת או שתיים, בלי כותרות.**
 - פתיחה ארוכה שמתארת את "המצב" / "המישורים" / "הסוגיות". היכנס ישר לכלל.
 - חזרה על אותם מספרי סעיפים בשני מקומות שונים.
 - הרחבת סייגים שלא נשאלו עליהם. סייג שולי = משפט בודד או הפניה, לא פסקה.
@@ -214,6 +214,47 @@ class LLMResult:
     references: list[Reference] = field(default_factory=list)
 
 
+_ANSWER_TOOL = {
+    "name": "answer",
+    "description": "Provide a cited Hebrew answer to a kibbutz-bylaw question.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "confidence": {
+                "type": "string",
+                "enum": ["confident", "uncertain", "refused"],
+                "description": (
+                    "confident = answer is well-grounded in sources; "
+                    "uncertain = partial info found, gaps remain; "
+                    "refused = cannot answer from sources or question out-of-scope."
+                ),
+            },
+            "answer": {
+                "type": "string",
+                "description": (
+                    "The Hebrew answer text. Plain prose, no markdown headers, "
+                    "no JSON. Section numbers cited inline (e.g. 'סעיף 11.2.2 קובע')."
+                ),
+            },
+            "references": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "section_number": {"type": "string"},
+                        "source_type": {"type": "string"},
+                        "excerpt": {"type": "string"},
+                    },
+                    "required": ["title", "section_number", "source_type", "excerpt"],
+                },
+            },
+        },
+        "required": ["confidence", "answer", "references"],
+    },
+}
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 def answer_with_citations(
     *,
@@ -221,7 +262,12 @@ def answer_with_citations(
     chunks: list[Chunk],
     lexicon_block: str = "",
 ) -> LLMResult:
-    """Ask Claude to produce a cited answer based on retrieved chunks."""
+    """Ask Claude to produce a cited answer using tool-use for structured output.
+
+    Tool-use eliminates the whole class of JSON-text-parsing bugs (unescaped
+    quotes in Hebrew, ```json fences```, prose-before-JSON, etc.). Claude is
+    forced to fill the tool's typed schema directly.
+    """
     sources_block = "\n\n".join(
         f"[{i + 1}] (מקור: {c.document.filename}{(' / ' + c.section_path) if c.section_path else ''})\n{c.text}"
         for i, c in enumerate(chunks)
@@ -237,7 +283,7 @@ def answer_with_citations(
         f"שאלה: {question}\n\n"
         f"{lexicon_section}"
         f"קטעי הקשר ממסמכי הקיבוץ:\n\n{sources_block}\n\n"
-        f"ענה בהתאם לכללים, בפורמט ה-JSON הנדרש."
+        f"קרא את כל הסעיפים והפעל את הכלי `answer` עם הניסוח הקצר והדטרמיניסטי הדרוש."
     )
 
     client = _claude_client()
@@ -245,48 +291,23 @@ def answer_with_citations(
         model=settings.claude_answer_model,
         max_tokens=2048,
         system=SYSTEM_PROMPT,
+        tools=[_ANSWER_TOOL],
+        tool_choice={"type": "tool", "name": "answer"},
         messages=[{"role": "user", "content": user_message}],
     )
 
-    raw = resp.content[0].text.strip()
+    # Find the tool_use block in the response
+    tool_input: dict | None = None
+    for block in resp.content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "answer":
+            tool_input = block.input  # type: ignore[attr-defined]
+            break
 
-    import json
-    import re
+    if not isinstance(tool_input, dict):
+        log.warning("llm.tool_use_missing", raw=str(resp.content)[:400])
+        return LLMResult(answer="", confidence="uncertain", references=[])
 
-    # Find a JSON object in the response. The model is *supposed* to return
-    # only JSON, but in practice it sometimes wraps it in ```json fences``` or
-    # — worse — emits prose first and then echoes the JSON at the end. We try
-    # in order of robustness:
-    #   1. The whole string (happy path)
-    #   2. Inside a ```json ... ``` fence
-    #   3. The largest balanced {...} block we can find
-    candidates: list[str] = [raw]
-
-    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
-    if fence_match:
-        candidates.append(fence_match.group(1))
-
-    brace_matches = re.findall(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", raw, re.DOTALL)
-    if brace_matches:
-        # Try the largest match first — most likely the full envelope
-        candidates.extend(sorted(brace_matches, key=len, reverse=True))
-
-    decoder = json.JSONDecoder(strict=False)
-    parsed = None
-    for candidate in candidates:
-        try:
-            parsed = decoder.decode(candidate.strip())
-            if isinstance(parsed, dict) and "answer" in parsed:
-                break
-            parsed = None
-        except json.JSONDecodeError:
-            continue
-
-    if parsed is None:
-        log.warning("llm.json_parse_failed", raw=raw[:500])
-        return LLMResult(answer=raw, confidence="uncertain", references=[])
-
-    refs_raw = parsed.get("references") or []
+    refs_raw = tool_input.get("references") or []
     references = [
         Reference(
             title=str(r.get("title", "")).strip(),
@@ -298,7 +319,7 @@ def answer_with_citations(
         if isinstance(r, dict)
     ]
     return LLMResult(
-        answer=str(parsed.get("answer", "")).strip(),
-        confidence=str(parsed.get("confidence", "uncertain")).strip(),
+        answer=str(tool_input.get("answer", "")).strip(),
+        confidence=str(tool_input.get("confidence", "uncertain")).strip(),
         references=references,
     )
