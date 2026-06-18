@@ -30,5 +30,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:5173"
 
+    # OCR — Azure Document Intelligence (for scanned PDFs)
+    azure_di_endpoint: str = ""
+    azure_di_key: str = ""
+
 
 settings = Settings()

@@ -46,24 +46,36 @@ def extract_text(path: Path) -> str:
         return "\n\n".join(parts)
 
     if suffix == ".pdf":
-        # Hebrew PDF extraction has known issues with all tooling. pdfplumber
-        # returns BiDi-visual order (each word is character-reversed at the
-        # display level) but preserves coherent line/paragraph structure, and
-        # Cohere multilingual embeddings handle the reversed form well enough
-        # for retrieval. PyMuPDF gets direction right but fragments into
-        # syllables which is worse. For scanned PDFs neither works — see
-        # the OCR pipeline (todo).
+        # First try pdfplumber. It returns BiDi-visual Hebrew (word-reversed)
+        # but preserves paragraph structure, and Cohere embeddings handle it.
+        # If we get 0 chars (likely scanned) we fall back to Azure OCR which
+        # returns logical-order Hebrew.
         import pdfplumber  # type: ignore[import-not-found]
 
         pages: list[str] = []
+        scanned_pages = 0
         with pdfplumber.open(path) as pdf:
             for i, page in enumerate(pdf.pages, 1):
                 text = page.extract_text() or ""
                 if text.strip():
                     pages.append(text)
                 else:
-                    print(f"  ⚠ page {i} produced no text (likely scanned — OCR needed)", file=sys.stderr)
-        return "\n\n".join(pages)
+                    scanned_pages += 1
+
+        combined = "\n\n".join(pages)
+        if combined.strip():
+            if scanned_pages:
+                print(f"  ⚠ {scanned_pages} page(s) had no native text", file=sys.stderr)
+            return combined
+
+        # Native extraction failed entirely — try Azure OCR
+        print(f"  ⓘ PDF has no extractable text — falling back to Azure OCR…", file=sys.stderr)
+        from app.services.ocr import is_configured, ocr_pdf
+
+        if not is_configured():
+            print(f"  ✗ Azure OCR not configured (set AZURE_DI_ENDPOINT/KEY in .env)", file=sys.stderr)
+            return ""
+        return ocr_pdf(path)
 
     raise ValueError(f"Unsupported file type: {suffix}")
 
