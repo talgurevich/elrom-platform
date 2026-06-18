@@ -289,29 +289,77 @@ export default function Search() {
               </div>
             </div>
           )}
-          <div className={`p-5 border rounded-xl shadow-soft ${confidenceColors[result.confidence] || ""}`}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs tracking-wider uppercase font-bold">
-                {confidenceLabel[result.confidence] || result.confidence}
+          {/* 1. Confidence header */}
+          <div
+            className={`inline-flex items-center gap-3 px-4 py-2 rounded-full border ${
+              confidenceColors[result.confidence] || ""
+            }`}
+          >
+            <span className="text-xs tracking-wider uppercase font-bold">
+              {confidenceLabel[result.confidence] || result.confidence}
+            </span>
+            {result.served_from === "hitl_cache" && (
+              <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full">
+                מהמטמון
+              </span>
+            )}
+          </div>
+
+          {/* 2. Cited clauses */}
+          {result.references && result.references.length > 0 && (
+            <div>
+              <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
+                סימוכין
               </div>
-              {result.served_from === "hitl_cache" && (
-                <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full">
-                  מהמטמון
-                </span>
-              )}
+              <div className="space-y-2">
+                {result.references.map((r, i) => (
+                  <div
+                    key={`${r.title}-${r.section_number}-${i}`}
+                    className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
+                  >
+                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                      <span className="font-semibold text-accent">{r.title}</span>
+                      {r.section_number && (
+                        <span className="text-sm text-ink font-mono">
+                          סעיף {r.section_number}
+                        </span>
+                      )}
+                      {r.source_type && (
+                        <span className="text-[10px] tracking-widest uppercase text-ink-soft mr-auto">
+                          {r.source_type}
+                        </span>
+                      )}
+                    </div>
+                    {r.excerpt && (
+                      <blockquote className="text-sm text-ink-soft leading-relaxed border-r-2 border-accent/30 pr-3 italic">
+                        "{r.excerpt}"
+                      </blockquote>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <p className="text-lg leading-relaxed whitespace-pre-wrap">{result.answer}</p>
+          )}
+
+          {/* 3. Natural-language answer */}
+          <div className="p-5 bg-white border border-stone-200 rounded-xl shadow-soft">
+            <div className="text-xs tracking-wider uppercase text-ink-soft font-bold mb-2">
+              תשובה
+            </div>
+            <p className="text-lg leading-relaxed whitespace-pre-wrap text-ink">
+              {result.answer}
+            </p>
 
             {result.confidence !== "refused" && (
-              <div className="mt-4 pt-4 border-t border-current/20 flex flex-wrap items-center gap-3">
-                <span className="text-xs">האם התשובה מדויקת?</span>
+              <div className="mt-4 pt-4 border-t border-stone-200 flex flex-wrap items-center gap-3">
+                <span className="text-xs text-ink-soft">האם התשובה מדויקת?</span>
                 <button
                   onClick={() => submitFeedback("positive")}
                   disabled={feedback !== null}
                   className={`px-3 py-1 text-sm rounded-full transition ${
                     feedback === "positive"
                       ? "bg-emerald-600 text-white"
-                      : "bg-white border border-current/30 hover:bg-emerald-100"
+                      : "bg-white border border-stone-300 hover:bg-emerald-50"
                   }`}
                 >
                   👍 כן
@@ -322,7 +370,7 @@ export default function Search() {
                   className={`px-3 py-1 text-sm rounded-full transition ${
                     feedback === "negative"
                       ? "bg-red-600 text-white"
-                      : "bg-white border border-current/30 hover:bg-red-100"
+                      : "bg-white border border-stone-300 hover:bg-red-50"
                   }`}
                 >
                   👎 לא
@@ -330,7 +378,7 @@ export default function Search() {
                 <button
                   onClick={promoteToGolden}
                   disabled={promoting || promoted}
-                  className="px-3 py-1 text-sm rounded-full bg-white border border-current/30 hover:bg-stone-100 disabled:opacity-60"
+                  className="px-3 py-1 text-sm rounded-full bg-white border border-stone-300 hover:bg-stone-100 disabled:opacity-60 text-ink-soft"
                   title="הפוך לשאלת זהב להרצה חוזרת"
                 >
                   {promoted ? "✓ נשמר כזהב" : promoting ? "..." : "⭐ קבע כשאלת זהב"}
@@ -365,41 +413,6 @@ export default function Search() {
           {failureMode && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-sm">
               ✓ נרשם: {failureLabels[failureMode]}
-            </div>
-          )}
-
-          {result.references && result.references.length > 0 && (
-            <div>
-              <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
-                סימוכין
-              </div>
-              <div className="space-y-2">
-                {result.references.map((r, i) => (
-                  <div
-                    key={`${r.title}-${r.section_number}-${i}`}
-                    className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
-                  >
-                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold text-accent">{r.title}</span>
-                      {r.section_number && (
-                        <span className="text-sm text-ink font-mono">
-                          סעיף {r.section_number}
-                        </span>
-                      )}
-                      {r.source_type && (
-                        <span className="text-[10px] tracking-widest uppercase text-ink-soft mr-auto">
-                          {r.source_type}
-                        </span>
-                      )}
-                    </div>
-                    {r.excerpt && (
-                      <blockquote className="text-sm text-ink-soft leading-relaxed border-r-2 border-accent/30 pr-3 italic">
-                        "{r.excerpt}"
-                      </blockquote>
-                    )}
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
