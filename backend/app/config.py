@@ -1,4 +1,5 @@
 """App configuration loaded from environment variables."""
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +8,16 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+psycopg://elrom:elrom@localhost:5433/elrom"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        """Render exposes Postgres as postgresql:// — convert to the psycopg3 driver scheme."""
+        if isinstance(v, str) and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg://", 1)
+        return v
 
     # LLM
     anthropic_api_key: str = ""

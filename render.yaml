@@ -1,0 +1,70 @@
+## Render Blueprint for elrom-platform.
+## To deploy: Render dashboard → New → Blueprint → select this repo → Apply.
+## After the first deploy, paste your API keys in the backend service's "Environment" tab.
+## Free tier is enough for design-partner stage; upgrade plans later.
+
+databases:
+  - name: elrom-postgres
+    plan: free
+    postgresMajorVersion: 16
+    region: frankfurt
+
+services:
+  - type: web
+    name: elrom-backend
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: elrom-postgres
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: EMBEDDING_PROVIDER
+        value: cohere
+      - key: COHERE_EMBED_MODEL
+        value: embed-multilingual-v3.0
+      - key: CLAUDE_ANSWER_MODEL
+        value: claude-sonnet-4-6
+      - key: CLAUDE_EXTRACT_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: MAGIC_LINK_FROM_EMAIL
+        value: noreply@elrom.tv
+      # Secrets — set these in Render UI after first deploy:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AZURE_DI_ENDPOINT
+        sync: false
+      - key: AZURE_DI_KEY
+        sync: false
+      # FRONTEND_URL is set in Render UI after the static site URL is known:
+      - key: FRONTEND_URL
+        sync: false
+
+  - type: web
+    name: elrom-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false   # set in Render UI after the backend URL is known
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
