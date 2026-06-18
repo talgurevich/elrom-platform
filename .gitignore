@@ -54,5 +54,10 @@ logs/
 data/
 uploads/
 
+# Customer documents — never commit
+sample-corpus/
+corpus/
+customer-data/
+
 # Postgres data (when using local volumes)
 postgres-data/
