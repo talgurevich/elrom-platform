@@ -234,32 +234,54 @@ def answer_with_citations(
     raw = resp.content[0].text.strip()
 
     import json
+    import re
 
-    cleaned = raw
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned
-        if cleaned.endswith("```"):
-            cleaned = cleaned.rsplit("```", 1)[0]
-        cleaned = cleaned.strip()
+    # Find a JSON object in the response. The model is *supposed* to return
+    # only JSON, but in practice it sometimes wraps it in ```json fences``` or
+    # — worse — emits prose first and then echoes the JSON at the end. We try
+    # in order of robustness:
+    #   1. The whole string (happy path)
+    #   2. Inside a ```json ... ``` fence
+    #   3. The largest balanced {...} block we can find
+    candidates: list[str] = [raw]
 
-    try:
-        parsed = json.JSONDecoder(strict=False).decode(cleaned)
-        refs_raw = parsed.get("references") or []
-        references = [
-            Reference(
-                title=str(r.get("title", "")).strip(),
-                section_number=str(r.get("section_number", "")).strip(),
-                source_type=str(r.get("source_type", "")).strip(),
-                excerpt=str(r.get("excerpt", "")).strip(),
-            )
-            for r in refs_raw
-            if isinstance(r, dict)
-        ]
-        return LLMResult(
-            answer=str(parsed.get("answer", "")).strip(),
-            confidence=str(parsed.get("confidence", "uncertain")).strip(),
-            references=references,
-        )
-    except json.JSONDecodeError:
+    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+    if fence_match:
+        candidates.append(fence_match.group(1))
+
+    brace_matches = re.findall(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", raw, re.DOTALL)
+    if brace_matches:
+        # Try the largest match first — most likely the full envelope
+        candidates.extend(sorted(brace_matches, key=len, reverse=True))
+
+    decoder = json.JSONDecoder(strict=False)
+    parsed = None
+    for candidate in candidates:
+        try:
+            parsed = decoder.decode(candidate.strip())
+            if isinstance(parsed, dict) and "answer" in parsed:
+                break
+            parsed = None
+        except json.JSONDecodeError:
+            continue
+
+    if parsed is None:
         log.warning("llm.json_parse_failed", raw=raw[:500])
         return LLMResult(answer=raw, confidence="uncertain", references=[])
+
+    refs_raw = parsed.get("references") or []
+    references = [
+        Reference(
+            title=str(r.get("title", "")).strip(),
+            section_number=str(r.get("section_number", "")).strip(),
+            source_type=str(r.get("source_type", "")).strip(),
+            excerpt=str(r.get("excerpt", "")).strip(),
+        )
+        for r in refs_raw
+        if isinstance(r, dict)
+    ]
+    return LLMResult(
+        answer=str(parsed.get("answer", "")).strip(),
+        confidence=str(parsed.get("confidence", "uncertain")).strip(),
+        references=references,
+    )
