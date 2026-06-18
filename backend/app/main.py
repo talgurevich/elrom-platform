@@ -2,9 +2,10 @@
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
-from app.routes import documents, health, ingest, reviewer, search
+from app.routes import auth, documents, health, ingest, reviewer, search
 
 log = structlog.get_logger()
 
@@ -23,7 +24,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cross-site session cookie: frontend and backend live on different Render
+# subdomains, so the cookie must be SameSite=None + Secure.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret,
+    session_cookie="elrom_session",
+    same_site="none",
+    https_only=settings.app_env != "development",
+    max_age=60 * 60 * 24 * 30,  # 30 days
+)
+
 app.include_router(health.router, prefix="/api", tags=["health"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(ingest.router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(reviewer.router, prefix="/api/reviewer", tags=["reviewer"])

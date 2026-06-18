@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # Auth
     session_secret: str = "dev-secret-change-me"
+    google_client_id: str = ""
     resend_api_key: str = ""
     magic_link_from_email: str = "noreply@elrom.tv"
 

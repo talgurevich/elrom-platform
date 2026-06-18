@@ -1,0 +1,124 @@
+import { useEffect, useRef, useState } from "react";
+import { ApiError } from "../lib/api";
+import { useAuth } from "../lib/auth";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              theme?: "outline" | "filled_blue" | "filled_black";
+              size?: "small" | "medium" | "large";
+              shape?: "rectangular" | "pill" | "circle" | "square";
+              text?: "signin_with" | "signup_with" | "continue_with" | "signin";
+              locale?: string;
+              width?: number;
+            }
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+export default function Login() {
+  const { signInWithGoogle } = useAuth();
+  const btnRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!CLIENT_ID) {
+      setError("VITE_GOOGLE_CLIENT_ID לא הוגדר");
+      return;
+    }
+
+    const SCRIPT_ID = "google-identity-services";
+    if (document.getElementById(SCRIPT_ID)) {
+      init();
+      return;
+    }
+    const s = document.createElement("script");
+    s.id = SCRIPT_ID;
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.defer = true;
+    s.onload = init;
+    document.head.appendChild(s);
+
+    function init() {
+      if (!window.google || !btnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: CLIENT_ID!,
+        callback: async (response) => {
+          setBusy(true);
+          setError(null);
+          try {
+            await signInWithGoogle(response.credential);
+          } catch (err) {
+            if (err instanceof ApiError) {
+              setError(err.message.replace(/^\{"detail":"|"\}$/g, ""));
+            } else {
+              setError(err instanceof Error ? err.message : String(err));
+            }
+            setBusy(false);
+          }
+        },
+      });
+      btnRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(btnRef.current, {
+        theme: "outline",
+        size: "large",
+        shape: "pill",
+        text: "continue_with",
+        locale: "he",
+        width: 280,
+      });
+    }
+  }, [signInWithGoogle]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="w-full max-w-md">
+        <div className="bg-white rounded-2xl shadow-lift border border-stone-200/70 p-10 animate-fade-up">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-2xl bg-brand-gradient flex items-center justify-center shadow-soft mb-5">
+              <span className="text-white font-display font-bold text-xl">א</span>
+            </div>
+            <h1 className="font-display text-3xl font-bold text-ink">אלרום</h1>
+            <p className="text-ink-soft mt-2 text-sm">
+              זיכרון ארגוני לקיבוצים ולמושבים
+            </p>
+          </div>
+
+          <div className="mt-10 flex flex-col items-center gap-4">
+            <div ref={btnRef} className={busy ? "opacity-50 pointer-events-none" : ""} />
+            {busy && (
+              <div className="text-xs text-ink-soft animate-pulse">מתחבר…</div>
+            )}
+            {error && (
+              <div className="w-full mt-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-900 text-sm text-center">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <p className="mt-10 text-xs text-ink-soft text-center leading-relaxed">
+            הגישה למערכת מוגבלת למשתמשים מאושרים בלבד.
+            <br />
+            אם אתה לא מצליח להתחבר — פנה למנהל המערכת.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

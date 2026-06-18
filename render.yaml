@@ -53,6 +53,8 @@ services:
         sync: false
       - key: AZURE_DI_KEY
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       # FRONTEND_URL is set in Render UI after the static site URL is known:
       - key: FRONTEND_URL
         sync: false
@@ -66,6 +68,8 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         sync: false   # set in Render UI after the backend URL is known
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
     routes:
       - type: rewrite
         source: /*

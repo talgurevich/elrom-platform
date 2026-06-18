@@ -8,6 +8,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${BASE}${path}`, {
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
   });
@@ -75,6 +76,14 @@ export type DocumentItem = {
   ingested_at: string;
 };
 
+export type CurrentUser = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: string;
+  tenant_id: string;
+};
+
 export type UploadResponse = {
   document_id: string;
   chunks_created: number;
@@ -85,6 +94,15 @@ export type UploadResponse = {
 
 // ─── Endpoints ─────────────────────────────────────────────────────────
 export const api = {
+  // Auth
+  me: () => request<CurrentUser>("/api/auth/me"),
+  googleLogin: (credential: string) =>
+    request<CurrentUser>("/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    }),
+  logout: () => request<{ status: string }>("/api/auth/logout", { method: "POST" }),
+
   search: (question: string) =>
     request<SearchResponse>("/api/search", {
       method: "POST",
@@ -129,7 +147,11 @@ export const api = {
     const fd = new FormData();
     fd.append("file", file);
     if (docType) fd.append("doc_type", docType);
-    const r = await fetch(`${BASE}/api/ingest/upload`, { method: "POST", body: fd });
+    const r = await fetch(`${BASE}/api/ingest/upload`, {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
     if (!r.ok) throw new ApiError(r.status, (await r.text()) || r.statusText);
     return r.json();
   },
