@@ -1,0 +1,17 @@
+[project]
+name = "elrom-platform-backend"
+version = "0.1.0"
+description = "Kibbutz bylaws & decisions search — backend"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
