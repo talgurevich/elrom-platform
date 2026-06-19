@@ -410,6 +410,7 @@
     <tr><td>LLM (answers)</td><td><strong>Claude Sonnet 4.6</strong></td><td>Best Hebrew Q&amp;A reasoning in benchmarks we ran; tool-use forces structured output.</td></tr>
     <tr><td>LLM (extraction / classification)</td><td><strong>Claude Haiku 4.5</strong></td><td>~10× cheaper, plenty smart for filename→title and lexicon-suggestion tasks.</td></tr>
     <tr><td>Embeddings</td><td><strong>Cohere <code>embed-multilingual-v3.0</code></strong> (1024-dim)</td><td>Better Hebrew than OpenAI 3-large in our benchmark; per-call pricing is friendly.</td></tr>
+    <tr><td>Embeddings (fallback)</td><td><strong>OpenAI <code>text-embedding-3-large</code></strong></td><td>Wired in as a hot alternative — flip <code>EMBEDDING_PROVIDER=openai</code> to swap. Vendor redundancy on the highest-volume external call.</td></tr>
     <tr><td>Reranker</td><td><strong>Cohere Rerank</strong></td><td>Tightens retrieval; multilingual, including Hebrew.</td></tr>
     <tr><td>OCR</td><td><strong>Azure Document Intelligence</strong> (<code>prebuilt-read</code>, Qatar Central)</td><td>Best Hebrew scanned-PDF OCR; logical-order output (no BiDi reversal — <em>usually</em>).</td></tr>
     <tr><td>Email</td><td><strong>Resend Pro</strong> (planned)</td><td>Magic-link / notification email; custom <code>@elrom.tv</code> sending domain.</td></tr>

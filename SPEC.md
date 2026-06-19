@@ -87,6 +87,7 @@ A member or staff person opens the web app, signs in with Google, and lands on t
 | LLM (answers) | **Claude Sonnet 4.6** | Best Hebrew Q&A reasoning in benchmarks we ran; tool-use forces structured output. |
 | LLM (extraction/classification) | **Claude Haiku 4.5** | ~10× cheaper, plenty smart for filename→title and lexicon-suggestion tasks. |
 | Embeddings | **Cohere `embed-multilingual-v3.0` (1024-dim)** | Better Hebrew than OpenAI 3-large in our benchmark; per-call pricing is friendly. |
+| Embeddings (fallback) | **OpenAI `text-embedding-3-large`** | Wired in as a hot alternative — flip `EMBEDDING_PROVIDER=openai` to swap. Vendor redundancy on the highest-volume external call. |
 | Reranker | **Cohere Rerank** | Tightens retrieval; multilingual, including Hebrew. |
 | OCR | **Azure Document Intelligence** (`prebuilt-read`, Qatar Central region) | Best Hebrew scanned-PDF OCR; logical-order output (no BiDi reversal — *usually*). |
 | Email | **Resend Pro** (planned) | Magic-link / notification email; custom `@elrom.tv` sending domain. |
