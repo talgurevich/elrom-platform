@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elrom Platform — Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,700&family=JetBrains+Mono:wght@400;600&family=Heebo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a2932;
+    --ink-soft: #5a6c75;
+    --ink-faint: #94a0a7;
+    --accent: #2a4b59;
+    --accent-dark: #1a3340;
+    --gold: #c8a55b;
+    --surface: #fbfaf7;
+    --rule: #e9e5dc;
+    --bg: #ffffff;
+    --max-width: 760px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--surface);
+    background-image:
+      radial-gradient(1200px 600px at 50% -100px, rgba(42, 75, 89, 0.07), transparent 60%),
+      radial-gradient(800px 400px at 95% 5%, rgba(200, 165, 91, 0.05), transparent 60%);
+    background-attachment: fixed;
+    color: var(--ink);
+    font-family: "Newsreader", "Heebo", Georgia, serif;
+    font-size: 18px;
+    line-height: 1.7;
+    font-feature-settings: "kern", "liga", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 64px 32px 96px;
+  }
+  header.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 56px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .brand-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #1a3340 0%, #2a4b59 50%, #3d6373 100%);
+    box-shadow: 0 1px 2px rgba(26,41,50,.06), 0 4px 16px rgba(26,41,50,.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: "Heebo", sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+  }
+  .brand-text {
+    line-height: 1.2;
+  }
+  .brand-text .name {
+    font-family: "Heebo", sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+  }
+  .brand-text .tag {
+    font-family: "Inter", sans-serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  h1 {
+    font-family: "Newsreader", serif;
+    font-weight: 700;
+    font-size: 42px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+  h2 {
+    font-family: "Newsreader", serif;
+    font-weight: 600;
+    font-size: 28px;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    margin: 64px 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    scroll-margin-top: 24px;
+  }
+  h3 {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    font-size: 18px;
+    line-height: 1.4;
+    margin: 36px 0 12px;
+    color: var(--accent);
+    letter-spacing: -0.005em;
+  }
+  h4 {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin: 28px 0 8px;
+  }
+  p {
+    margin: 0 0 18px;
+  }
+  p, li { hyphens: auto; word-wrap: break-word; }
+  strong { font-weight: 600; color: var(--ink); }
+  em { font-style: italic; color: var(--accent-dark); }
+  a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: rgba(42, 75, 89, 0.3);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s;
+  }
+  a:hover {
+    text-decoration-color: var(--accent);
+  }
+  blockquote {
+    margin: 18px 0;
+    padding: 16px 22px;
+    border-right: 3px solid var(--gold);
+    background: rgba(200, 165, 91, 0.06);
+    border-radius: 6px;
+    font-style: italic;
+    color: var(--ink-soft);
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+  code {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-size: 0.88em;
+    background: rgba(42, 75, 89, 0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent-dark);
+  }
+  pre {
+    background: #f5f3ee;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 18px 22px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin: 18px 0;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    color: var(--ink);
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: 48px 0;
+  }
+  ul, ol {
+    margin: 0 0 18px;
+    padding-right: 24px;
+  }
+  li {
+    margin-bottom: 8px;
+  }
+  li > ul, li > ol {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 18px 0;
+    font-family: "Inter", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-weight: 600;
+    color: var(--ink);
+    background: rgba(42, 75, 89, 0.04);
+    border-bottom: 2px solid var(--accent);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 0.85em; }
+  .toc {
+    background: rgba(42, 75, 89, 0.04);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 20px 28px;
+    margin: 28px 0 48px;
+    font-family: "Inter", sans-serif;
+    font-size: 14.5px;
+  }
+  .toc-title {
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .toc ol {
+    margin: 0;
+    padding-right: 22px;
+  }
+  .toc li { margin-bottom: 4px; }
+  .toc a { text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #1a3340 0%, #2a4b59 50%, #3d6373 100%);
+    color: white;
+    padding: 4px 14px;
+    border-radius: 999px;
+    font-family: "Inter", sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  .status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #6ee7b7;
+    box-shadow: 0 0 8px rgba(110, 231, 183, 0.6);
+  }
+  .release-tag {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .check {
+    color: #059669;
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+  ::selection { background: rgba(42, 75, 89, 0.18); color: var(--ink); }
+  @media (max-width: 600px) {
+    .container { padding: 32px 20px 64px; }
+    h1 { font-size: 32px; }
+    h2 { font-size: 24px; }
+    body { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="brand">
+  <div class="brand-mark">א</div>
+  <div class="brand-text">
+    <div class="name">אלרום</div>
+    <div class="tag">Organizational Memory</div>
+  </div>
+</header>
+
+<h1>Elrom Platform — Specification</h1>
+<p><span class="status">v0.1 MVP shipped — June 2026</span></p>
+
+<div class="toc">
+<div class="toc-title">Contents</div>
+<ol>
+  <li><a href="#goal">Goal</a></li>
+  <li><a href="#metrics">Success metrics</a></li>
+  <li><a href="#portal">How the portal works</a></li>
+  <li><a href="#stack">Stack</a></li>
+  <li><a href="#components">Components &amp; roles</a></li>
+  <li><a href="#pricing">Pricing</a></li>
+  <li><a href="#current">Current state — v0.1 shipped</a></li>
+  <li><a href="#roadmap">Roadmap (by release)</a></li>
+</ol>
+</div>
+
+<h2 id="goal">1 · Goal</h2>
+
+<p><strong>The problem.</strong> Kibbutz and moshav secretariats hold decades of bylaws, sub-bylaws, board protocols, assembly decisions, and policy memos. Members ask the secretary questions like <em>"What happens to my father's house and equity units after he died?"</em> every week — and the secretary has to read through 14 documents to answer. Generic AI tools (ChatGPT, NotebookLM) can ingest the documents but don't understand the <strong>hierarchy</strong> (sub-bylaw overrides main bylaw), the <strong>terminology</strong> (<code>בן נסמך</code> is not "an heir"), or the <strong>organizational memory</strong> (which decisions are still active vs. retired).</p>
+
+<p><strong>What Elrom does.</strong> A per-tenant search-and-answer system over the kibbutz's own corpus, with three things generic tools don't have:</p>
+<ol>
+  <li>A <strong>structured citation layer</strong> — every answer cites bylaw + section + verbatim excerpt.</li>
+  <li>A <strong>human-in-the-loop authoritative-answer cache</strong> — once a reviewer approves an answer, future similar questions return that answer verbatim (no LLM call, no drift).</li>
+  <li>A <strong>per-tenant lexicon</strong> — domain terms that route the LLM around predictable mistakes.</li>
+</ol>
+
+<p><strong>Why now.</strong> Hebrew-capable LLMs (Claude Sonnet 4.6) are finally good enough; multilingual embeddings (Cohere v3) finally rank Hebrew well; Azure DI finally OCRs scanned Hebrew bylaws correctly. Two years ago this didn't work.</p>
+
+<p><strong>Who it's for, today.</strong> Design-partner secretariats of kibbutzim and moshavim in Israel. The seed customer is קיבוץ אל-רום.</p>
+
+<p><strong>Who it's for, eventually.</strong> Any cooperative organization with a deep document corpus and a "ask the secretary" workflow — kibbutzim, moshavim, professional associations, religious communities, condo associations.</p>
+
+
+<h2 id="metrics">2 · Success metrics</h2>
+
+<h3>Product quality (the ones we ship against)</h3>
+
+<table>
+  <thead><tr><th>Metric</th><th>Definition</th><th>Target</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Answer precision</strong></td><td>% of <code>confident</code> answers a reviewer approves without edits</td><td>≥ 80%</td></tr>
+    <tr><td><strong>Retrieval recall</strong></td><td>% of golden questions where every required doc appears in top-5</td><td>≥ 90%</td></tr>
+    <tr><td><strong>Answer brevity</strong></td><td>Mean answer length on yes/no questions</td><td>≤ 200 chars</td></tr>
+    <tr><td><strong>HITL cache hit rate</strong></td><td>% of queries served from authoritative cache (LLM bypassed)</td><td>grows weekly</td></tr>
+    <tr><td><strong>Reviewer load</strong></td><td>Mean reviewer minutes per approved authoritative answer</td><td>≤ 2 min</td></tr>
+  </tbody>
+</table>
+
+<p>All measurable via <code>POST /api/eval/run</code> against the golden set.</p>
+
+<h3>Operational (the ones we watch)</h3>
+
+<table>
+  <thead><tr><th>Metric</th><th>Target</th></tr></thead>
+  <tbody>
+    <tr><td><strong>p95 query latency</strong> (LLM path)</td><td>≤ 12s</td></tr>
+    <tr><td><strong>p95 query latency</strong> (HITL cache hit)</td><td>≤ 1.5s</td></tr>
+    <tr><td><strong>Cost per query</strong> (LLM path)</td><td>≤ $0.02</td></tr>
+    <tr><td><strong>Cost per query</strong> (cache hit)</td><td>≤ $0.0005</td></tr>
+    <tr><td><strong>MAU per tenant</strong></td><td>tracked, no target until we have 3+ tenants</td></tr>
+  </tbody>
+</table>
+
+
+<h2 id="portal">3 · How the portal works</h2>
+
+<p>A member or staff person opens the web app, signs in with Google, and lands on the search tab.</p>
+
+<p><strong>Asking a question.</strong> They type a question in Hebrew. While the request is in flight, the UI cycles through pipeline stages (<code>🔎 מנתח את השאלה → 📚 מחפש בארכיון → 🎯 מדרג מקורות → ✍️ מנסח תשובה</code>) so they know what's happening. Total wait: 5–15 seconds end-to-end.</p>
+
+<p><strong>The answer.</strong> They see, top to bottom:</p>
+<ol>
+  <li><strong>Confidence chip</strong> — <code>תשובה מבוססת</code>, <code>תשובה חלקית</code>, or <code>אין תשובה במאגר</code>.</li>
+  <li><strong>Cited clauses</strong> — each one shows the bylaw name, section number, source type, and a verbatim excerpt.</li>
+  <li><strong>Natural-language answer</strong> — short, direct, opens with the rule for yes/no questions.</li>
+  <li><strong>Feedback row</strong> — 👍 / 👎 / "promote to golden question."</li>
+  <li><strong>Raw retrieved chunks</strong> (collapsible, for debugging) and <strong>retrieval debug panel</strong> showing per-stage scores.</li>
+</ol>
+
+<p><strong>If a near-miss authoritative answer exists</strong> for this question (similarity 0.82–0.92 to something previously approved), it's surfaced <em>above</em> the LLM answer with a warning so the user can rebase or the reviewer can avoid creating duplicates.</p>
+
+<p><strong>Tagging failures.</strong> If the user gives 👎, a tagger appears: <em>retrieval miss, wrong generation, other</em>. This is the data the eval loop runs on later.</p>
+
+<p><strong>Reviewer workflow.</strong> The reviewer opens the תור בדיקה tab, sees recent queries (negative-feedback first), and for each one can: approve as-is, edit and approve (promoted to the HITL cache), reject, or <strong>retry</strong> (re-runs the question against the current pipeline so you can see if a prompt/embedding change improved it).</p>
+
+<p><strong>Document management.</strong> Upload PDFs/DOCX/TXT; PDFs route to Azure DI OCR if pdfplumber returns no text. Each document is auto-classified by Claude Haiku — title, type (bylaw / sub-bylaw / minutes / decision / other), one-line summary. Hash-named files from scanned-source URLs get human-readable titles assigned.</p>
+
+<p><strong>Eval.</strong> A separate <code>הערכה</code> tab holds golden questions. One-click "Run eval" re-issues every golden through the live pipeline and scores it: retrieval recall (did the required docs surface?), keyword recall (did the required terms appear in the answer?), composite. Per-question scores persist for delta tracking after any change.</p>
+
+<p><strong>Lexicon.</strong> A <code>מילון</code> tab holds tenant-specific term expansions. There's also a "✨ suggest entries" button that sweeps recent failed queries with Claude Haiku and proposes new entries.</p>
+
+
+<h2 id="stack">4 · Stack</h2>
+
+<table>
+  <thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Hosting</td><td><strong>Render</strong> (frankfurt)</td><td>Cheapest with a GitHub-app webhook, blueprint deploys, managed Postgres in EU.</td></tr>
+    <tr><td>Database</td><td><strong>Postgres 16 + pgvector</strong></td><td>One database for relational data and vector embeddings — no separate vector store to operate.</td></tr>
+    <tr><td>Backend</td><td><strong>Python 3.11 + FastAPI + SQLAlchemy 2 + Alembic</strong></td><td>Mature async-friendly stack, the AI ecosystem is Python-native.</td></tr>
+    <tr><td>Frontend</td><td><strong>React 18 + Vite + TypeScript + Tailwind 3</strong></td><td>Small footprint, RTL works out of the box, fast HMR.</td></tr>
+    <tr><td>Auth</td><td><strong>Google OAuth</strong> (Identity Services) + Starlette <code>SessionMiddleware</code></td><td>Invite-only — user signs in with Google, lookup by email in <code>users</code> table; no password rot.</td></tr>
+    <tr><td>LLM (answers)</td><td><strong>Claude Sonnet 4.6</strong></td><td>Best Hebrew Q&amp;A reasoning in benchmarks we ran; tool-use forces structured output.</td></tr>
+    <tr><td>LLM (extraction / classification)</td><td><strong>Claude Haiku 4.5</strong></td><td>~10× cheaper, plenty smart for filename→title and lexicon-suggestion tasks.</td></tr>
+    <tr><td>Embeddings</td><td><strong>Cohere <code>embed-multilingual-v3.0</code></strong> (1024-dim)</td><td>Better Hebrew than OpenAI 3-large in our benchmark; per-call pricing is friendly.</td></tr>
+    <tr><td>Reranker</td><td><strong>Cohere Rerank</strong></td><td>Tightens retrieval; multilingual, including Hebrew.</td></tr>
+    <tr><td>OCR</td><td><strong>Azure Document Intelligence</strong> (<code>prebuilt-read</code>, Qatar Central)</td><td>Best Hebrew scanned-PDF OCR; logical-order output (no BiDi reversal — <em>usually</em>).</td></tr>
+    <tr><td>Email</td><td><strong>Resend Pro</strong> (planned)</td><td>Magic-link / notification email; custom <code>@elrom.tv</code> sending domain.</td></tr>
+    <tr><td>Domain</td><td><strong>elrom.tv</strong> (already owned)</td><td></td></tr>
+  </tbody>
+</table>
+
+
+<h2 id="components">5 · Components &amp; roles</h2>
+
+<h3>Backend</h3>
+<pre><code>app/
+├── main.py              # FastAPI entry; middleware (CORS, sessions); router wiring
+├── config.py            # Settings (env-var loaded)
+├── db.py                # SQLAlchemy engine + session
+├── models.py            # All ORM models (Tenant, User, Document, Chunk, Query,
+│                         AuthoritativeAnswer, GoldenQuestion, Lexicon)
+├── routes/
+│   ├── auth.py          # Google OAuth verify + session cookie
+│   ├── health.py        # /api/health + bootstrap-tenant admin endpoint
+│   ├── ingest.py        # File upload → extract → chunk → embed → store
+│   ├── documents.py     # List, delete, classify (Haiku-driven titles), inspect chunks, fix RTL
+│   ├── search.py        # The query pipeline (cache → retrieve → answer)
+│   ├── reviewer.py      # Queue, approve/edit/reject, authoritative library, lexicon CRUD + suggestions
+│   └── eval.py          # Golden questions CRUD, run-eval, scoring
+└── services/
+    ├── embedding.py     # Cohere wrapper
+    ├── extraction.py    # PDF/DOCX/TXT text extraction with OCR fallback
+    ├── ocr.py           # Azure DI client; auto-splits PDFs by page count
+    ├── retrieval.py     # Hybrid (vector + BM25) + RRF + per-doc diversity + Cohere rerank
+    ├── reranker.py      # Cohere Rerank wrapper
+    ├── hitl.py          # Authoritative cache lookup + near-miss surfacing
+    ├── lexicon.py       # Term matching + Haiku-driven suggestion from failed queries
+    └── llm.py           # Claude tool-use call; SYSTEM_PROMPT lives here</code></pre>
+
+<h3>Frontend</h3>
+<pre><code>src/
+├── main.tsx             # ReactDOM + AuthProvider
+├── App.tsx              # Auth gate; brand nav; tab routing
+├── lib/
+│   ├── api.ts           # Typed fetch wrapper; credentials: include
+│   └── auth.tsx         # AuthProvider context; useAuth hook
+└── pages/
+    ├── Login.tsx        # Google Identity Services button
+    ├── Search.tsx       # The main Q&A view; debug panel; near-miss surfacing
+    ├── Upload.tsx       # Drag-and-drop + queue + classify-all button
+    ├── Review.tsx       # Reviewer queue; retry button per query
+    ├── Authoritative.tsx# Manage the HITL cache
+    ├── Lexicon.tsx      # Term CRUD + suggestion accept/reject
+    └── Eval.tsx         # Golden questions + run-eval dashboard</code></pre>
+
+<h3>Hard rules (the ones we will not break)</h3>
+<ul>
+  <li><strong>The LLM never answers without a retrieved chunk.</strong> No "general knowledge" fallback.</li>
+  <li><strong>References are structured, not inline-marker.</strong> Every cited section returns as <code>{title, section_number, source_type, excerpt}</code>.</li>
+  <li><strong>Authoritative cache bypasses the LLM entirely.</strong> Reviewer-approved answers are served verbatim.</li>
+  <li><strong>No cross-tenant data leakage.</strong> <em>(Currently enforced by "first tenant wins" — see v0.3 roadmap.)</em></li>
+</ul>
+
+
+<h2 id="pricing">6 · Pricing</h2>
+
+<p>See <code>BILLING.md</code> for the per-service breakdown. Forward-looking unit economics:</p>
+
+<h3>At 1,000 queries / month (one design-partner pilot)</h3>
+<table>
+  <thead><tr><th>Cost</th><th>Estimate</th></tr></thead>
+  <tbody>
+    <tr><td>Render Starter ($21/mo)</td><td>$21</td></tr>
+    <tr><td>Anthropic (Sonnet @ avg 4K in / 600 out per query)</td><td>~$20</td></tr>
+    <tr><td>Cohere (embed + rerank)</td><td>~$2</td></tr>
+    <tr><td>Azure DI (one-time ingest cost, then trivial)</td><td>&lt; $1/mo at steady state</td></tr>
+    <tr><td>Resend Pro</td><td>$20</td></tr>
+    <tr><td><strong>Total</strong></td><td><strong>~$65 / month</strong></td></tr>
+  </tbody>
+</table>
+
+<h3>At 10,000 queries / month</h3>
+<table>
+  <thead><tr><th>Cost</th><th>Estimate</th></tr></thead>
+  <tbody>
+    <tr><td>Render (likely needs upgrade to Standard or Pro)</td><td>~$50</td></tr>
+    <tr><td>Anthropic (with HITL cache hit rate growing toward 30%)</td><td>~$140</td></tr>
+    <tr><td>Cohere</td><td>~$15</td></tr>
+    <tr><td>Azure DI</td><td>&lt; $5/mo</td></tr>
+    <tr><td>Resend Pro</td><td>$20</td></tr>
+    <tr><td><strong>Total</strong></td><td><strong>~$230 / month</strong></td></tr>
+  </tbody>
+</table>
+
+<p>At a pilot price of $200–500/month per design-partner kibbutz, unit economics work from query 1.</p>
+
+
+<h2 id="current">7 · Current state — v0.1 shipped</h2>
+
+<p>What's actually running in production today:</p>
+<ul>
+  <li><span class="check">✓</span> Google OAuth login (invite-only via email in <code>users</code> table)</li>
+  <li><span class="check">✓</span> Multi-format upload (PDF text-extract, PDF→OCR fallback, DOCX, TXT)</li>
+  <li><span class="check">✓</span> Per-document AI classification (title, doc_type, summary)</li>
+  <li><span class="check">✓</span> Per-document <strong>chunk inspection</strong> + <strong>RTL-reversed text repair</strong> endpoints</li>
+  <li><span class="check">✓</span> Hybrid retrieval (vector + BM25 + RRF + Cohere rerank)</li>
+  <li><span class="check">✓</span> <strong>Per-document diversity cap</strong> at both candidate and final stages</li>
+  <li><span class="check">✓</span> HITL authoritative-answer cache + near-miss surfacing</li>
+  <li><span class="check">✓</span> Tenant lexicon (manual CRUD + Haiku-driven suggestions from failed queries)</li>
+  <li><span class="check">✓</span> Claude Sonnet answer generation with <strong>tool-use schema</strong> (no JSON parsing bugs)</li>
+  <li><span class="check">✓</span> Domain-specific Hebrew system prompt (hierarchy, member-status distinction, intent classification, brevity, no headers)</li>
+  <li><span class="check">✓</span> <strong>Retrieval debug panel</strong> (per-stage scores)</li>
+  <li><span class="check">✓</span> <strong>Failure-mode tagging</strong> (retrieval miss vs wrong generation)</li>
+  <li><span class="check">✓</span> <strong>Golden Q&amp;A eval harness</strong> with per-question scoring</li>
+  <li><span class="check">✓</span> <strong>Retry</strong> button in reviewer queue (re-run a question against the current pipeline)</li>
+  <li><span class="check">✓</span> Auto-OCR splitting for multi-page PDFs (workaround for Azure DI silent truncation)</li>
+</ul>
+<p>22 documents indexed for קיבוץ אל-רום. Real users (Tal, Noam) using daily.</p>
+<p>Tenant scoping is currently "first tenant wins" — fine while there's exactly one tenant, breaks on the second. See v0.3.</p>
+
+
+<h2 id="roadmap">8 · Roadmap (by release)</h2>
+
+<h3><span class="release-tag">v0.2</span>Measurement &amp; Retrieval Quality</h3>
+<p>The point of this release: <strong>stop flying blind</strong>, then push retrieval recall hard. Every change should land alongside an eval delta.</p>
+<ul>
+  <li><strong>Build the golden set (20+ questions)</strong> with <code>expected_doc_filenames</code> and <code>expected_keywords</code>. Establish baseline scores.</li>
+  <li><strong>Section-aware chunking.</strong> Today: char-window splits. Replace with a splitter that respects bylaw section boundaries (<code>1.1.1</code>, <code>10.2</code>, etc.) — preserves the natural semantic unit and dramatically improves "is this chunk the right answer" rerank scores.</li>
+  <li><strong>Hebrew-aware BM25.</strong> Postgres FTS <code>simple</code> dictionary doesn't lemmatize Hebrew, so <code>ירש</code> and <code>ירושה</code> don't match. Add a Hebrew analyzer (precompute stems at ingest time as a separate column).</li>
+  <li><strong>Lexicon-driven query rewriting.</strong> When a known lexicon term matches the user's question, expand it <em>into the embedding query</em>, not just the LLM prompt. Today the term is explained to the LLM but the retrieval still searches the unexpanded form.</li>
+  <li><strong>HyDE</strong> (hypothetical-doc embeddings). Add as an optional retrieval mode, A/B against the baseline on the golden set; ship if it wins.</li>
+  <li><strong>Multi-query fan-out.</strong> Haiku generates 3 rephrasings, retrieve for each, RRF-fuse. Same A/B treatment.</li>
+  <li><strong>Re-OCR pass</strong> on any document where chunk count looks suspiciously low vs page count.</li>
+</ul>
+
+<h3><span class="release-tag">v0.3</span>Multi-tenant Production Readiness</h3>
+<p>The point: stop being a single-customer demo, start being a platform.</p>
+<ul>
+  <li><strong>Real tenant scoping.</strong> Every DB query that today picks "the first tenant" gets <code>tenant_id=current_user.tenant_id</code> wired in. Audit + test.</li>
+  <li><strong>Tenant onboarding flow.</strong> Sign up → name your organization → seed lexicon (templates by segment: kibbutz shitufi, kibbutz mitchadesh, moshav) → upload docs → done. End state: a new tenant can self-serve to first answer within an hour.</li>
+  <li><strong>Per-tenant cost dashboard.</strong> Show admin: queries this month, LLM cost, cache hit rate, top failed queries.</li>
+  <li><strong>Magic-link login alongside Google.</strong> Resend Pro integration (the env var slot exists, the flow doesn't yet).</li>
+  <li><strong>Tenant data export.</strong> GDPR/PII hygiene; "download all my data" + "delete my tenant" endpoints.</li>
+</ul>
+
+<h3><span class="release-tag">v0.4</span>HITL Workflow &amp; Authoritative Library</h3>
+<p>The point: the reviewer is the bottleneck. Reduce their per-answer cost.</p>
+<ul>
+  <li><strong>Bulk approve/reject in the reviewer queue</strong> (keyboard shortcuts: <code>A</code> approve, <code>R</code> reject, <code>E</code> edit, <code>J/K</code> navigate).</li>
+  <li><strong>Diff view</strong> for edited answers — show LLM original vs reviewer-edited, side by side, with <code>git</code>-style highlighting.</li>
+  <li><strong>Authoritative-answer versioning + retire/replace</strong> — when a bylaw changes, retire affected authoritative answers and prompt the reviewer to re-author.</li>
+  <li><strong>Auto-suggest authoritative answer</strong> when reviewer opens a query — search for similar already-approved answers and offer "promote based on this template."</li>
+  <li><strong>Reviewer analytics</strong> — which docs/questions are the highest-volume failure source; weekly "you have N untouched negative-feedback queries" digest.</li>
+</ul>
+
+<h3><span class="release-tag">v0.5</span>Generation Quality &amp; Answer Tuning</h3>
+<p>The point: with retrieval solid and HITL fast, push answer prose toward "reads like a great human secretary."</p>
+<ul>
+  <li><strong>Eval-driven prompt iteration loop</strong> (formalized: every prompt change must improve composite score on the golden set, or revert).</li>
+  <li><strong>Answer-length awareness.</strong> Today the prompt says "short." Add explicit type-routing: yes/no → 1 sentence, "what is X?" → 2 paragraphs, "what's the process?" → numbered list.</li>
+  <li><strong>Self-consistency for high-stakes questions.</strong> When <code>confidence=uncertain</code> and the topic touches money/property, run the LLM twice with different chunk orderings and only return the consensus.</li>
+  <li><strong>Inline-citation hover tooltips on the frontend</strong> — hover a section number, see the excerpt without scrolling.</li>
+</ul>
+
+<h3><span class="release-tag">v1.0</span>UI Polish, Accessibility, Share-ability</h3>
+<p>Cosmetic but worth doing well before pitching beyond design partners.</p>
+<ul>
+  <li><strong>Mobile responsive layout</strong> (today the nav is desktop-only).</li>
+  <li><strong>Israeli accessibility compliance</strong> — IS 5568 + WCAG 2.1 AA for Hebrew RTL (mandatory under the Equal Rights for Persons with Disabilities Act in Israel; non-compliance carries fines).</li>
+  <li><strong>Search history</strong> (per-user) and <strong>bookmarked answers</strong>.</li>
+  <li><strong>Shareable answer links</strong> (<code>/answer/&lt;query_id&gt;</code> — copy-link, read-only).</li>
+  <li><strong>Document thumbnails</strong> on the מסמכים tab.</li>
+  <li><strong>Light/dark theme.</strong></li>
+  <li><strong>Empty-state illustrations</strong> and richer loading skeletons.</li>
+  <li><strong>Notification system</strong> ("your bylaw question got an authoritative answer — view it").</li>
+</ul>
+
+<h3>Backlog (post-v1.0, ordered by interest, not priority)</h3>
+<ul>
+  <li>Slack / WhatsApp bot integrations</li>
+  <li>Mobile native (React Native — the frontend is already TypeScript)</li>
+  <li>Question-difficulty estimation (route hard questions to better/longer-context model)</li>
+  <li>Cross-tenant anonymized analytics ("90% of kibbutzim asked about X this quarter")</li>
+  <li>Fine-tuned Hebrew embedding model</li>
+  <li>Read-only public knowledge pages (per-tenant, opt-in)</li>
+  <li>Live "ask a question" widget for the kibbutz's own website</li>
+</ul>
+
+<div class="footer">Doc owner: Tal Gurevich. Last updated: 2026-06-19.</div>
+
+</div>
+</body>
+</html>
