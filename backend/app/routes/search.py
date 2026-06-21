@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AuthoritativeAnswer, Chunk, Query, Tenant
+from app.models import AuthoritativeAnswer, Chunk, Query, Tenant, User
+from app.routes.auth import current_user
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
@@ -27,7 +28,6 @@ router = APIRouter()
 
 class SearchRequest(BaseModel):
     question: str
-    tenant_id: UUID | None = None
     top_k: int = 5
 
 
@@ -87,14 +87,13 @@ def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
 
 
 @router.post("", response_model=SearchResponse)
-def search(req: SearchRequest, db: Session = Depends(get_db)) -> SearchResponse:
+def search(
+    req: SearchRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> SearchResponse:
     """Run the search pipeline: HITL cache → retrieve → answer with citations."""
-    tenant_id = req.tenant_id
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists. Create one first.")
-        tenant_id = tenant.id
+    tenant_id = user.tenant_id
 
     question_embedding = embed_texts([req.question], input_type="search_query")[0]
 
@@ -234,7 +233,10 @@ class FeedbackRequest(BaseModel):
 
 @router.post("/{query_id}/feedback")
 def submit_feedback(
-    query_id: UUID, req: FeedbackRequest, db: Session = Depends(get_db)
+    query_id: UUID,
+    req: FeedbackRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> dict:
     """👍 / 👎 on a returned answer — the in-flow signal Ido gives.
 
@@ -246,7 +248,8 @@ def submit_feedback(
         raise HTTPException(400, "feedback must be 'positive' or 'negative'")
 
     query = db.get(Query, query_id)
-    if query is None:
+    if query is None or query.tenant_id != user.tenant_id:
+        # 404 (not 403) so we don't leak existence of other tenants' queries.
         raise HTTPException(404, "Query not found")
 
     query.feedback = req.feedback
@@ -270,14 +273,17 @@ class FailureModeRequest(BaseModel):
 
 @router.post("/{query_id}/failure-mode")
 def tag_failure_mode(
-    query_id: UUID, req: FailureModeRequest, db: Session = Depends(get_db)
+    query_id: UUID,
+    req: FailureModeRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> dict:
     """Tag *why* an answer was wrong, so we can route the fix correctly."""
     valid = {"retrieval_miss", "wrong_generation", "other"}
     if req.failure_mode not in valid:
         raise HTTPException(400, f"failure_mode must be one of {valid}")
     query = db.get(Query, query_id)
-    if query is None:
+    if query is None or query.tenant_id != user.tenant_id:
         raise HTTPException(404, "Query not found")
     query.failure_mode = req.failure_mode
     if not query.feedback:

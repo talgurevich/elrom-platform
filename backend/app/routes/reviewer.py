@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AuthoritativeAnswer, Lexicon, Query, Tenant
+from app.models import AuthoritativeAnswer, Lexicon, Query, Tenant, User
+from app.routes.auth import current_user
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -38,19 +39,13 @@ class QueryListItem(BaseModel):
 @router.get("/queries", response_model=list[QueryListItem])
 def list_queries(
     db: Session = Depends(get_db),
-    tenant_id: UUID | None = QParam(None),
+    user: User = Depends(current_user),
     needs_review: bool = QParam(False, description="Only show queries with no reviewer action yet"),
     feedback_only: bool = QParam(False, description="Only show queries with feedback (👎 first)"),
     limit: int = QParam(50, le=200),
 ) -> list[QueryListItem]:
     """List recent queries for the reviewer queue."""
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists.")
-        tenant_id = tenant.id
-
-    q = db.query(Query).filter(Query.tenant_id == tenant_id)
+    q = db.query(Query).filter(Query.tenant_id == user.tenant_id)
     if needs_review:
         q = q.filter(Query.reviewer_action.is_(None))
     if feedback_only:
@@ -94,7 +89,10 @@ class ApproveResponse(BaseModel):
 
 @router.post("/queries/{query_id}/approve", response_model=ApproveResponse)
 def approve_query(
-    query_id: UUID, req: ApproveRequest, db: Session = Depends(get_db)
+    query_id: UUID,
+    req: ApproveRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> ApproveResponse:
     """Promote a query/answer pair to an authoritative answer.
 
@@ -102,7 +100,7 @@ def approve_query(
     use the original LLM answer. The canonical question = the original question.
     """
     query = db.get(Query, query_id)
-    if query is None:
+    if query is None or query.tenant_id != user.tenant_id:
         raise HTTPException(404, "Query not found")
     if query.confidence == "refused" and req.edited_answer is None:
         raise HTTPException(400, "Cannot approve a refused answer without providing edited_answer")
@@ -137,10 +135,14 @@ def approve_query(
 
 
 @router.post("/queries/{query_id}/reject")
-def reject_query(query_id: UUID, db: Session = Depends(get_db)) -> dict:
+def reject_query(
+    query_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
     """Mark a query/answer pair as incorrect — does NOT create an authoritative entry."""
     query = db.get(Query, query_id)
-    if query is None:
+    if query is None or query.tenant_id != user.tenant_id:
         raise HTTPException(404, "Query not found")
     query.reviewer_action = "rejected"
     db.commit()
@@ -166,17 +168,11 @@ class AuthoritativeItem(BaseModel):
 @router.get("/authoritative", response_model=list[AuthoritativeItem])
 def list_authoritative(
     db: Session = Depends(get_db),
-    tenant_id: UUID | None = QParam(None),
+    user: User = Depends(current_user),
     include_retired: bool = QParam(False),
 ) -> list[AuthoritativeItem]:
-    """List authoritative answers."""
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists.")
-        tenant_id = tenant.id
-
-    q = db.query(AuthoritativeAnswer).filter(AuthoritativeAnswer.tenant_id == tenant_id)
+    """List authoritative answers for the caller's tenant."""
+    q = db.query(AuthoritativeAnswer).filter(AuthoritativeAnswer.tenant_id == user.tenant_id)
     if not include_retired:
         q = q.filter(AuthoritativeAnswer.status == "active")
     rows = q.order_by(AuthoritativeAnswer.approved_at.desc()).all()
@@ -204,11 +200,14 @@ class UpdateAuthoritativeRequest(BaseModel):
 
 @router.patch("/authoritative/{auth_id}")
 def update_authoritative(
-    auth_id: UUID, req: UpdateAuthoritativeRequest, db: Session = Depends(get_db)
+    auth_id: UUID,
+    req: UpdateAuthoritativeRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> dict:
     """Edit or retire an authoritative answer."""
     auth = db.get(AuthoritativeAnswer, auth_id)
-    if auth is None:
+    if auth is None or auth.tenant_id != user.tenant_id:
         raise HTTPException(404, "Authoritative answer not found")
 
     if req.answer is not None:
@@ -246,7 +245,6 @@ class CreateLexiconRequest(BaseModel):
     term: str
     expansion: str
     notes: str | None = None
-    tenant_id: UUID | None = None
 
 
 class UpdateLexiconRequest(BaseModel):
@@ -258,18 +256,12 @@ class UpdateLexiconRequest(BaseModel):
 @router.get("/lexicon", response_model=list[LexiconItem])
 def list_lexicon(
     db: Session = Depends(get_db),
-    tenant_id: UUID | None = QParam(None),
+    user: User = Depends(current_user),
 ) -> list[LexiconItem]:
-    """List lexicon entries for a tenant."""
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists.")
-        tenant_id = tenant.id
-
+    """List lexicon entries for the caller's tenant."""
     rows = (
         db.query(Lexicon)
-        .filter(Lexicon.tenant_id == tenant_id)
+        .filter(Lexicon.tenant_id == user.tenant_id)
         .order_by(Lexicon.term)
         .all()
     )
@@ -286,20 +278,17 @@ def list_lexicon(
 
 
 @router.post("/lexicon", response_model=LexiconItem)
-def create_lexicon(req: CreateLexiconRequest, db: Session = Depends(get_db)) -> LexiconItem:
-    """Add a new lexicon entry."""
-    tenant_id = req.tenant_id
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists.")
-        tenant_id = tenant.id
-
+def create_lexicon(
+    req: CreateLexiconRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> LexiconItem:
+    """Add a new lexicon entry in the caller's tenant."""
     if not req.term.strip() or not req.expansion.strip():
         raise HTTPException(400, "term and expansion are required")
 
     entry = Lexicon(
-        tenant_id=tenant_id,
+        tenant_id=user.tenant_id,
         term=req.term.strip(),
         expansion=req.expansion.strip(),
         notes=req.notes,
@@ -319,11 +308,14 @@ def create_lexicon(req: CreateLexiconRequest, db: Session = Depends(get_db)) -> 
 
 @router.patch("/lexicon/{lex_id}")
 def update_lexicon(
-    lex_id: UUID, req: UpdateLexiconRequest, db: Session = Depends(get_db)
+    lex_id: UUID,
+    req: UpdateLexiconRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> dict:
     """Edit a lexicon entry."""
     entry = db.get(Lexicon, lex_id)
-    if entry is None:
+    if entry is None or entry.tenant_id != user.tenant_id:
         raise HTTPException(404, "Lexicon entry not found")
     if req.term is not None:
         entry.term = req.term.strip()
@@ -337,10 +329,14 @@ def update_lexicon(
 
 
 @router.delete("/lexicon/{lex_id}")
-def delete_lexicon(lex_id: UUID, db: Session = Depends(get_db)) -> dict:
+def delete_lexicon(
+    lex_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
     """Delete a lexicon entry."""
     entry = db.get(Lexicon, lex_id)
-    if entry is None:
+    if entry is None or entry.tenant_id != user.tenant_id:
         raise HTTPException(404, "Lexicon entry not found")
     db.delete(entry)
     db.commit()
@@ -357,12 +353,12 @@ class LexiconSuggestion(BaseModel):
 
 
 @router.post("/lexicon/suggestions", response_model=list[LexiconSuggestion])
-def lexicon_suggestions(db: Session = Depends(get_db)) -> list[LexiconSuggestion]:
+def lexicon_suggestions(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> list[LexiconSuggestion]:
     """Propose lexicon entries from recent failed queries (Claude Haiku-driven)."""
     from app.services.lexicon import suggest_lexicon_entries_from_failures
 
-    tenant = db.query(Tenant).first()
-    if not tenant:
-        raise HTTPException(400, "No tenant exists.")
-    items = suggest_lexicon_entries_from_failures(db, tenant_id=tenant.id, limit=10)
+    items = suggest_lexicon_entries_from_failures(db, tenant_id=user.tenant_id, limit=10)
     return [LexiconSuggestion(**i) for i in items]

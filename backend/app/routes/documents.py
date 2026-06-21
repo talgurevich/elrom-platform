@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Chunk, Document, Tenant
+from app.models import Chunk, Document, Tenant, User
+from app.routes.auth import current_user
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -73,14 +74,10 @@ def _quality_verdict(
 @router.get("", response_model=list[DocumentItem])
 def list_documents(
     db: Session = Depends(get_db),
-    tenant_id: UUID | None = QParam(None),
+    user: User = Depends(current_user),
 ) -> list[DocumentItem]:
-    """List documents for a tenant with chunk + char counts."""
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists.")
-        tenant_id = tenant.id
+    """List documents for the caller's tenant with chunk + char counts."""
+    tenant_id = user.tenant_id
 
     stmt = (
         select(
@@ -135,20 +132,16 @@ def list_documents(
 @router.delete("")
 def delete_all_documents(
     confirm: bool = QParam(False, description="Must be true to actually delete."),
-    tenant_id: UUID | None = QParam(None),
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> dict:
-    """Wipe every document (and its chunks via cascade) for the tenant.
+    """Wipe every document (and its chunks via cascade) for the caller's tenant.
 
     Requires confirm=true. Returns how many docs/chunks were deleted.
     """
     if not confirm:
         raise HTTPException(400, "Pass confirm=true to actually delete all documents.")
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists.")
-        tenant_id = tenant.id
+    tenant_id = user.tenant_id
 
     docs = db.query(Document).filter(Document.tenant_id == tenant_id).all()
     n_docs = len(docs)
@@ -293,16 +286,13 @@ def classify_document_by_id_bg(document_id: UUID) -> None:
 @router.post("/classify", response_model=ClassifySummary)
 def classify_documents(
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
     force: bool = QParam(False, description="Re-classify even already-classified docs"),
 ) -> ClassifySummary:
-    """Walk every document and classify any that need it. Mostly a manual
-    backstop / reclassify-everything button — new uploads classify themselves
-    automatically via a background task in /ingest/upload."""
-    tenant = db.query(Tenant).first()
-    if not tenant:
-        raise HTTPException(400, "No tenant exists.")
-
-    docs = db.query(Document).filter(Document.tenant_id == tenant.id).all()
+    """Walk every document in the caller's tenant and classify any that need it.
+    Mostly a manual backstop / reclassify-everything button — new uploads
+    classify themselves automatically via a background task in /ingest/upload."""
+    docs = db.query(Document).filter(Document.tenant_id == user.tenant_id).all()
     results: list[ClassifyResult] = []
     classified = 0
 
@@ -372,13 +362,17 @@ class FixRtlSummary(BaseModel):
 
 
 @router.post("/{document_id}/fix-rtl", response_model=FixRtlSummary)
-def fix_rtl(document_id: UUID, db: Session = Depends(get_db)) -> FixRtlSummary:
+def fix_rtl(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> FixRtlSummary:
     """Repair an RTL-reversed document in place: reverse each line of every
     chunk's text, then re-embed so the chunks become findable in search."""
     from app.services.embedding import embed_texts
 
     doc = db.get(Document, document_id)
-    if doc is None:
+    if doc is None or doc.tenant_id != user.tenant_id:
         raise HTTPException(404, "Document not found")
 
     chunks = (
@@ -420,11 +414,15 @@ class ChunkPreview(BaseModel):
 
 
 @router.get("/{document_id}/chunks", response_model=list[ChunkPreview])
-def get_chunks(document_id: UUID, db: Session = Depends(get_db)) -> list[ChunkPreview]:
+def get_chunks(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> list[ChunkPreview]:
     """Return all chunks of a document with their text. For debugging chunking
     + OCR quality."""
     doc = db.get(Document, document_id)
-    if doc is None:
+    if doc is None or doc.tenant_id != user.tenant_id:
         raise HTTPException(404, "Document not found")
     chunks = (
         db.query(Chunk)
@@ -444,10 +442,14 @@ def get_chunks(document_id: UUID, db: Session = Depends(get_db)) -> list[ChunkPr
 
 
 @router.delete("/{document_id}")
-def delete_document(document_id: UUID, db: Session = Depends(get_db)) -> dict:
+def delete_document(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
     """Delete a document and its chunks (queries that reference its chunks become orphaned but stay)."""
     doc = db.get(Document, document_id)
-    if doc is None:
+    if doc is None or doc.tenant_id != user.tenant_id:
         raise HTTPException(404, "Document not found")
     db.delete(doc)
     db.commit()

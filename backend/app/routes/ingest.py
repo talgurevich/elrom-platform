@@ -11,7 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Chunk, Document, Tenant
+from app.models import Chunk, Document, Tenant, User
+from app.routes.auth import current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import chunk_document
 from app.services.embedding import embed_texts
@@ -24,7 +25,6 @@ router = APIRouter()
 class IngestRequest(BaseModel):
     filename: str
     text: str
-    tenant_id: UUID | None = None  # if omitted, uses the first tenant (dev convenience)
     doc_type: str | None = None  # bylaw | sub_bylaw | minutes | decision | other
     extractor: str | None = None  # set by CLI script when extraction happened client-side
     used_ocr: bool = False
@@ -56,18 +56,10 @@ def ingest(
     req: IngestRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> IngestResponse:
-    """Ingest a single document.
-
-    MVP scope: accepts text directly (no OCR yet). Splits into structural chunks,
-    embeds each, persists to pgvector. Date metadata extraction comes in Week 2.
-    """
-    tenant_id = req.tenant_id
-    if tenant_id is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists. Create one first.")
-        tenant_id = tenant.id
+    """Ingest a single document into the caller's tenant."""
+    tenant_id = user.tenant_id
 
     # Density sanity check — refuse PDFs that produced suspiciously little text
     # per page (usually means OCR was needed but didn't run, or partial OCR).
@@ -154,11 +146,11 @@ def ingest(
 async def ingest_upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    tenant_id: UUID | None = Form(None),
     doc_type: str | None = Form(None),
     prefer_ocr: bool | None = Form(None),
     auto_classify: bool = Form(True),
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> IngestResponse:
     """Accept a file upload (txt/md/docx/pdf), extract text (with OCR fallback for scanned PDFs),
     chunk + embed + store. Returns chunks_created + extractor metadata.
@@ -174,12 +166,7 @@ async def ingest_upload(
             400, f"Unsupported file type: {suffix}. Supported: {sorted(SUPPORTED_EXTENSIONS)}"
         )
 
-    resolved_tenant = tenant_id
-    if resolved_tenant is None:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            raise HTTPException(400, "No tenant exists. Create one first.")
-        resolved_tenant = tenant.id
+    resolved_tenant = user.tenant_id
 
     # Save to a temp file so the existing extraction service can use Path-based APIs
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:

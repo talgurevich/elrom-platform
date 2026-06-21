@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import GoldenQuestion, Query, Tenant
+from app.models import GoldenQuestion, Query, Tenant, User
+from app.routes.auth import current_user
 from app.services.embedding import embed_texts
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
@@ -87,13 +88,6 @@ class EvalRunSummary(BaseModel):
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────
-
-
-def _first_tenant_id(db: Session) -> UUID:
-    tenant = db.query(Tenant).first()
-    if not tenant:
-        raise HTTPException(400, "No tenant exists")
-    return tenant.id
 
 
 def _to_out(g: GoldenQuestion) -> GoldenOut:
@@ -173,11 +167,13 @@ def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunRes
 
 
 @router.get("/goldens", response_model=list[GoldenOut])
-def list_goldens(db: Session = Depends(get_db)) -> list[GoldenOut]:
-    tenant_id = _first_tenant_id(db)
+def list_goldens(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> list[GoldenOut]:
     goldens = (
         db.query(GoldenQuestion)
-        .filter(GoldenQuestion.tenant_id == tenant_id)
+        .filter(GoldenQuestion.tenant_id == user.tenant_id)
         .order_by(GoldenQuestion.created_at.desc())
         .all()
     )
@@ -185,10 +181,13 @@ def list_goldens(db: Session = Depends(get_db)) -> list[GoldenOut]:
 
 
 @router.post("/goldens", response_model=GoldenOut)
-def create_golden(body: GoldenIn, db: Session = Depends(get_db)) -> GoldenOut:
-    tenant_id = _first_tenant_id(db)
+def create_golden(
+    body: GoldenIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> GoldenOut:
     g = GoldenQuestion(
-        tenant_id=tenant_id,
+        tenant_id=user.tenant_id,
         question=body.question.strip(),
         expected_doc_filenames=body.expected_doc_filenames or None,
         expected_keywords=body.expected_keywords or None,
@@ -206,13 +205,13 @@ def promote_query_to_golden(
     query_id: UUID,
     body: PromoteGoldenIn | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ) -> GoldenOut:
     """Promote an existing answered query into a golden. Defaults pull from the
     query (the cited sources become expected_doc_filenames) but the caller can
     override every field."""
-    tenant_id = _first_tenant_id(db)
     query = db.get(Query, query_id)
-    if query is None:
+    if query is None or query.tenant_id != user.tenant_id:
         raise HTTPException(404, "Query not found")
 
     expected_filenames: list[str] | None = None
@@ -227,7 +226,7 @@ def promote_query_to_golden(
         expected_filenames = sorted({c.document.filename for c in chunks})
 
     g = GoldenQuestion(
-        tenant_id=tenant_id,
+        tenant_id=user.tenant_id,
         question=(body.question if body and body.question else query.question).strip(),
         expected_doc_filenames=(body.expected_doc_filenames if body and body.expected_doc_filenames else expected_filenames),
         expected_keywords=(body.expected_keywords if body else None),
@@ -242,9 +241,13 @@ def promote_query_to_golden(
 
 
 @router.delete("/goldens/{golden_id}")
-def delete_golden(golden_id: UUID, db: Session = Depends(get_db)) -> dict:
+def delete_golden(
+    golden_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
     g = db.get(GoldenQuestion, golden_id)
-    if g is None:
+    if g is None or g.tenant_id != user.tenant_id:
         raise HTTPException(404, "Golden not found")
     db.delete(g)
     db.commit()
@@ -252,8 +255,11 @@ def delete_golden(golden_id: UUID, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/run", response_model=EvalRunSummary)
-def run_eval(db: Session = Depends(get_db)) -> EvalRunSummary:
-    tenant_id = _first_tenant_id(db)
+def run_eval(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> EvalRunSummary:
+    tenant_id = user.tenant_id
     goldens = (
         db.query(GoldenQuestion)
         .filter(GoldenQuestion.tenant_id == tenant_id)

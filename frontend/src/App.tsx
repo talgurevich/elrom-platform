@@ -124,6 +124,22 @@ export default function App() {
         {tab === "lexicon" && <Lexicon />}
         {tab === "eval" && <Eval />}
       </main>
+
+      <footer className="mt-16 border-t border-stone-200">
+        <div className="max-w-5xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-soft">
+          <span>© כל הזכויות שמורות לאלרום סטודיוס בע״מ</span>
+          <span className="flex items-center gap-3">
+            <a
+              href="mailto:tal@elrom.tv"
+              className="hover:text-ink transition-colors"
+            >
+              תמיכה: tal@elrom.tv
+            </a>
+            <span className="text-stone-300">·</span>
+            <span>גרסה 0.2</span>
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }
