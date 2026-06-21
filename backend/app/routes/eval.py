@@ -38,6 +38,17 @@ class GoldenIn(BaseModel):
     notes: str | None = None
 
 
+class PromoteGoldenIn(BaseModel):
+    """Body for /goldens/from-query — all fields optional because the source
+    query supplies sensible defaults (question, answer, cited filenames)."""
+
+    question: str | None = None
+    expected_doc_filenames: list[str] | None = None
+    expected_keywords: list[str] | None = None
+    expected_answer: str | None = None
+    notes: str | None = None
+
+
 class GoldenOut(BaseModel):
     id: UUID
     question: str
@@ -193,7 +204,7 @@ def create_golden(body: GoldenIn, db: Session = Depends(get_db)) -> GoldenOut:
 @router.post("/goldens/from-query/{query_id}", response_model=GoldenOut)
 def promote_query_to_golden(
     query_id: UUID,
-    body: GoldenIn | None = None,
+    body: PromoteGoldenIn | None = None,
     db: Session = Depends(get_db),
 ) -> GoldenOut:
     """Promote an existing answered query into a golden. Defaults pull from the
