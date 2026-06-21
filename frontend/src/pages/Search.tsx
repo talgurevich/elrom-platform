@@ -280,6 +280,10 @@ export default function Search() {
         </div>
       )}
 
+      {/* Virgin-state explainer — shown only before the first query lands.
+          Hidden the moment a result, error, or loading state appears. */}
+      {!result && !error && !loading && <HowItWorks />}
+
       {result && (
         <div className="space-y-6 animate-fade-up">
           {result.near_misses && result.near_misses.length > 0 && (
@@ -475,5 +479,71 @@ export default function Search() {
         </div>
       )}
     </>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section className="mt-2 mb-6 p-6 bg-white border border-stone-200 rounded-2xl shadow-soft animate-fade-up">
+      <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
+        איך זה עובד?
+      </div>
+      <p className="text-sm text-ink-soft leading-relaxed mb-5">
+        זה לא חיפוש מילים כמו Ctrl+F — המערכת קוראת את התקנונים
+        <strong className="text-ink"> לפי משמעות </strong>
+        ומשתמשת ב-AI כדי לנסח תשובה מבוססת מקורות. הנה התהליך:
+      </p>
+
+      <ol className="space-y-3 text-sm leading-relaxed">
+        <li className="flex gap-3">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
+            1
+          </span>
+          <span className="text-ink">
+            <strong>פירוק מסמכים לקטעים.</strong> כל תקנון מחולק אוטומטית
+            לסעיפים, פרקים, ונהלים — היחידה הקטנה ביותר של משמעות בשפה
+            משפטית.
+          </span>
+        </li>
+        <li className="flex gap-3">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
+            2
+          </span>
+          <span className="text-ink">
+            <strong>טביעת אצבע סמנטית לכל קטע.</strong> מודל שפה מתרגם כל קטע
+            לייצוג מספרי שלוכד את <em>המשמעות</em>, לא רק את המילים. שני קטעים
+            שמדברים על אותו דבר במילים שונות יקבלו טביעות אצבע דומות.
+          </span>
+        </li>
+        <li className="flex gap-3">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
+            3
+          </span>
+          <span className="text-ink">
+            <strong>השאלה שלך עוברת את אותו תהליך.</strong> השאלה מתורגמת
+            לטביעת אצבע משלה והמערכת מאתרת את הקטעים הקרובים אליה ביותר
+            במשמעות. במקביל רץ גם חיפוש מילולי לאיתור שמות ומספרי סעיפים
+            ספציפיים. שני הזרמים מתמזגים, ומדורג מחדש מנוע ייעודי שמעלה את
+            הרלוונטיים ביותר לראש.
+          </span>
+        </li>
+        <li className="flex gap-3">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
+            4
+          </span>
+          <span className="text-ink">
+            <strong>תשובה בעברית מבוססת מקורות.</strong> הקטעים הרלוונטיים
+            נשלחים ל-Claude שמנסח תשובה תוך ציטוט המקור המדויק. אם אין מספיק
+            עוגן במסמכים — המערכת תאמר שלא מצאה תשובה, ולא תמציא.
+          </span>
+        </li>
+      </ol>
+
+      <div className="mt-5 pt-4 border-t border-stone-200 text-xs text-ink-soft leading-relaxed">
+        <strong className="text-ink">זמן תגובה:</strong> בדרך כלל 5–15 שניות.
+        זה לא Google — המערכת קוראת, מבינה, ומחברת בין סעיפים בכל שאלה.
+        סבלנות שווה תשובה איכותית.
+      </div>
+    </section>
   );
 }
