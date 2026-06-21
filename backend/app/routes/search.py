@@ -19,8 +19,9 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query as QParam
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -336,6 +337,27 @@ async def search_stream(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.get("/recent", response_model=list[str])
+def recent_questions(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+    limit: int = QParam(8, ge=1, le=25),
+) -> list[str]:
+    """Distinct recent questions for the caller's tenant — drives the
+    "recently asked" list on the search page. Same-text repeats collapse
+    to one entry showing the most recent occurrence."""
+    rows = (
+        db.query(Query.question, func.max(Query.created_at).label("last_at"))
+        .filter(Query.tenant_id == user.tenant_id)
+        .filter(Query.question.isnot(None))
+        .group_by(Query.question)
+        .order_by(func.max(Query.created_at).desc())
+        .limit(limit)
+        .all()
+    )
+    return [r.question for r in rows]
 
 
 class FeedbackRequest(BaseModel):

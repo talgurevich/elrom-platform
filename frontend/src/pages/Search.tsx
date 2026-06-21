@@ -122,9 +122,9 @@ export default function Search() {
   const [stage, setStage] = useState<SearchPipelineStage | null>(null);
   const [stageDetail, setStageDetail] = useState<string | null>(null);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!question.trim()) return;
+  const runSearch = async (q: string) => {
+    if (!q.trim()) return;
+    setQuestion(q);
     setLoading(true);
     setError(null);
     setResult(null);
@@ -135,7 +135,7 @@ export default function Search() {
     setStage(null);
     setStageDetail(null);
     try {
-      const fresh = await api.searchStream(question, (ev) => {
+      const fresh = await api.searchStream(q, (ev) => {
         if (ev.type === "stage") setStage(ev.stage);
         else if (ev.type === "detail") setStageDetail(ev.text);
       });
@@ -147,6 +147,11 @@ export default function Search() {
       setStage(null);
       setStageDetail(null);
     }
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void runSearch(question);
   };
 
   const submitFeedback = async (kind: "positive" | "negative") => {
@@ -248,9 +253,15 @@ export default function Search() {
         </div>
       )}
 
-      {/* Virgin-state explainer — shown only before the first query lands.
-          Hidden the moment a result, error, or loading state appears. */}
-      {!result && !error && !loading && <HowItWorks />}
+      {/* Virgin-state explainer + recent-questions list. Both shown only before
+          the first query lands; hidden the moment a result / error / loading
+          state appears. */}
+      {!result && !error && !loading && (
+        <>
+          <HowItWorks />
+          <RecentQuestions onPick={(q) => void runSearch(q)} />
+        </>
+      )}
 
       {result && (
         <div className="space-y-6 animate-fade-up">
@@ -538,6 +549,54 @@ function ThinkingProgress({
       {detail && (
         <div className="mt-3 text-xs text-ink-soft text-center">{detail}</div>
       )}
+    </section>
+  );
+}
+
+function RecentQuestions({ onPick }: { onPick: (q: string) => void }) {
+  const [questions, setQuestions] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .recentQuestions(8)
+      .then((qs) => {
+        if (!cancelled) setQuestions(qs);
+      })
+      .catch(() => {
+        if (!cancelled) setQuestions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (questions === null || questions.length === 0) return null;
+
+  return (
+    <section className="mt-6 p-6 bg-white border border-stone-200 rounded-2xl shadow-soft animate-fade-up">
+      <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
+        שאלות אחרונות
+      </div>
+      <p className="text-xs text-ink-soft mb-4 leading-relaxed">
+        שאלות שנשאלו לאחרונה במאגר הזה. לחץ על אחת כדי לשאול שוב.
+      </p>
+      <ul className="space-y-1.5">
+        {questions.map((q) => (
+          <li key={q}>
+            <button
+              type="button"
+              onClick={() => onPick(q)}
+              className="group w-full text-right px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 hover:bg-accent/5 hover:border-accent/40 transition text-sm text-ink"
+            >
+              <span className="text-ink-soft text-xs mr-2 group-hover:text-accent transition">
+                ›
+              </span>
+              {q}
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

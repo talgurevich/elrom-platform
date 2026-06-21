@@ -240,6 +240,9 @@ export const api = {
       body: JSON.stringify({ question }),
     }),
 
+  recentQuestions: (limit = 8) =>
+    request<string[]>(`/api/search/recent?limit=${limit}`),
+
   /**
    * Streaming search via Server-Sent Events. Calls `onEvent` for every
    * progress event as the pipeline runs. Resolves with the final
