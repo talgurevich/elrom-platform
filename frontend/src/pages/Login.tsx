@@ -87,8 +87,28 @@ export default function Login() {
   }, [signInWithGoogle]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-md border-2 border-ink bg-surface p-12 animate-fade-up">
+    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
+      {/* Background — close-up of tree bark from Unsplash (photo by Annie Spratt).
+          Heavily blurred + darkened so it reads as texture, not a photo, and the
+          card on top stays the visual subject. Slight scale to hide blur edges. */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{
+          backgroundImage:
+            "url('https://images.unsplash.com/photo-1523440775332-daeb15e69286?fm=jpg&q=60&w=2400&auto=format&fit=crop&ixlib=rb-4.1.0')",
+          filter: "blur(6px) brightness(0.45) saturate(0.85)",
+          transform: "scale(1.06)",
+        }}
+        aria-hidden="true"
+      />
+      {/* Warm ink wash to tie the bark hues into the modernist palette. */}
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: "rgba(23, 23, 23, 0.35)" }}
+        aria-hidden="true"
+      />
+
+      <div className="relative w-full max-w-md border-2 border-ink bg-surface p-12 animate-fade-up">
         <div className="text-center">
           <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
             Organizational Memory
