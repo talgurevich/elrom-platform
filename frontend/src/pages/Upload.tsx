@@ -29,6 +29,59 @@ function formatChars(n: number) {
   return `${(n / 1000).toFixed(1)}K תווים`;
 }
 
+function QualityBadge({ doc }: { doc: DocumentItem }) {
+  const q = doc.quality ?? "unknown";
+  if (q === "ok") {
+    const density =
+      doc.pages && doc.chars_extracted ? Math.round(doc.chars_extracted / doc.pages) : null;
+    return (
+      <span
+        className="text-[10px] px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full"
+        title={density ? `${density} תווים לעמוד` : "ingest תקין"}
+      >
+        ✓ תקין
+      </span>
+    );
+  }
+  if (q === "partial") {
+    return (
+      <span
+        className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-800 rounded-full"
+        title={doc.extraction_note || "OCR חלקי"}
+      >
+        ⚠ חלקי
+      </span>
+    );
+  }
+  if (q === "low_density") {
+    const density =
+      doc.pages && doc.chars_extracted ? Math.round(doc.chars_extracted / doc.pages) : null;
+    return (
+      <span
+        className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-full"
+        title={density ? `רק ${density} תווים לעמוד — חשד ל-OCR שנכשל` : "טקסט דליל מדי"}
+      >
+        ⚠ דליל
+      </span>
+    );
+  }
+  if (q === "suspect") {
+    return (
+      <span className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-full">
+        ⚠ ללא קטעים
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[10px] px-2 py-0.5 bg-stone-100 text-ink-soft rounded-full"
+      title="המסמך הוטען לפני שהמערכת תיעדה מדדי איכות"
+    >
+      ? ישן
+    </span>
+  );
+}
+
 export default function Upload() {
   const [queue, setQueue] = useState<Queued[]>([]);
   const [docs, setDocs] = useState<DocumentItem[]>([]);
@@ -116,6 +169,23 @@ export default function Upload() {
     try {
       await api.deleteDocument(doc.id);
       loadDocs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const deleteAllDocs = async () => {
+    const n = docs.length;
+    if (n === 0) return;
+    const msg =
+      `למחוק את כל ${n} המסמכים ואת כל הקטעים שלהם?\n\n` +
+      `הפעולה אינה הפיכה. שאלות שכבר נשאלו יישארו, אך הקטעים שאליהם הן הפנו ייעלמו.`;
+    if (!confirm(msg)) return;
+    if (!confirm(`אישור אחרון: למחוק את כל ${n} המסמכים?`)) return;
+    try {
+      const r = await api.deleteAllDocuments();
+      setClassifyMsg(`נמחקו ${r.documents_deleted} מסמכים ו-${r.chunks_deleted} קטעים.`);
+      await loadDocs();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -242,8 +312,24 @@ export default function Upload() {
                     <div className="text-xs text-red-700 mt-1">{entry.status.message}</div>
                   )}
                   {entry.status.kind === "done" && (
-                    <div className="text-xs text-emerald-700 mt-1">
-                      ✓ {entry.status.result.chunks_created} קטעים
+                    <div
+                      className={`text-xs mt-1 ${
+                        entry.status.result.partial
+                          ? "text-amber-700"
+                          : "text-emerald-700"
+                      }`}
+                    >
+                      {entry.status.result.partial ? "⚠" : "✓"}{" "}
+                      {entry.status.result.chunks_created} קטעים
+                      {entry.status.result.pages != null &&
+                        ` · ${entry.status.result.pages} עמ׳`}
+                      {entry.status.result.chars_extracted != null &&
+                        entry.status.result.pages
+                          ? ` · ${Math.round(
+                              entry.status.result.chars_extracted /
+                                entry.status.result.pages
+                            )} תווים/עמ׳`
+                          : ""}
                       {entry.status.result.used_ocr && " · OCR"}
                       {entry.status.result.note && ` · ${entry.status.result.note}`}
                     </div>
@@ -316,6 +402,13 @@ export default function Upload() {
               >
                 סווג הכל מחדש
               </button>
+              <button
+                onClick={deleteAllDocs}
+                className="px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 rounded-full transition"
+                title="מחיקת כל המסמכים מהמאגר"
+              >
+                🗑 מחק הכל
+              </button>
             </div>
           )}
         </div>
@@ -359,11 +452,25 @@ export default function Upload() {
                         {d.summary}
                       </div>
                     )}
-                    <div className="text-xs text-ink-soft mt-2 flex gap-3 flex-wrap">
+                    <div className="text-xs text-ink-soft mt-2 flex gap-3 flex-wrap items-center">
+                      <QualityBadge doc={d} />
                       <span>{d.chunks} קטעים</span>
                       <span>{formatChars(d.chars)}</span>
+                      {d.pages != null && <span>{d.pages} עמודים</span>}
+                      {d.extractor && (
+                        <span title="מנוע חילוץ הטקסט">
+                          {d.extractor === "azure_ocr"
+                            ? "OCR"
+                            : d.extractor === "pdfplumber"
+                            ? "PDF native"
+                            : d.extractor}
+                        </span>
+                      )}
                       <span>{new Date(d.ingested_at).toLocaleString("he-IL")}</span>
                     </div>
+                    {d.extraction_note && (
+                      <div className="text-xs text-amber-700 mt-1">⚠ {d.extraction_note}</div>
+                    )}
                   </div>
                   <button
                     onClick={() => deleteDoc(d)}

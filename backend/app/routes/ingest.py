@@ -141,10 +141,15 @@ async def ingest_upload(
     file: UploadFile = File(...),
     tenant_id: UUID | None = Form(None),
     doc_type: str | None = Form(None),
+    prefer_ocr: bool | None = Form(None),
     db: Session = Depends(get_db),
 ) -> IngestResponse:
     """Accept a file upload (txt/md/docx/pdf), extract text (with OCR fallback for scanned PDFs),
     chunk + embed + store. Returns chunks_created + extractor metadata.
+
+    For PDFs we default prefer_ocr=True: this corpus is overwhelmingly scanned
+    Hebrew documents where pdfplumber returns either nothing or RTL-reversed
+    garbage. Callers can pass prefer_ocr=false to override for clean native PDFs.
     """
     filename = file.filename or "uploaded"
     suffix = Path(filename).suffix.lower()
@@ -166,8 +171,11 @@ async def ingest_upload(
         tmp.write(contents)
         tmp_path = Path(tmp.name)
 
+    # Default to OCR for PDFs — see docstring for rationale.
+    use_ocr = prefer_ocr if prefer_ocr is not None else (suffix == ".pdf")
+
     try:
-        extraction = extract_file(tmp_path)
+        extraction = extract_file(tmp_path, prefer_ocr=use_ocr)
     finally:
         try:
             tmp_path.unlink()

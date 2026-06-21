@@ -165,6 +165,14 @@ export type DocumentItem = {
   ingested_at: string;
   summary?: string | null;
   ai_classified?: boolean;
+  // Extraction telemetry
+  extractor?: string | null;
+  used_ocr?: boolean;
+  pages?: number | null;
+  chars_extracted?: number | null;
+  extraction_partial?: boolean;
+  extraction_note?: string | null;
+  quality?: "ok" | "partial" | "low_density" | "suspect" | "unknown";
 };
 
 export type ClassifyResult = {
@@ -198,6 +206,9 @@ export type UploadResponse = {
   used_ocr: boolean;
   extractor: string | null;
   note: string | null;
+  pages?: number | null;
+  chars_extracted?: number | null;
+  partial?: boolean;
 };
 
 // ─── Endpoints ─────────────────────────────────────────────────────────
@@ -270,6 +281,11 @@ export const api = {
   listDocuments: () => request<DocumentItem[]>("/api/documents"),
   deleteDocument: (id: string) =>
     request<{ status: string }>(`/api/documents/${id}`, { method: "DELETE" }),
+  deleteAllDocuments: () =>
+    request<{ status: string; documents_deleted: number; chunks_deleted: number }>(
+      `/api/documents?confirm=true`,
+      { method: "DELETE" }
+    ),
   classifyDocuments: (force = false) =>
     request<ClassifySummary>(
       `/api/documents/classify${force ? "?force=true" : ""}`,

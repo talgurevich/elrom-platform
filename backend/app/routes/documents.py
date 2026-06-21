@@ -37,6 +37,37 @@ class DocumentItem(BaseModel):
     ingested_at: str
     summary: str | None = None
     ai_classified: bool = False
+    # Extraction telemetry — populated on ingest, lets the UI flag bad ingests.
+    extractor: str | None = None
+    used_ocr: bool = False
+    pages: int | None = None
+    chars_extracted: int | None = None
+    extraction_partial: bool = False
+    extraction_note: str | None = None
+    quality: str = "unknown"  # ok | low_density | partial | suspect | unknown
+
+
+def _quality_verdict(
+    *,
+    chars_extracted: int | None,
+    pages: int | None,
+    extraction_partial: bool,
+    chunks: int,
+) -> str:
+    """Cheap quality summary from telemetry. Returns one of:
+       ok | partial | low_density | suspect | unknown.
+    """
+    if chars_extracted is None and pages is None:
+        return "unknown"  # legacy doc, ingested before telemetry
+    if extraction_partial:
+        return "partial"
+    if pages and chars_extracted is not None:
+        density = chars_extracted / pages if pages else 0
+        if density < 200:
+            return "low_density"
+    if chunks == 0:
+        return "suspect"
+    return "ok"
 
 
 @router.get("", response_model=list[DocumentItem])
@@ -58,6 +89,12 @@ def list_documents(
             Document.doc_type,
             Document.ingested_at,
             Document.doc_metadata,
+            Document.extractor,
+            Document.used_ocr,
+            Document.pages,
+            Document.chars_extracted,
+            Document.extraction_partial,
+            Document.extraction_note,
             func.count(Chunk.id).label("chunks"),
             func.coalesce(func.sum(func.length(Chunk.text)), 0).label("chars"),
         )
@@ -78,9 +115,51 @@ def list_documents(
             ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",
             summary=(r.doc_metadata or {}).get("summary") if r.doc_metadata else None,
             ai_classified=bool((r.doc_metadata or {}).get("ai_classified")) if r.doc_metadata else False,
+            extractor=r.extractor,
+            used_ocr=bool(r.used_ocr),
+            pages=r.pages,
+            chars_extracted=r.chars_extracted,
+            extraction_partial=bool(r.extraction_partial),
+            extraction_note=r.extraction_note,
+            quality=_quality_verdict(
+                chars_extracted=r.chars_extracted,
+                pages=r.pages,
+                extraction_partial=bool(r.extraction_partial),
+                chunks=int(r.chunks),
+            ),
         )
         for r in rows
     ]
+
+
+@router.delete("")
+def delete_all_documents(
+    confirm: bool = QParam(False, description="Must be true to actually delete."),
+    tenant_id: UUID | None = QParam(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Wipe every document (and its chunks via cascade) for the tenant.
+
+    Requires confirm=true. Returns how many docs/chunks were deleted.
+    """
+    if not confirm:
+        raise HTTPException(400, "Pass confirm=true to actually delete all documents.")
+    if tenant_id is None:
+        tenant = db.query(Tenant).first()
+        if not tenant:
+            raise HTTPException(400, "No tenant exists.")
+        tenant_id = tenant.id
+
+    docs = db.query(Document).filter(Document.tenant_id == tenant_id).all()
+    n_docs = len(docs)
+    n_chunks = (
+        db.query(func.count(Chunk.id)).filter(Chunk.tenant_id == tenant_id).scalar() or 0
+    )
+    for d in docs:
+        db.delete(d)
+    db.commit()
+    log.info("documents.delete_all", tenant_id=str(tenant_id), docs=n_docs, chunks=n_chunks)
+    return {"status": "ok", "documents_deleted": n_docs, "chunks_deleted": int(n_chunks)}
 
 
 class ClassifyResult(BaseModel):

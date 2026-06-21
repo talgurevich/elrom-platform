@@ -23,6 +23,27 @@ class ExtractionResult:
     pages: int | None = None  # source page count when known (PDFs)
     failed_ocr_batches: list[int] | None = None  # set when OCR partially failed
     partial: bool = False  # True when extractor returned incomplete content
+    quality: str = "ok"  # ok | low_density | partial | reversed_hebrew | empty
+
+
+# Common Hebrew function words. If we see more reversed forms than forward
+# forms in extracted text, the PDF text layer is RTL-visual-ordered garbage.
+_HE_FORWARD = ("של", "את", "על", "לא", "כי", "אם", "זה", "אל", "כל", "מן", "או")
+_HE_REVERSED = tuple(w[::-1] for w in _HE_FORWARD)
+
+
+def _looks_reversed_hebrew(text: str) -> bool:
+    """Heuristic: count reversed vs forward Hebrew function words.
+
+    pdfplumber on some scanned Hebrew PDFs returns RTL text in visual order —
+    each line is character-by-character LTR, so words come out backwards.
+    Density check passes (chars are present), but the content is unusable.
+    """
+    if not text or len(text) < 200:
+        return False
+    fwd = sum(text.count(w) for w in _HE_FORWARD)
+    rev = sum(text.count(w) for w in _HE_REVERSED)
+    return rev > fwd + 3  # require margin to avoid false positives on short docs
 
 
 def extract_text(path: Path, prefer_ocr: bool = False) -> ExtractionResult:
@@ -45,9 +66,16 @@ def extract_text(path: Path, prefer_ocr: bool = False) -> ExtractionResult:
         if not prefer_ocr:
             native = _extract_pdf_native(path)
             if native.strip():
-                return ExtractionResult(
-                    text=native, used_ocr=False, extractor="pdfplumber", pages=page_count
-                )
+                # Detect RTL-visual-order garbage — if so, escalate to OCR
+                # instead of accepting reversed Hebrew that would silently
+                # poison embeddings + search.
+                if _looks_reversed_hebrew(native) and ocr_service.is_configured():
+                    log.warning("extraction.pdfplumber_reversed_hebrew_falling_back_to_ocr",
+                                path=str(path))
+                else:
+                    return ExtractionResult(
+                        text=native, used_ocr=False, extractor="pdfplumber", pages=page_count,
+                    )
 
         if not ocr_service.is_configured():
             return ExtractionResult(
