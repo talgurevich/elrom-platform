@@ -25,8 +25,13 @@ class ExtractionResult:
     partial: bool = False  # True when extractor returned incomplete content
 
 
-def extract_text(path: Path) -> ExtractionResult:
-    """Extract text from a file. Falls back to Azure OCR if a PDF has no native text."""
+def extract_text(path: Path, prefer_ocr: bool = False) -> ExtractionResult:
+    """Extract text from a file. Falls back to Azure OCR if a PDF has no native text.
+
+    prefer_ocr: for PDFs, skip pdfplumber and go straight to Azure OCR. Useful
+    for scanned Hebrew PDFs where pdfplumber returns reversed RTL text that
+    looks valid (passes density check) but is unusable for embedding/search.
+    """
     suffix = path.suffix.lower()
 
     if suffix in {".txt", ".md"}:
@@ -37,11 +42,12 @@ def extract_text(path: Path) -> ExtractionResult:
 
     if suffix == ".pdf":
         page_count = _pdf_page_count(path)
-        native = _extract_pdf_native(path)
-        if native.strip():
-            return ExtractionResult(
-                text=native, used_ocr=False, extractor="pdfplumber", pages=page_count
-            )
+        if not prefer_ocr:
+            native = _extract_pdf_native(path)
+            if native.strip():
+                return ExtractionResult(
+                    text=native, used_ocr=False, extractor="pdfplumber", pages=page_count
+                )
 
         if not ocr_service.is_configured():
             return ExtractionResult(
