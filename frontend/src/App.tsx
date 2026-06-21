@@ -46,7 +46,7 @@ export default function App() {
   const { user } = state;
 
   return (
-    <div className="min-h-screen text-ink font-sans">
+    <div className="min-h-screen flex flex-col text-ink font-sans">
       <nav className="bg-white/80 backdrop-blur-md border-b border-stone-200/70 sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
           <div className="flex items-center gap-3 shrink-0">
@@ -116,7 +116,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-5xl mx-auto px-6 py-10 animate-fade-up">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-6 py-10 animate-fade-up">
         {tab === "search" && <Search />}
         {tab === "upload" && <Upload />}
         {tab === "review" && <Review />}
