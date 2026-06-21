@@ -38,6 +38,7 @@ class DocumentItem(BaseModel):
     ingested_at: str
     summary: str | None = None
     ai_classified: bool = False
+    folder: str | None = None  # AI-assigned topical folder
     # Extraction telemetry — populated on ingest, lets the UI flag bad ingests.
     extractor: str | None = None
     used_ocr: bool = False
@@ -92,6 +93,7 @@ def list_documents(
             Document.chars_extracted,
             Document.extraction_partial,
             Document.extraction_note,
+            Document.folder,
             func.count(Chunk.id).label("chunks"),
             func.coalesce(func.sum(func.length(Chunk.text)), 0).label("chars"),
         )
@@ -112,6 +114,7 @@ def list_documents(
             ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",
             summary=(r.doc_metadata or {}).get("summary") if r.doc_metadata else None,
             ai_classified=bool((r.doc_metadata or {}).get("ai_classified")) if r.doc_metadata else False,
+            folder=r.folder,
             extractor=r.extractor,
             used_ocr=bool(r.used_ocr),
             pages=r.pages,
@@ -172,18 +175,37 @@ class ClassifySummary(BaseModel):
     results: list[ClassifyResult]
 
 
-_CLASSIFY_SYSTEM = """אתה מסווג מסמכים של קיבוץ אל-רום. קבל קטע מתחילת המסמך וחזור JSON תקין (ללא markdown) עם 3 שדות:
+_CLASSIFY_SYSTEM_BASE = """אתה מסווג מסמכים של קיבוץ אל-רום. קבל קטע מתחילת המסמך וחזור JSON תקין (ללא markdown) עם 4 שדות:
 {
   "title": "כותרת קצרה בעברית, 3-8 מילים, שמתארת את התוכן (למשל: 'תקנון שיוך דירות', 'פרוטוקול אסיפה 23.11.2022', 'החלטה על נוהל הקדמה לקומה שנייה')",
   "doc_type": "אחד מ: bylaw, sub_bylaw, minutes, decision, other",
+  "folder": "שם תיקייה נושאית קצרה (1-2 מילים) בעברית, מתאר את התחום של המסמך — לדוגמה: 'פנסיה', 'קליטה', 'סיעוד', 'מבנה ארגוני', 'שיוך דירות'. לא 'תקנון פנסיה' (זה כותרת, לא תיקייה).",
   "summary": "משפט אחד עד שניים על מה המסמך, בעברית"
 }
-אם זה תקנון משנה ספציפי (שיוך דירות / שיוך נכסים / פירות נכסים / סיעוד / קליטה / רווחה / פנסיה וכד') — doc_type = sub_bylaw.
-אם זה התקנון הראשי הכללי — doc_type = bylaw.
-אם זה פרוטוקול אסיפה — doc_type = minutes.
-אם זו החלטה ספציפית — doc_type = decision.
-אחרת — other.
+
+doc_type:
+- אם זה תקנון משנה ספציפי (שיוך דירות / שיוך נכסים / פירות נכסים / סיעוד / קליטה / רווחה / פנסיה וכד') — doc_type = sub_bylaw.
+- אם זה התקנון הראשי הכללי — doc_type = bylaw.
+- אם זה פרוטוקול אסיפה — doc_type = minutes.
+- אם זו החלטה ספציפית — doc_type = decision.
+- אחרת — other.
+
 JSON בלבד, ללא הסברים, ללא ```fences."""
+
+
+def _classify_system_prompt(existing_folders: list[str]) -> str:
+    """The classifier prompt + a hint about already-used folder names so the
+    model reuses them instead of inventing synonyms (פנסיה / פנסיוני /
+    תקנון פנסיה)."""
+    if not existing_folders:
+        return _CLASSIFY_SYSTEM_BASE
+    folder_list = "[" + ", ".join(f'"{f}"' for f in existing_folders) + "]"
+    return (
+        _CLASSIFY_SYSTEM_BASE
+        + f"\n\nתיקיות קיימות במאגר: {folder_list}\n"
+        + "אם המסמך שייך לאחת מהתיקיות הקיימות — השתמש בשם הקיים בדיוק. "
+        + "רק אם הוא על נושא שאינו מיוצג — הצע שם חדש קצר."
+    )
 
 
 def _reembed_document_chunks(db: Session, doc: Document) -> int:
@@ -246,12 +268,25 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
     if not sample.strip():
         return {"status": "skipped", "reason": "no_text"}
 
+    # Gather existing folders in this tenant so the model can reuse names.
+    existing_folders = sorted(
+        {
+            f
+            for (f,) in db.query(Document.folder)
+            .filter(Document.tenant_id == doc.tenant_id)
+            .filter(Document.folder.isnot(None))
+            .distinct()
+            .all()
+            if f
+        }
+    )
+
     try:
         client = Anthropic(api_key=settings.anthropic_api_key)
         resp = client.messages.create(
             model=settings.claude_extract_model,
-            max_tokens=400,
-            system=_CLASSIFY_SYSTEM,
+            max_tokens=500,
+            system=_classify_system_prompt(existing_folders),
             messages=[{"role": "user", "content": sample}],
         )
         raw = resp.content[0].text.strip()
@@ -260,6 +295,7 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
         data = json.loads(raw)
         title = str(data.get("title") or "").strip()
         doc_type = str(data.get("doc_type") or "").strip() or doc.doc_type
+        folder = str(data.get("folder") or "").strip() or None
         summary = str(data.get("summary") or "").strip()
 
         new_filename = doc.filename
@@ -272,6 +308,8 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
             filename_changed = original_filename != new_filename
         if doc_type:
             doc.doc_type = doc_type
+        if folder:
+            doc.folder = folder
         doc.doc_metadata = {
             **meta,
             "ai_classified": True,

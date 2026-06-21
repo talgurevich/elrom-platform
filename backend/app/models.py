@@ -52,6 +52,10 @@ class Document(Base):
     chunks_created: Mapped[int | None] = mapped_column(Integer)
     extraction_partial: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     extraction_note: Mapped[str | None] = mapped_column(Text)
+    # AI-assigned topical folder. Flat (no nesting), single-membership. The
+    # classifier prefers to reuse an existing folder name when one fits to
+    # avoid synonyms drifting apart ("פנסיה" / "פנסיוני" / "תקנון פנסיה").
+    folder: Mapped[str | None] = mapped_column(String)
 
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 

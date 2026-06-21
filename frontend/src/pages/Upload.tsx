@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type DocumentItem, type UploadResponse } from "../lib/api";
 
 type SortKey = "recent" | "alpha" | "chunks";
-type GroupKey = "none" | "type";
+type GroupKey = "none" | "type" | "folder";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   bylaw: "תקנון",
@@ -214,13 +214,15 @@ export default function Upload() {
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [groupKey, setGroupKey] = useState<GroupKey>("none");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [folderFilter, setFolderFilter] = useState<string | null>(null);
 
   const filteredSortedDocs = useMemo(() => {
     const q = search.trim().toLowerCase();
     let out = docs.filter((d) => {
       if (typeFilter && (d.doc_type || "unclassified") !== typeFilter) return false;
+      if (folderFilter && (d.folder || "__none__") !== folderFilter) return false;
       if (!q) return true;
-      const hay = `${d.filename} ${d.summary || ""}`.toLowerCase();
+      const hay = `${d.filename} ${d.summary || ""} ${d.folder || ""}`.toLowerCase();
       return hay.includes(q);
     });
     out = [...out].sort((a, b) => {
@@ -230,7 +232,7 @@ export default function Upload() {
       return new Date(b.ingested_at).getTime() - new Date(a.ingested_at).getTime();
     });
     return out;
-  }, [docs, search, sortKey, typeFilter]);
+  }, [docs, search, sortKey, typeFilter, folderFilter]);
 
   // Counts per type, computed over the *unfiltered* set so the chips show the
   // total even when one is selected.
@@ -243,17 +245,52 @@ export default function Upload() {
     return m;
   }, [docs]);
 
-  // Group the (already-filtered+sorted) list by doc_type when requested.
+  // Distinct folders across the corpus (for the filter-chip row).
+  const folderCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const d of docs) {
+      const k = d.folder || "__none__";
+      m[k] = (m[k] || 0) + 1;
+    }
+    return m;
+  }, [docs]);
+
+  const folderList = useMemo(
+    () =>
+      Object.keys(folderCounts)
+        .filter((k) => k !== "__none__")
+        .sort((a, b) => a.localeCompare(b, "he")),
+    [folderCounts]
+  );
+
+  // Group the (already-filtered+sorted) list by the chosen key.
   const groupedDocs = useMemo(() => {
     if (groupKey === "none") return null;
     const m: Record<string, DocumentItem[]> = {};
+    const keyOf = (d: DocumentItem) =>
+      groupKey === "type"
+        ? d.doc_type || "unclassified"
+        : d.folder || "__none__";
     for (const d of filteredSortedDocs) {
-      const k = d.doc_type || "unclassified";
+      const k = keyOf(d);
       (m[k] ||= []).push(d);
     }
-    return DOC_TYPE_ORDER.filter((k) => m[k]?.length).map((k) => ({
+    if (groupKey === "type") {
+      return DOC_TYPE_ORDER.filter((k) => m[k]?.length).map((k) => ({
+        key: k,
+        label: DOC_TYPE_LABELS[k] || k,
+        items: m[k],
+      }));
+    }
+    // Folder grouping: alphabetical, with "ללא תיקייה" last.
+    const folderKeys = Object.keys(m).sort((a, b) => {
+      if (a === "__none__") return 1;
+      if (b === "__none__") return -1;
+      return a.localeCompare(b, "he");
+    });
+    return folderKeys.map((k) => ({
       key: k,
-      label: DOC_TYPE_LABELS[k] || k,
+      label: k === "__none__" ? "ללא תיקייה" : k,
       items: m[k],
     }));
   }, [filteredSortedDocs, groupKey]);
@@ -525,12 +562,16 @@ export default function Upload() {
                 >
                   <option value="none">ללא</option>
                   <option value="type">לפי סוג מסמך</option>
+                  <option value="folder">לפי תיקייה</option>
                 </select>
               </label>
             </div>
 
             {/* Type filter chips — show only types that have at least one doc */}
             <div className="flex flex-wrap gap-px bg-line border-t border-line">
+              <span className="px-3 py-1.5 text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold bg-surface flex items-center">
+                סוג
+              </span>
               <button
                 onClick={() => setTypeFilter(null)}
                 className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
@@ -559,6 +600,58 @@ export default function Upload() {
                 </button>
               ))}
             </div>
+
+            {/* Folder filter chips — appear only once AI has assigned at least one folder */}
+            {folderList.length > 0 && (
+              <div className="flex flex-wrap gap-px bg-line border-t border-line">
+                <span className="px-3 py-1.5 text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold bg-surface flex items-center">
+                  תיקייה
+                </span>
+                <button
+                  onClick={() => setFolderFilter(null)}
+                  className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
+                    folderFilter === null
+                      ? "bg-ink text-surface"
+                      : "bg-surface hover:bg-line text-ink"
+                  }`}
+                >
+                  <span>הכל</span>
+                </button>
+                {folderList.map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFolderFilter(folderFilter === f ? null : f)}
+                    className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
+                      folderFilter === f
+                        ? "bg-ink text-surface"
+                        : "bg-surface hover:bg-line text-ink"
+                    }`}
+                  >
+                    <span>{f}</span>
+                    <span className="font-mono text-[10px] opacity-70">
+                      {folderCounts[f]}
+                    </span>
+                  </button>
+                ))}
+                {folderCounts.__none__ && (
+                  <button
+                    onClick={() =>
+                      setFolderFilter(folderFilter === "__none__" ? null : "__none__")
+                    }
+                    className={`px-3 py-1.5 text-xs flex items-baseline gap-2 italic ${
+                      folderFilter === "__none__"
+                        ? "bg-ink text-surface"
+                        : "bg-surface hover:bg-line text-ink-soft"
+                    }`}
+                  >
+                    <span>ללא תיקייה</span>
+                    <span className="font-mono text-[10px] opacity-70">
+                      {folderCounts.__none__}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -624,6 +717,11 @@ function DocumentRow({
             {doc.doc_type && (
               <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-ink-soft border border-line-strong px-1.5 py-0.5">
                 {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
+              </span>
+            )}
+            {doc.folder && (
+              <span className="text-[10px] tracking-[0.2em] uppercase font-bold bg-ink text-surface px-1.5 py-0.5">
+                {doc.folder}
               </span>
             )}
           </div>

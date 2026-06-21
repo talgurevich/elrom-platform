@@ -177,6 +177,7 @@ export type DocumentItem = {
   ingested_at: string;
   summary?: string | null;
   ai_classified?: boolean;
+  folder?: string | null; // AI-assigned topical folder
   // Extraction telemetry
   extractor?: string | null;
   used_ocr?: boolean;
