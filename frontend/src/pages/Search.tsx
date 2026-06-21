@@ -1,40 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type FailureMode, type RetrievalDebugRow, type SearchResponse } from "../lib/api";
 
-// Approximate timings of the real pipeline. The label advances on a timer
-// that loosely tracks the typical request profile — embedding (~0.5s) →
-// retrieval (~1-2s) → rerank (~1s) → Claude (~5-10s). We don't know exactly
-// where we are server-side, but the order is right.
-const PIPELINE_STAGES: { at: number; label: string; icon: string }[] = [
-  { at: 0, label: "מנתח את השאלה", icon: "🔎" },
-  { at: 700, label: "מחפש בארכיון", icon: "📚" },
-  { at: 2200, label: "מדרג מקורות", icon: "🎯" },
-  { at: 4000, label: "מנסח תשובה", icon: "✍️" },
-  { at: 12000, label: "כמעט מוכן", icon: "⌛" },
-];
-
-function useStageLabel(loading: boolean): { label: string; icon: string } | null {
-  const [stage, setStage] = useState(0);
-  useEffect(() => {
-    if (!loading) {
-      setStage(0);
-      return;
-    }
-    const start = Date.now();
-    const id = setInterval(() => {
-      const elapsed = Date.now() - start;
-      let next = 0;
-      for (let i = 0; i < PIPELINE_STAGES.length; i++) {
-        if (elapsed >= PIPELINE_STAGES[i].at) next = i;
-      }
-      setStage(next);
-    }, 200);
-    return () => clearInterval(id);
-  }, [loading]);
-  if (!loading) return null;
-  return PIPELINE_STAGES[stage];
-}
-
 const confidenceColors: Record<string, string> = {
   confident: "bg-emerald-50 text-emerald-900 border-emerald-200",
   uncertain: "bg-amber-50 text-amber-900 border-amber-200",
@@ -148,8 +114,6 @@ export default function Search() {
   const [retrying, setRetrying] = useState(false);
   const [justRetried, setJustRetried] = useState(false);
 
-  const stage = useStageLabel(loading);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
@@ -257,22 +221,10 @@ export default function Search() {
               "שאל"
             )}
           </button>
-          {stage && (
-            <div
-              key={stage.label}
-              className="flex items-center gap-2 text-sm text-ink-soft animate-fade-up"
-            >
-              <span className="text-base leading-none">{stage.icon}</span>
-              <span>{stage.label}</span>
-              <span className="inline-block">
-                <span className="inline-block animate-pulse">.</span>
-                <span className="inline-block animate-pulse [animation-delay:200ms]">.</span>
-                <span className="inline-block animate-pulse [animation-delay:400ms]">.</span>
-              </span>
-            </div>
-          )}
         </div>
       </form>
+
+      {loading && <ThinkingProgress />}
 
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-sm whitespace-pre-wrap">
@@ -479,6 +431,77 @@ export default function Search() {
         </div>
       )}
     </>
+  );
+}
+
+// Approximate stage durations of the real pipeline. Sum gives a reasonable
+// total of ~12s for the typical request. The bar fills proportionally to
+// elapsed time, capped at 95% so we never claim "100% done" before the actual
+// response arrives — the bar snaps to 100% only when the request lands.
+const THINKING_STAGES: { label: string; duration: number }[] = [
+  { label: "ניתוח השאלה", duration: 700 },
+  { label: "חיפוש בארכיון", duration: 1500 },
+  { label: "דירוג מקורות", duration: 1800 },
+  { label: "ניסוח תשובה", duration: 8000 },
+];
+const THINKING_TOTAL = THINKING_STAGES.reduce((a, s) => a + s.duration, 0);
+
+function ThinkingProgress() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - start), 100);
+    return () => clearInterval(id);
+  }, []);
+
+  // Capped at 95 so we don't visually "complete" before the response lands.
+  // Slight easing as we approach the cap so it doesn't look stuck.
+  const rawPct = (elapsed / THINKING_TOTAL) * 100;
+  const pct = rawPct < 90 ? rawPct : 90 + (95 - 90) * (1 - Math.exp(-(rawPct - 90) / 20));
+
+  // Locate active stage by walking the cumulative duration.
+  let stageIdx = 0;
+  let acc = 0;
+  for (let i = 0; i < THINKING_STAGES.length; i++) {
+    acc += THINKING_STAGES[i].duration;
+    if (elapsed < acc) {
+      stageIdx = i;
+      break;
+    }
+    stageIdx = i; // past the end → stay on last stage
+  }
+
+  return (
+    <section
+      className="mb-6 p-5 bg-white border border-stone-200 rounded-2xl shadow-soft animate-fade-up"
+      role="status"
+      aria-live="polite"
+      aria-label="מתבצע חיפוש"
+    >
+      <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden mb-4">
+        <div
+          className="h-full bg-brand-gradient transition-[width] duration-300 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="grid grid-cols-4 gap-2 text-xs text-center">
+        {THINKING_STAGES.map((s, i) => {
+          const state =
+            i < stageIdx ? "done" : i === stageIdx ? "active" : "pending";
+          const cls =
+            state === "active"
+              ? "text-accent font-semibold"
+              : state === "done"
+              ? "text-ink-soft"
+              : "text-stone-300";
+          return (
+            <span key={s.label} className={cls}>
+              {s.label}
+            </span>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
