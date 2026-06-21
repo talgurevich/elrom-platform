@@ -83,7 +83,7 @@ export default function Review() {
           תור בדיקה
         </h1>
         <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
-          סקירת שאלות שנשאלו, סימון תשובות כסמכותיות, או דחייה.
+          סקירת שאלות שנשאלו, סימון תשובות כסמכותיות, או מחיקה.
         </p>
       </header>
 
@@ -140,12 +140,12 @@ export default function Review() {
                         </span>
                       )}
                       {q.reviewer_action && (
-                        <span className="mr-2 inline-block bg-stone-200 px-2 py-0.5 rounded text-[10px]">
+                        <span className="mr-2 inline-block bg-line border border-line-strong px-2 py-0.5 text-[10px] tracking-wider uppercase font-bold">
                           {q.reviewer_action === "approved"
                             ? "אושר"
                             : q.reviewer_action === "edited"
                             ? "ערוך + אושר"
-                            : "נדחה"}
+                            : "נמחק"}
                         </span>
                       )}
                     </div>
@@ -273,9 +273,9 @@ export default function Review() {
                       <button
                         onClick={() => reject(q)}
                         disabled={busy}
-                        className="px-3 py-1.5 bg-red-50 text-red-900 border border-red-200 hover:bg-red-100 rounded mr-auto"
+                        className="px-3 py-1.5 border border-line-strong hover:border-accent hover:text-accent text-ink-soft mr-auto"
                       >
-                        ✕ דחה
+                        מחק
                       </button>
                     </>
                   )}
