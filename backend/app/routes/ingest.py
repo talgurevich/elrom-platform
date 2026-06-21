@@ -5,13 +5,14 @@ from pathlib import Path
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Chunk, Document, Tenant
+from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import chunk_document
 from app.services.embedding import embed_texts
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
@@ -31,6 +32,7 @@ class IngestRequest(BaseModel):
     extraction_partial: bool = False
     extraction_note: str | None = None
     force: bool = False  # bypass density sanity check
+    auto_classify: bool = True  # background AI rename + summary + doc_type after ingest
 
 
 class IngestResponse(BaseModel):
@@ -50,7 +52,11 @@ MIN_CHARS_PER_PAGE = 200
 
 
 @router.post("", response_model=IngestResponse)
-def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
+def ingest(
+    req: IngestRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> IngestResponse:
     """Ingest a single document.
 
     MVP scope: accepts text directly (no OCR yet). Splits into structural chunks,
@@ -119,11 +125,18 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
 
     doc.chunks_created = len(structural_chunks)
     db.commit()
+
+    # Auto-classify in the background so cryptic filenames get human Hebrew
+    # titles + a summary + doc_type without the user having to click anything.
+    if req.auto_classify:
+        background_tasks.add_task(classify_document_by_id_bg, doc.id)
+
     log.info(
         "ingest.complete",
         document_id=str(doc.id),
         chunks=len(structural_chunks),
         with_section_path=sum(1 for c in structural_chunks if c.section_path),
+        auto_classify=req.auto_classify,
     )
     return IngestResponse(
         document_id=doc.id,
@@ -139,10 +152,12 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
 
 @router.post("/upload", response_model=IngestResponse)
 async def ingest_upload(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     tenant_id: UUID | None = Form(None),
     doc_type: str | None = Form(None),
     prefer_ocr: bool | None = Form(None),
+    auto_classify: bool = Form(True),
     db: Session = Depends(get_db),
 ) -> IngestResponse:
     """Accept a file upload (txt/md/docx/pdf), extract text (with OCR fallback for scanned PDFs),
@@ -251,6 +266,11 @@ async def ingest_upload(
 
     doc.chunks_created = len(structural_chunks)
     db.commit()
+
+    # Auto-classify in the background — see /ingest for rationale.
+    if auto_classify:
+        background_tasks.add_task(classify_document_by_id_bg, doc.id)
+
     log.info(
         "ingest.upload_complete",
         document_id=str(doc.id),
@@ -259,6 +279,7 @@ async def ingest_upload(
         used_ocr=extraction.used_ocr,
         pages=extraction.pages,
         chars=len(extraction.text),
+        auto_classify=auto_classify,
     )
     return IngestResponse(
         document_id=doc.id,

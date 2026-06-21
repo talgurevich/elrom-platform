@@ -193,131 +193,147 @@ _CLASSIFY_SYSTEM = """אתה מסווג מסמכים של קיבוץ אל-רום
 JSON בלבד, ללא הסברים, ללא ```fences."""
 
 
+def classify_one_document(db: Session, doc: Document, *, force: bool = False) -> dict:
+    """Classify a single document — extract title, doc_type, summary via Claude.
+
+    Mutates `doc` in place and commits. Used both by the bulk classify endpoint
+    and by the post-upload background task. Returns a small dict for logging.
+
+    Errors are caught and logged — never raised — because this runs in a
+    background task where there's no caller to surface the error to.
+    """
+    from anthropic import Anthropic
+
+    meta = doc.doc_metadata or {}
+    already = bool(meta.get("ai_classified"))
+    has_name = _has_meaningful_name(doc.filename)
+
+    if not force and already:
+        return {"status": "skipped", "reason": "already_classified"}
+
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == doc.id)
+        .order_by(Chunk.position)
+        .limit(8)
+        .all()
+    )
+    sample = "\n\n".join(c.text for c in chunks)[:4000]
+    if not sample.strip():
+        return {"status": "skipped", "reason": "no_text"}
+
+    try:
+        client = Anthropic(api_key=settings.anthropic_api_key)
+        resp = client.messages.create(
+            model=settings.claude_extract_model,
+            max_tokens=400,
+            system=_CLASSIFY_SYSTEM,
+            messages=[{"role": "user", "content": sample}],
+        )
+        raw = resp.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`").lstrip("json").strip()
+        data = json.loads(raw)
+        title = str(data.get("title") or "").strip()
+        doc_type = str(data.get("doc_type") or "").strip() or doc.doc_type
+        summary = str(data.get("summary") or "").strip()
+
+        new_filename = doc.filename
+        original_filename = meta.get("original_filename") or doc.filename
+        if title and not has_name:
+            ext = "." + doc.filename.rsplit(".", 1)[1] if "." in doc.filename else ""
+            new_filename = f"{title}{ext}"
+            doc.filename = new_filename
+        if doc_type:
+            doc.doc_type = doc_type
+        doc.doc_metadata = {
+            **meta,
+            "ai_classified": True,
+            "ai_title": title,
+            "summary": summary,
+            "original_filename": original_filename,
+        }
+        db.commit()
+        return {
+            "status": "ok",
+            "old_filename": original_filename,
+            "new_filename": new_filename,
+            "doc_type": doc.doc_type,
+        }
+    except Exception as e:
+        log.warning("documents.classify_failed", doc_id=str(doc.id), err=str(e))
+        return {"status": "error", "error": str(e)[:200]}
+
+
+def classify_document_by_id_bg(document_id: UUID) -> None:
+    """Background-task entrypoint: opens its own DB session so it survives the
+    request lifecycle, then classifies the document.
+    """
+    from app.db import SessionLocal
+
+    db: Session = SessionLocal()
+    try:
+        doc = db.get(Document, document_id)
+        if doc is None:
+            log.warning("documents.classify_bg.doc_missing", document_id=str(document_id))
+            return
+        result = classify_one_document(db, doc)
+        log.info(
+            "documents.classify_bg.done",
+            document_id=str(document_id),
+            **{k: v for k, v in result.items() if k != "status"},
+            status=result["status"],
+        )
+    except Exception as e:
+        log.error("documents.classify_bg.crashed", document_id=str(document_id), err=str(e))
+    finally:
+        db.close()
+
+
 @router.post("/classify", response_model=ClassifySummary)
 def classify_documents(
     db: Session = Depends(get_db),
     force: bool = QParam(False, description="Re-classify even already-classified docs"),
 ) -> ClassifySummary:
-    """Walk every document. For each one without a Hebrew title or not yet
-    classified, read its first ~4000 chars of chunk text and ask Claude Haiku
-    to title + type + summarize it. Writes results into Document.filename,
-    Document.doc_type, and Document.doc_metadata."""
-    from anthropic import Anthropic
-
+    """Walk every document and classify any that need it. Mostly a manual
+    backstop / reclassify-everything button — new uploads classify themselves
+    automatically via a background task in /ingest/upload."""
     tenant = db.query(Tenant).first()
     if not tenant:
         raise HTTPException(400, "No tenant exists.")
 
     docs = db.query(Document).filter(Document.tenant_id == tenant.id).all()
-    client = Anthropic(api_key=settings.anthropic_api_key)
     results: list[ClassifyResult] = []
     classified = 0
 
     for doc in docs:
-        meta = doc.doc_metadata or {}
-        already = bool(meta.get("ai_classified"))
-        has_name = _has_meaningful_name(doc.filename)
-
-        if not force and already:
+        original_filename = (doc.doc_metadata or {}).get("original_filename") or doc.filename
+        outcome = classify_one_document(db, doc, force=force)
+        if outcome["status"] == "ok":
+            classified += 1
             results.append(
                 ClassifyResult(
                     document_id=doc.id,
-                    old_filename=doc.filename,
-                    new_filename=doc.filename,
-                    doc_type=doc.doc_type,
-                    summary=meta.get("summary"),
-                    skipped=True,
-                    reason="already_classified",
-                )
-            )
-            continue
-
-        # Already has a meaningful Hebrew name AND a doc_type — keep, but still
-        # generate a summary if missing so the UI has something.
-        chunks = (
-            db.query(Chunk)
-            .filter(Chunk.document_id == doc.id)
-            .order_by(Chunk.position)
-            .limit(8)
-            .all()
-        )
-        sample = "\n\n".join(c.text for c in chunks)[:4000]
-
-        if not sample.strip():
-            results.append(
-                ClassifyResult(
-                    document_id=doc.id,
-                    old_filename=doc.filename,
-                    new_filename=doc.filename,
-                    doc_type=doc.doc_type,
-                    summary=None,
-                    skipped=True,
-                    reason="no_text_extracted",
-                )
-            )
-            continue
-
-        try:
-            resp = client.messages.create(
-                model=settings.claude_extract_model,
-                max_tokens=400,
-                system=_CLASSIFY_SYSTEM,
-                messages=[{"role": "user", "content": sample}],
-            )
-            raw = resp.content[0].text.strip()
-            if raw.startswith("```"):
-                raw = raw.strip("`").lstrip("json").strip()
-            data = json.loads(raw)
-            title = str(data.get("title") or "").strip()
-            doc_type = str(data.get("doc_type") or "").strip() or doc.doc_type
-            summary = str(data.get("summary") or "").strip()
-
-            new_filename = doc.filename
-            if title and not has_name:
-                # Preserve the original extension for traceability.
-                ext = ""
-                if "." in doc.filename:
-                    ext = "." + doc.filename.rsplit(".", 1)[1]
-                new_filename = f"{title}{ext}"
-                doc.filename = new_filename
-
-            if doc_type:
-                doc.doc_type = doc_type
-
-            doc.doc_metadata = {
-                **(doc.doc_metadata or {}),
-                "ai_classified": True,
-                "ai_title": title,
-                "summary": summary,
-                "original_filename": meta.get("original_filename") or doc.filename,
-            }
-
-            results.append(
-                ClassifyResult(
-                    document_id=doc.id,
-                    old_filename=meta.get("original_filename") or doc.filename,
-                    new_filename=new_filename,
-                    doc_type=doc.doc_type,
-                    summary=summary,
+                    old_filename=outcome["old_filename"],
+                    new_filename=outcome["new_filename"],
+                    doc_type=outcome["doc_type"],
+                    summary=(doc.doc_metadata or {}).get("summary"),
                     skipped=False,
                 )
             )
-            classified += 1
-        except Exception as e:
-            log.warning("documents.classify_failed", doc_id=str(doc.id), err=str(e))
+        else:
             results.append(
                 ClassifyResult(
                     document_id=doc.id,
-                    old_filename=doc.filename,
+                    old_filename=original_filename,
                     new_filename=doc.filename,
                     doc_type=doc.doc_type,
-                    summary=None,
+                    summary=(doc.doc_metadata or {}).get("summary"),
                     skipped=True,
-                    reason=f"error: {str(e)[:80]}",
+                    reason=outcome.get("reason") or outcome.get("error"),
                 )
             )
 
-    db.commit()
     return ClassifySummary(
         total=len(docs),
         classified=classified,
