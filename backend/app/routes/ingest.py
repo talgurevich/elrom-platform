@@ -14,7 +14,7 @@ from app.db import get_db
 from app.models import Chunk, Document, Tenant, User
 from app.routes.auth import current_user
 from app.routes.documents import classify_document_by_id_bg
-from app.services.chunking import chunk_document
+from app.services.chunking import build_contextual_input, chunk_document
 from app.services.embedding import embed_texts
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
 
@@ -97,7 +97,14 @@ def ingest(
     if not structural_chunks:
         raise HTTPException(400, "Document produced no chunks.")
 
-    embeddings = embed_texts([sc.text for sc in structural_chunks])
+    embeddings = embed_texts(
+        [
+            build_contextual_input(
+                text=sc.text, section_path=sc.section_path, document_title=req.filename
+            )
+            for sc in structural_chunks
+        ]
+    )
 
     for sc, embedding in zip(structural_chunks, embeddings, strict=True):
         chunk = Chunk(
@@ -231,9 +238,13 @@ async def ingest_upload(
     if not structural_chunks:
         raise HTTPException(400, "Document produced no chunks.")
 
-    embeddings = await asyncio.to_thread(
-        embed_texts, [sc.text for sc in structural_chunks]
-    )
+    contextual_inputs = [
+        build_contextual_input(
+            text=sc.text, section_path=sc.section_path, document_title=filename
+        )
+        for sc in structural_chunks
+    ]
+    embeddings = await asyncio.to_thread(embed_texts, contextual_inputs)
 
     for sc, embedding in zip(structural_chunks, embeddings, strict=True):
         chunk = Chunk(

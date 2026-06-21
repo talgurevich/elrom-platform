@@ -32,6 +32,35 @@ class StructuralChunk:
     position: int
 
 
+def build_contextual_input(
+    *,
+    text: str,
+    section_path: str | None,
+    document_title: str | None,
+) -> str:
+    """Compose the string we actually send to the embedding model.
+
+    Why prepend metadata: Cohere only sees the chunk text by default, so a chunk
+    of legal prose has no signal about which document or section it came from.
+    Queries that reference the section by name ("מה אומר סעיף 4.1 בתקנון פנסיה")
+    then can't match. Prepending a short header binds each chunk to its
+    document + section in vector space, which empirically lifts recall a lot on
+    structured corpora.
+
+    The chunk text stored in the DB is unchanged — this is only the embedding
+    input. Citations and the UI keep showing the clean text.
+    """
+    header_parts: list[str] = []
+    if document_title:
+        header_parts.append(document_title.strip())
+    if section_path:
+        header_parts.append(section_path.strip())
+    if not header_parts:
+        return text
+    header = " — ".join(header_parts)
+    return f"{header}\n\n{text}"
+
+
 # Matches a line beginning with a structural marker. Group 1 captures the
 # marker label (e.g. "סעיף 4א").
 SECTION_RE = re.compile(

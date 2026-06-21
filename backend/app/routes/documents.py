@@ -186,6 +186,37 @@ _CLASSIFY_SYSTEM = """אתה מסווג מסמכים של קיבוץ אל-רום
 JSON בלבד, ללא הסברים, ללא ```fences."""
 
 
+def _reembed_document_chunks(db: Session, doc: Document) -> int:
+    """Regenerate embeddings for every chunk of `doc` using the current
+    contextual format (document title + section_path prepended). Returns
+    the number of chunks re-embedded.
+    """
+    from app.services.chunking import build_contextual_input
+    from app.services.embedding import embed_texts
+
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == doc.id)
+        .order_by(Chunk.position)
+        .all()
+    )
+    if not chunks:
+        return 0
+    inputs = [
+        build_contextual_input(
+            text=c.text or "",
+            section_path=c.section_path,
+            document_title=doc.filename,
+        )
+        for c in chunks
+    ]
+    new_vecs = embed_texts(inputs, input_type="search_document")
+    for c, v in zip(chunks, new_vecs, strict=True):
+        c.embedding = v
+    db.commit()
+    return len(chunks)
+
+
 def classify_one_document(db: Session, doc: Document, *, force: bool = False) -> dict:
     """Classify a single document — extract title, doc_type, summary via Claude.
 
@@ -233,10 +264,12 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
 
         new_filename = doc.filename
         original_filename = meta.get("original_filename") or doc.filename
+        filename_changed = False
         if title and not has_name:
             ext = "." + doc.filename.rsplit(".", 1)[1] if "." in doc.filename else ""
             new_filename = f"{title}{ext}"
             doc.filename = new_filename
+            filename_changed = original_filename != new_filename
         if doc_type:
             doc.doc_type = doc_type
         doc.doc_metadata = {
@@ -247,11 +280,30 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
             "original_filename": original_filename,
         }
         db.commit()
+
+        # If the filename just changed from a cryptic hash to a real Hebrew
+        # title, the contextual embeddings we built at ingest time are stale
+        # (they bound the chunk to e.g. "505308920_90409efb1_1217.pdf" instead
+        # of "תקנון פנסיה"). Re-embed in place so retrieval benefits from the
+        # better title.
+        reembedded = False
+        if filename_changed:
+            try:
+                _reembed_document_chunks(db, doc)
+                reembedded = True
+            except Exception as e:
+                log.warning(
+                    "documents.classify.reembed_failed",
+                    doc_id=str(doc.id),
+                    err=str(e)[:200],
+                )
+
         return {
             "status": "ok",
             "old_filename": original_filename,
             "new_filename": new_filename,
             "doc_type": doc.doc_type,
+            "reembedded": reembedded,
         }
     except Exception as e:
         log.warning("documents.classify_failed", doc_id=str(doc.id), err=str(e))
