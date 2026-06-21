@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>הערות שחרור — אלרום v0.2</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Heebo",
+          "Assistant", "Helvetica Neue", Arial, sans-serif;
+        background: #f7f5f1;
+        color: #1f2933;
+        margin: 0;
+        padding: 32px 16px;
+        line-height: 1.65;
+      }
+      .container {
+        max-width: 760px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #e8e4dc;
+        border-radius: 14px;
+        padding: 40px 48px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        color: #0f2231;
+        letter-spacing: -0.01em;
+      }
+      .meta {
+        color: #7c8794;
+        font-size: 14px;
+        margin: 0 0 24px;
+      }
+      .lede {
+        background: #f4f8f9;
+        border-right: 4px solid #2a6f7a;
+        padding: 14px 18px;
+        border-radius: 8px;
+        margin: 0 0 32px;
+        font-size: 15px;
+        color: #28384a;
+      }
+      h2 {
+        font-size: 20px;
+        margin: 36px 0 10px;
+        color: #0f2231;
+        border-bottom: 1px solid #ece9e2;
+        padding-bottom: 8px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 22px 0 6px;
+        color: #1f2933;
+      }
+      p {
+        margin: 8px 0;
+      }
+      ul {
+        margin: 8px 0 12px;
+        padding-right: 22px;
+      }
+      li {
+        margin: 4px 0;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas",
+          monospace;
+        font-size: 13px;
+        direction: ltr;
+        text-align: left;
+        unicode-bidi: embed;
+      }
+      code {
+        background: #f1efe9;
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: #5b3c00;
+      }
+      pre {
+        background: #0f1d28;
+        color: #d8e4f0;
+        padding: 16px 18px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 12px 0;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      .pill {
+        display: inline-block;
+        background: #eef3f4;
+        color: #2a6f7a;
+        font-size: 12px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        margin-left: 6px;
+      }
+      .pill.fix {
+        background: #fef2e7;
+        color: #9a4a14;
+      }
+      .pill.perf {
+        background: #ecf3ec;
+        color: #2c6f3a;
+      }
+      .pill.tenancy {
+        background: #f0eafe;
+        color: #5933c1;
+      }
+      .pill.ui {
+        background: #fef0f4;
+        color: #a8265f;
+      }
+      a {
+        color: #2a6f7a;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(42, 111, 122, 0.3);
+      }
+      a:hover {
+        border-bottom-color: #2a6f7a;
+      }
+      .known {
+        background: #fdfaf3;
+        border: 1px solid #ecddb5;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-top: 24px;
+        font-size: 14px;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 16px;
+        border-top: 1px solid #ece9e2;
+        font-size: 13px;
+        color: #7c8794;
+        text-align: center;
+      }
+      .footer a {
+        color: #7c8794;
+        border-bottom-color: rgba(124, 135, 148, 0.3);
+      }
+      strong {
+        color: #0f2231;
+      }
+      @media (max-width: 600px) {
+        .container {
+          padding: 24px 18px;
+        }
+        h1 {
+          font-size: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>הערות שחרור — אלרום <span class="pill">v0.2</span></h1>
+      <p class="meta">21 ביוני 2026</p>
+
+      <p class="lede">
+        גרסה זו מתמקדת בשלוש חזיתות: יציבות וכיסוי של הטמעת המסמכים, חוויית
+        משוב על תשובות, ותשתית רב־ארגונית לקראת הצטרפות לקוחות נוספים. בנוסף,
+        איתרנו ותיקנו מספר תקלות שקטות שהשפיעו על איכות התשובות.
+      </p>
+
+      <h2>הטמעת מסמכים — שיפורי איכות מהותיים <span class="pill fix">תיקון משמעותי</span></h2>
+
+      <h3>תיקון כשל שקט שגרם להטמעה חלקית של מסמכים סרוקים</h3>
+      <p>
+        תקלה משמעותית: מסמכים סרוקים גדולים נכנסו למאגר עם
+        <strong>כ־10% בלבד</strong> מהתוכן שלהם. הסיבה: כשמערכת ה־OCR נכשלה על
+        חלק מקבוצות העמודים, המערכת המשיכה כרגיל ושמרה רק את החלק שהצליח, ללא
+        התרעה. לדוגמה — תקנון הקיבוץ 2009 הוטמע עם 3 קטעי טקסט בלבד במקום 57.
+      </p>
+      <p><strong>מה תוקן:</strong></p>
+      <ul>
+        <li>
+          המערכת תיכשל בקול רם אם OCR נכשל על חלק מהמסמך, ותסרב לשמור מסמך
+          חלקי.
+        </li>
+        <li>
+          נוסף סף איכות: מסמך שמייצר פחות מ־200 תווים לעמוד יידחה אוטומטית
+          (כמעט תמיד מעיד על OCR שנכשל).
+        </li>
+        <li>
+          כל מסמך נשמר עם מטא־דאטה מלא של איכות החילוץ (כלי החילוץ, מספר
+          עמודים, מספר תווים, האם נדרש OCR).
+        </li>
+      </ul>
+
+      <h3>זיהוי אוטומטי של מסמכים עם טקסט הפוך</h3>
+      <p>
+        מסמכי PDF סרוקים מסוימים החזירו טקסט עברי <strong>הפוך</strong>
+        (קריאה משמאל לימין בתוך כל שורה) — המערכת לא זיהתה זאת ושמרה את הטקסט
+        המעוות במאגר. המערכת כעת מזהה את המקרה אוטומטית ועוברת ל־OCR איכותי.
+        PDF עובר אוטומטית דרך Azure OCR (במקום פרסר טקסט גולמי) כברירת מחדל.
+      </p>
+
+      <h3>תגי איכות בממשק המסמכים</h3>
+      <p>
+        כל מסמך מציג כעת תג איכות צבעוני: <strong>תקין</strong> (ירוק) /
+        <strong>חלקי</strong> (כתום) / <strong>דליל</strong> (אדום) /
+        <strong>ללא קטעים</strong> (אדום) / <strong>ישן</strong> (אפור —
+        הוטמע לפני תיעוד איכות). הרישום כולל גם את מספר העמודים, כלי החילוץ,
+        וצפיפות התווים. כך אפשר לזהות בבדיקה ויזואלית מהירה האם הטמעה הצליחה.
+      </p>
+
+      <h3>מחיקה גורפת + מיון אוטומטי בפועל</h3>
+      <ul>
+        <li>נוסף כפתור <strong>"מחק הכל"</strong> במסך המסמכים עם אישור כפול.</li>
+        <li>
+          <strong>מיון מסמכים בעזרת AI רץ כעת אוטומטית</strong> אחרי כל
+          העלאה — לא צריך יותר ללחוץ על כפתור הסיווג. מסמכים עם שמות קובץ
+          קריפטיים מקבלים כותרת בעברית + תקציר + סיווג סוג ברקע, מבלי לעכב את
+          ההעלאה.
+        </li>
+      </ul>
+
+      <h2>חיפוש ומשוב — שיפורים בלולאת הלמידה</h2>
+
+      <h3>סימון תשובה שגויה משחזר ניסיון חדש</h3>
+      <p>
+        כשמשתמש סימן <strong>👎</strong> על תשובה שהוגשה מהארכיון (תשובה
+        מאושרת מפעם קודמת), המערכת המשיכה להגיש את אותה תשובה שגויה גם
+        בפעמים הבאות. כעת:
+      </p>
+      <ul>
+        <li>
+          סימון 👎 על תשובה מהארכיון
+          <strong>מסיר אותה אוטומטית מהארכיון</strong>.
+        </li>
+        <li>
+          השאלה <strong>משוחזרת מיידית</strong> מול המקורות הטריים (retrieval
+          + LLM) ומוצגת תשובה חדשה במקום.
+        </li>
+        <li>
+          הודעה ירוקה מסבירה למשתמש מה קרה: "התשובה הקודמת הוסרה מהמטמון.
+          הנה ניסיון חדש מבוסס מקורות."
+        </li>
+      </ul>
+
+      <h3>תיקון תקלה בהפיכת שאלה ל"שאלת זהב"</h3>
+      <p>
+        לחיצה על "קבע כשאלת זהב" החזירה שגיאה (422 — שדה חובה חסר). תוקן —
+        הפעולה משתמשת אוטומטית בטקסט השאלה ובמקורות המצוטטים.
+      </p>
+
+      <h2>רב־ארגוניות <span class="pill tenancy">תשתית חדשה</span></h2>
+
+      <h3>הפרדה מלאה בין ארגונים</h3>
+      <p>
+        לפני העדכון, מרבית נקודות הקצה (API endpoints)
+        <strong>לא דרשו אימות משתמש</strong> וניגשו לארגון הראשון במאגר
+        ("אלרום") כברירת מחדל. הוספת לקוח שני הייתה גורמת לראיית מידע
+        חוצה־ארגונים.
+      </p>
+      <p><strong>מה תוקן:</strong></p>
+      <ul>
+        <li>כל נקודת קצה דורשת כעת משתמש מחובר.</li>
+        <li>
+          כל גישה למשאב לפי מזהה (מסמך, שאילתה, תשובה מאושרת, מילון, שאלת
+          זהב) מאומתת מול הארגון של המשתמש. ניסיון לגשת למשאב של ארגון אחר
+          מחזיר 404 (כדי לא להדליף את עצם קיומו).
+        </li>
+        <li>
+          שדות <code>tenant_id</code> הוסרו מבקשות הלקוח כך שלא ניתן "להבריח"
+          זהות ארגונית מהדפדפן.
+        </li>
+      </ul>
+
+      <h3>כלים להקמת ארגון חדש</h3>
+      <p>שתי פקודות CLI להקמת ארגון חדש:</p>
+      <pre><code># יצירת ארגון חדש + משתמש אדמין ראשון
+python -m scripts.create_tenant \
+  --name "קיבוץ דגניה" \
+  --segment kibbutz_mitchadesh \
+  --admin-email admin@degania.tv
+
+# הוספת משתמשים נוספים לאותו ארגון
+python -m scripts.add_user \
+  --tenant-name "קיבוץ דגניה" \
+  --email reviewer@degania.tv \
+  --role reviewer</code></pre>
+      <p>
+        המשתמש מתחבר דרך Google עם המייל התואם — ונוחת מבודד לחלוטין בארגון
+        שלו.
+      </p>
+
+      <h2>ביצועים ויציבות <span class="pill perf">תשתית</span></h2>
+
+      <h3>מעבר ל־Render Standard tier (2GB RAM, 2 workers)</h3>
+      <p>
+        הטמעת מסמכים גדולים גרמה ל־Render להפעיל הפעלה מחדש של השרת באמצע
+        התהליך, כי תהליך ה־OCR חסם את לולאת השרת ולא הגיב לבדיקות תקינות.
+        פתרנו ב־3 שכבות:
+      </p>
+      <ol>
+        <li><strong>עליה לדרגת Standard</strong> (2GB RAM במקום 512MB).</li>
+        <li>
+          <strong>2 worker processes</strong> במקום 1 — בזמן ש־worker אחד
+          עסוק ב־OCR, השני עונה לבדיקות התקינות.
+        </li>
+        <li>
+          <strong>הוצאת עבודות כבדות לתהליכי רקע</strong> — לולאת השרת
+          נשארת פנויה תמיד.
+        </li>
+      </ol>
+
+      <h3>תיקון מגבלת batch בקריאות Embedding</h3>
+      <p>
+        שירות ה־embedding של Cohere מוגבל ל־96 טקסטים לקריאה אחת. מסמך בן 28
+        עמודים שיצר 113 קטעים גרם לקריסה באמצע ההטמעה. כעת קריאות מתבצעות
+        אוטומטית בקבוצות בגודל מתאים — המשתמש לא צריך להיות מודע למגבלה.
+      </p>
+
+      <h2>ממשק <span class="pill ui">UX</span></h2>
+      <ul>
+        <li>
+          נוסף <strong>פוטר</strong> בכל עמוד: זכויות יוצרים אלרום סטודיוס
+          בע״מ · גרסה 0.2 · קישור תמיכה ל־<a href="mailto:tal@elrom.tv"
+            >tal@elrom.tv</a
+          >.
+        </li>
+        <li>
+          שדרוגי משוב חזותיים על הזרמת מסמכים: בזמן ההעלאה מוצג מספר עמודים,
+          צפיפות תווים, וסטטוס OCR בזמן אמת.
+        </li>
+      </ul>
+
+      <div class="known">
+        <strong>ידוע ולא תוקן בגרסה זו:</strong>
+        <ul style="margin-bottom: 0">
+          <li>
+            <strong>חיפוש BM25 בעברית מחזיר 0 תוצאות</strong> עבור רוב
+            השאלות בשל אי־טיפול בקידומות עבריות (ה, ב, ל, ש, ו, מ, כ). החיפוש
+            הווקטורי לבדו מטפל בצרכים הנוכחיים, אך זוהי הזדמנות הגדולה הבאה
+            לשיפור איכות שליפה.
+          </li>
+          <li>
+            <strong>בדיקות אוטומטיות לבידוד בין ארגונים</strong> — הקוד נכון,
+            אך אין עדיין כיסוי בדיקות. ייושם בגרסה הבאה.
+          </li>
+        </ul>
+      </div>
+
+      <div class="footer">
+        <p>
+          <strong>פיד פיתוח חי:</strong>
+          <a
+            href="https://github.com/talgurevich/elrom-platform/commits/main"
+            target="_blank"
+            rel="noreferrer noopener"
+            >github.com/talgurevich/elrom-platform/commits/main</a
+          ><br />
+          <strong>Production:</strong>
+          <code>elrom-backend.onrender.com</code> · Live ✓
+        </p>
+        <p>
+          לשאלות ותמיכה: <a href="mailto:tal@elrom.tv">tal@elrom.tv</a><br />
+          © כל הזכויות שמורות לאלרום סטודיוס בע״מ
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

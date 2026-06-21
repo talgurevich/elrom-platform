@@ -136,6 +136,16 @@ export default function App() {
               תמיכה: tal@elrom.tv
             </a>
             <span className="text-stone-300">·</span>
+            <a
+              href="https://github.com/talgurevich/elrom-platform/commits/main"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="hover:text-ink transition-colors"
+              title="פיד פיתוח חי — כל שינוי שהוטמע במערכת"
+            >
+              עדכוני פיתוח
+            </a>
+            <span className="text-stone-300">·</span>
             <span>גרסה 0.2</span>
           </span>
         </div>
