@@ -1,3 +1,8 @@
+/* Heebo Hebrew via Google Fonts — we use the full weight range so headlines
+   can be 800/900 (modernist relies on type-weight contrast, not decoration).
+   @import must precede the @tailwind directives per CSS spec. */
+@import url("https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,27 +13,22 @@ html {
 
 html,
 body {
-  font-family: "Assistant", "Heebo", system-ui, sans-serif;
+  font-family: "Heebo", "Assistant", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "kern", "liga", "calt";
 }
 
 body {
-  background-color: #fbfaf7;
-  background-image: radial-gradient(
-      1200px 600px at 50% -100px,
-      rgba(42, 75, 89, 0.07),
-      transparent 60%
-    ),
-    radial-gradient(800px 400px at 95% 5%, rgba(200, 165, 91, 0.05), transparent 60%);
-  background-attachment: fixed;
-  color: #1a2932;
+  /* Single warm off-white. No radial gradients — modernist is about confident
+     edges and whitespace, not soft glow. */
+  background-color: #fafaf9;
+  color: #171717;
 }
 
 ::selection {
-  background-color: rgba(42, 75, 89, 0.18);
-  color: #1a2932;
+  background-color: rgba(184, 65, 43, 0.22);
+  color: #171717;
 }
 
 ::-webkit-scrollbar {
@@ -39,13 +39,13 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(42, 75, 89, 0.2);
-  border-radius: 999px;
+  background-color: rgba(23, 23, 23, 0.18);
+  border-radius: 0;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(42, 75, 89, 0.4);
+  background-color: rgba(184, 65, 43, 0.55);
   background-clip: content-box;
   border: 2px solid transparent;
 }
@@ -53,10 +53,19 @@ body {
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(42, 75, 89, 0.06) 25%,
-    rgba(42, 75, 89, 0.12) 50%,
-    rgba(42, 75, 89, 0.06) 75%
+    rgba(23, 23, 23, 0.05) 25%,
+    rgba(23, 23, 23, 0.1) 50%,
+    rgba(23, 23, 23, 0.05) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
+}
+
+/* Headlines get tighter tracking — modernist signature, especially at the
+   heavier weights we'll use for the hero h1. */
+h1,
+h2,
+h3,
+.font-display {
+  letter-spacing: -0.02em;
 }

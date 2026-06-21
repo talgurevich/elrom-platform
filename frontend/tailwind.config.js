@@ -4,33 +4,47 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Assistant"', '"Heebo"', "system-ui", "sans-serif"],
+        sans: ['"Heebo"', '"Assistant"', "system-ui", "sans-serif"],
         display: ['"Heebo"', '"Assistant"', "system-ui", "sans-serif"],
       },
       colors: {
+        // Modernist palette — one strong accent, near-black ink, warm off-white
+        // surface. No second decorative color. Borders carry the weight that
+        // soft shadows used to.
         accent: {
-          DEFAULT: "#2a4b59",
-          dark: "#1a3340",
-          light: "#3d6373",
+          DEFAULT: "#b8412b", // clay red
+          dark: "#922f1f",
+          light: "#d96a52",
         },
-        gold: "#c8a55b",
-        ink: "#1a2932",
-        "ink-soft": "#5a6c75",
-        surface: "#fbfaf7",
+        ink: "#171717",
+        "ink-soft": "#525252",
+        surface: "#fafaf9",
+        line: "#e7e5e4", // hairline border, replaces shadow-as-separator
+        "line-strong": "#d6d3d1",
       },
       backgroundImage: {
-        "brand-gradient": "linear-gradient(135deg, #1a3340 0%, #2a4b59 50%, #3d6373 100%)",
-        "surface-soft":
-          "radial-gradient(1200px 600px at 50% -100px, rgba(42, 75, 89, 0.08), transparent 60%), radial-gradient(800px 400px at 90% 10%, rgba(200, 165, 91, 0.06), transparent 60%)",
+        // Solid wash — kept the token name for compat but it's no longer a
+        // 3-stop gradient. One color, end of story.
+        "brand-gradient": "linear-gradient(180deg, #b8412b 0%, #922f1f 100%)",
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(26, 41, 50, 0.04), 0 4px 16px rgba(26, 41, 50, 0.04)",
-        lift: "0 2px 4px rgba(26, 41, 50, 0.06), 0 12px 32px rgba(26, 41, 50, 0.08)",
-        glow: "0 0 0 4px rgba(42, 75, 89, 0.12)",
+        // Used sparingly — modernist relies on borders + whitespace, not depth.
+        soft: "0 1px 0 rgba(23, 23, 23, 0.04)",
+        lift: "0 2px 0 rgba(23, 23, 23, 0.06)",
+        glow: "0 0 0 3px rgba(184, 65, 43, 0.18)",
+      },
+      borderRadius: {
+        // Sharper everything. The old default 2xl/full was the SaaS-template look.
+        DEFAULT: "0.125rem",
+        sm: "0.125rem",
+        md: "0.25rem",
+        lg: "0.375rem",
+        xl: "0.5rem",
+        "2xl": "0.5rem",
       },
       keyframes: {
         "fade-up": {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         shimmer: {
@@ -39,7 +53,7 @@ export default {
         },
       },
       animation: {
-        "fade-up": "fade-up 0.4s ease-out",
+        "fade-up": "fade-up 0.35s ease-out",
         shimmer: "shimmer 1.6s linear infinite",
       },
     },

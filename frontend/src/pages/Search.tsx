@@ -7,12 +7,6 @@ import {
   type SearchResponse,
 } from "../lib/api";
 
-const confidenceColors: Record<string, string> = {
-  confident: "bg-emerald-50 text-emerald-900 border-emerald-200",
-  uncertain: "bg-amber-50 text-amber-900 border-amber-200",
-  refused: "bg-stone-100 text-stone-700 border-stone-300",
-};
-
 const confidenceLabel: Record<string, string> = {
   confident: "תשובה מבוססת",
   uncertain: "תשובה חלקית",
@@ -209,39 +203,52 @@ export default function Search() {
   return (
     <>
       <header className="mb-10">
-        <h1 className="font-display text-4xl font-bold tracking-tight">
-          חיפוש בזיכרון הארגוני
+        <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+          חיפוש
+        </div>
+        <h1 className="font-display text-5xl md:text-6xl font-black text-ink leading-[0.95]">
+          זיכרון ארגוני
+          <br />
+          <span className="text-ink-soft">נגיש מיידית.</span>
         </h1>
-        <p className="text-ink-soft mt-3 text-base">
-          שאל שאלה בעברית. קבל תשובה מבוססת מקורות.
+        <p className="text-ink-soft mt-5 text-base max-w-xl leading-relaxed">
+          שאל שאלה בעברית. המערכת תקרא את כל התקנונים, תאתר את המקורות
+          הרלוונטיים ביותר, ותחזיר תשובה מבוססת ציטוטים.
         </p>
       </header>
 
-      <form onSubmit={submit} className="mb-8">
-        <div className="relative">
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="לדוגמה: מה הוחלט בעניין קדימות לקומה שנייה?"
-            rows={3}
-            className="w-full px-4 py-3 bg-white border border-stone-300 rounded-xl shadow-soft focus:border-accent focus:ring-4 focus:ring-accent/15 outline-none text-base resize-none transition"
-          />
-        </div>
-        <div className="mt-3 flex items-center gap-3 flex-wrap">
+      <form onSubmit={submit} className="mb-10">
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              void runSearch(question);
+            }
+          }}
+          placeholder="לדוגמה: מה הוחלט בעניין קדימות לקומה שנייה?"
+          rows={3}
+          className="w-full px-4 py-3 bg-surface border-2 border-ink focus:border-accent outline-none text-base resize-none transition placeholder:text-ink-soft/70"
+        />
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
           <button
             type="submit"
             disabled={loading || !question.trim()}
-            className="px-6 py-2.5 bg-brand-gradient text-white font-semibold rounded-full shadow-soft hover:shadow-lift disabled:opacity-50 disabled:shadow-none transition min-w-[110px]"
+            className="px-8 py-3 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition min-w-[120px]"
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-white/80 animate-pulse" />
+                <span className="inline-block w-2.5 h-2.5 bg-surface animate-pulse" />
                 <span>חושב</span>
               </span>
             ) : (
               "שאל"
             )}
           </button>
+          <span className="text-xs text-ink-soft">
+            Cmd/Ctrl + Enter לשליחה מהירה
+          </span>
         </div>
       </form>
 
@@ -266,24 +273,23 @@ export default function Search() {
       {result && (
         <div className="space-y-6 animate-fade-up">
           {result.near_misses && result.near_misses.length > 0 && (
-            <div className="p-4 border border-amber-300 bg-amber-50 rounded-xl shadow-soft">
-              <div className="text-xs font-bold text-amber-900 tracking-wide mb-2 flex items-center gap-2">
-                <span>⚡</span>
-                <span>קיימת תשובה מאושרת קרובה בארכיון</span>
+            <div className="border-2 border-accent bg-surface">
+              <div className="px-4 py-2 bg-accent text-surface text-[11px] tracking-[0.2em] uppercase font-bold">
+                קיימת תשובה מאושרת קרובה בארכיון
               </div>
-              <div className="space-y-2">
+              <div>
                 {result.near_misses.map((nm) => (
                   <details
                     key={nm.authoritative_answer_id}
-                    className="bg-white border border-amber-200 rounded-lg"
+                    className="border-t border-line first:border-t-0"
                   >
-                    <summary className="px-3 py-2 cursor-pointer text-sm">
-                      <span className="text-amber-900 font-semibold">
-                        {Math.round(nm.similarity * 100)}% דמיון:
-                      </span>{" "}
-                      <span className="text-ink">{nm.canonical_question}</span>
+                    <summary className="px-4 py-3 cursor-pointer text-sm hover:bg-line/40">
+                      <span className="text-accent font-bold font-mono">
+                        {Math.round(nm.similarity * 100)}%
+                      </span>
+                      <span className="text-ink mr-3">{nm.canonical_question}</span>
                     </summary>
-                    <div className="px-3 py-2 border-t border-amber-200 text-sm leading-relaxed whitespace-pre-wrap text-ink-soft">
+                    <div className="px-4 py-3 border-t border-line text-sm leading-relaxed whitespace-pre-wrap text-ink-soft">
                       {nm.answer}
                     </div>
                   </details>
@@ -291,57 +297,110 @@ export default function Search() {
               </div>
             </div>
           )}
-          {/* 0. Retry banner (one-shot notice after auto-retry from 👎 on cached answer) */}
+          {/* 0. Retry banner (after auto-retry from 👎 on cached answer) */}
           {justRetried && (
-            <div className="px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-900">
-              ✓ התשובה הקודמת הוסרה מהמטמון. הנה ניסיון חדש מבוסס מקורות.
+            <div className="px-4 py-3 bg-surface border-r-4 border-accent text-sm text-ink">
+              התשובה הקודמת הוסרה מהמטמון. הנה ניסיון חדש מבוסס מקורות.
             </div>
           )}
 
-          {/* 1. Confidence header */}
-          <div
-            className={`inline-flex items-center gap-3 px-4 py-2 rounded-full border ${
-              confidenceColors[result.confidence] || ""
-            }`}
-          >
-            <span className="text-xs tracking-wider uppercase font-bold">
+          {/* 1. Confidence label — flat, no pill */}
+          <div className="flex items-center gap-4">
+            <span
+              className={`text-[11px] tracking-[0.25em] uppercase font-bold ${
+                result.confidence === "confident"
+                  ? "text-accent"
+                  : result.confidence === "uncertain"
+                  ? "text-amber-700"
+                  : "text-ink-soft"
+              }`}
+            >
               {confidenceLabel[result.confidence] || result.confidence}
             </span>
             {result.served_from === "hitl_cache" && (
-              <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full">
-                מהמטמון
+              <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
+                מהמטמון המאושר
               </span>
             )}
           </div>
 
-          {/* 2. Cited clauses */}
+          {/* 2. Natural-language answer — the artifact */}
+          <article className="relative bg-surface">
+            <div className="absolute -right-1 top-0 bottom-0 w-1 bg-accent" />
+            <div className="pr-6 py-2">
+              <p className="font-display text-xl md:text-2xl leading-relaxed whitespace-pre-wrap text-ink">
+                {result.answer}
+              </p>
+            </div>
+
+            {result.confidence !== "refused" && (
+              <div className="mt-6 pt-4 border-t border-line flex flex-wrap items-center gap-2">
+                <span className="text-xs text-ink-soft ml-2">
+                  {retrying ? "מחפש שוב…" : "האם התשובה מדויקת?"}
+                </span>
+                <button
+                  onClick={() => submitFeedback("positive")}
+                  disabled={feedback !== null || retrying}
+                  className={`px-3 py-1.5 text-sm border transition ${
+                    feedback === "positive"
+                      ? "bg-ink text-surface border-ink"
+                      : "bg-surface border-line-strong hover:border-ink"
+                  }`}
+                >
+                  כן
+                </button>
+                <button
+                  onClick={() => submitFeedback("negative")}
+                  disabled={feedback !== null || retrying}
+                  className={`px-3 py-1.5 text-sm border transition ${
+                    feedback === "negative"
+                      ? "bg-accent text-surface border-accent"
+                      : "bg-surface border-line-strong hover:border-accent hover:text-accent"
+                  }`}
+                >
+                  לא
+                </button>
+                <button
+                  onClick={promoteToGolden}
+                  disabled={promoting || promoted}
+                  className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface disabled:opacity-50 text-ink-soft transition mr-auto"
+                  title="הפוך לשאלת זהב להרצה חוזרת"
+                >
+                  {promoted ? "✓ נשמר כשאלת זהב" : promoting ? "..." : "סמן כשאלת זהב"}
+                </button>
+              </div>
+            )}
+          </article>
+
+          {/* 3. Cited clauses — index-card aesthetic */}
           {result.references && result.references.length > 0 && (
             <div>
-              <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
-                סימוכין
+              <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3 flex items-center gap-3">
+                <span>סימוכין</span>
+                <span className="flex-1 h-px bg-line" />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-px bg-line border border-line">
                 {result.references.map((r, i) => (
                   <div
                     key={`${r.title}-${r.section_number}-${i}`}
-                    className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
+                    className="p-4 bg-surface"
                   >
-                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold text-accent">{r.title}</span>
+                    <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
+                      <span className="font-semibold text-ink">{r.title}</span>
                       {r.section_number && (
-                        <span className="text-sm text-ink font-mono">
-                          סעיף {r.section_number}
+                        <span className="text-xs text-accent font-mono tracking-tight">
+                          {r.section_number}
                         </span>
                       )}
                       {r.source_type && (
-                        <span className="text-[10px] tracking-widest uppercase text-ink-soft mr-auto">
+                        <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft mr-auto">
                           {r.source_type}
                         </span>
                       )}
                     </div>
                     {r.excerpt && (
-                      <blockquote className="text-sm text-ink-soft leading-relaxed border-r-2 border-accent/30 pr-3 italic">
-                        "{r.excerpt}"
+                      <blockquote className="text-sm text-ink-soft leading-relaxed">
+                        {r.excerpt}
                       </blockquote>
                     )}
                   </div>
@@ -350,57 +409,9 @@ export default function Search() {
             </div>
           )}
 
-          {/* 3. Natural-language answer */}
-          <div className="p-5 bg-white border border-stone-200 rounded-xl shadow-soft">
-            <div className="text-xs tracking-wider uppercase text-ink-soft font-bold mb-2">
-              תשובה
-            </div>
-            <p className="text-lg leading-relaxed whitespace-pre-wrap text-ink">
-              {result.answer}
-            </p>
-
-            {result.confidence !== "refused" && (
-              <div className="mt-4 pt-4 border-t border-stone-200 flex flex-wrap items-center gap-3">
-                <span className="text-xs text-ink-soft">
-                  {retrying ? "מחפש שוב…" : "האם התשובה מדויקת?"}
-                </span>
-                <button
-                  onClick={() => submitFeedback("positive")}
-                  disabled={feedback !== null || retrying}
-                  className={`px-3 py-1 text-sm rounded-full transition ${
-                    feedback === "positive"
-                      ? "bg-emerald-600 text-white"
-                      : "bg-white border border-stone-300 hover:bg-emerald-50"
-                  }`}
-                >
-                  👍 כן
-                </button>
-                <button
-                  onClick={() => submitFeedback("negative")}
-                  disabled={feedback !== null || retrying}
-                  className={`px-3 py-1 text-sm rounded-full transition ${
-                    feedback === "negative"
-                      ? "bg-red-600 text-white"
-                      : "bg-white border border-stone-300 hover:bg-red-50"
-                  }`}
-                >
-                  👎 לא
-                </button>
-                <button
-                  onClick={promoteToGolden}
-                  disabled={promoting || promoted}
-                  className="px-3 py-1 text-sm rounded-full bg-white border border-stone-300 hover:bg-stone-100 disabled:opacity-60 text-ink-soft"
-                  title="הפוך לשאלת זהב להרצה חוזרת"
-                >
-                  {promoted ? "✓ נשמר כזהב" : promoting ? "..." : "⭐ קבע כשאלת זהב"}
-                </button>
-              </div>
-            )}
-          </div>
-
           {feedback === "negative" && !failureMode && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <div className="text-xs font-bold text-amber-900 mb-2 tracking-wide">
+            <div className="border-2 border-ink p-4 bg-surface">
+              <div className="text-[11px] tracking-[0.25em] uppercase font-bold text-ink mb-3">
                 מה השתבש?
               </div>
               <div className="flex flex-wrap gap-2">
@@ -408,44 +419,43 @@ export default function Search() {
                   <button
                     key={m}
                     onClick={() => tagFailure(m)}
-                    className="px-3 py-1.5 text-sm bg-white border border-amber-300 hover:bg-amber-100 rounded-full transition"
+                    className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-line/40 transition"
                   >
                     {failureLabels[m]}
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-amber-800 mt-2 leading-relaxed">
-                "השליפה החטיאה" = החלקים הנכונים לא נמצאו. "הניסוח שגוי" = החלקים נמצאו אבל
-                התשובה לא נכונה.
+              <p className="text-[11px] text-ink-soft mt-3 leading-relaxed">
+                "השליפה החטיאה" = החלקים הנכונים לא נמצאו. "הניסוח שגוי" =
+                החלקים נמצאו אבל התשובה לא נכונה.
               </p>
             </div>
           )}
 
           {failureMode && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-sm">
-              ✓ נרשם: {failureLabels[failureMode]}
+            <div className="px-4 py-3 bg-surface border-r-4 border-accent text-sm text-ink">
+              נרשם: {failureLabels[failureMode]}
             </div>
           )}
 
           {result.sources.length > 0 && (
-            <details className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-soft">
-              <summary className="px-4 py-3 cursor-pointer hover:bg-stone-50 text-sm font-semibold text-ink-soft">
+            <details className="border border-line">
+              <summary className="px-4 py-3 cursor-pointer hover:bg-line/40 text-[11px] tracking-[0.25em] uppercase font-bold text-ink-soft">
                 קטעי טקסט שנשלפו ({result.sources.length})
               </summary>
-              <div className="px-4 py-3 border-t border-stone-200 space-y-3 bg-stone-50/50">
+              <div className="border-t border-line grid gap-px bg-line">
                 {result.sources.map((s, i) => (
-                  <details
-                    key={s.chunk_id}
-                    className="bg-white border border-stone-200 rounded-lg overflow-hidden"
-                  >
-                    <summary className="px-3 py-2 cursor-pointer hover:bg-stone-50 text-sm">
-                      <span className="font-semibold text-accent">[{i + 1}]</span>{" "}
+                  <details key={s.chunk_id} className="bg-surface">
+                    <summary className="px-4 py-2.5 cursor-pointer hover:bg-line/40 text-sm flex items-baseline gap-3">
+                      <span className="font-mono text-accent">[{i + 1}]</span>
                       <span className="text-ink">{s.document_filename}</span>
                       {s.section_path && (
-                        <span className="text-ink-soft mr-2">⋅ {s.section_path}</span>
+                        <span className="text-ink-soft font-mono text-xs">
+                          {s.section_path}
+                        </span>
                       )}
                     </summary>
-                    <div className="px-3 py-2 border-t border-stone-200 text-xs leading-relaxed whitespace-pre-wrap bg-stone-50">
+                    <div className="px-4 py-3 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft">
                       {s.text}
                     </div>
                   </details>
@@ -518,36 +528,37 @@ function ThinkingProgress({
 
   return (
     <section
-      className="mb-6 p-5 bg-white border border-stone-200 rounded-2xl shadow-soft animate-fade-up"
+      className="mb-8 py-5 border-y-2 border-ink animate-fade-up"
       role="status"
       aria-live="polite"
       aria-label="מתבצע חיפוש"
     >
-      <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden mb-4">
+      <div className="h-[3px] bg-line overflow-hidden mb-4">
         <div
-          className="h-full bg-brand-gradient transition-[width] duration-300 ease-out"
+          className="h-full bg-accent transition-[width] duration-300 ease-out"
           style={{ width: `${Math.min(pct, FINAL_PCT)}%` }}
         />
       </div>
-      <div className="grid grid-cols-4 gap-2 text-xs text-center">
+      <div className="grid grid-cols-4 gap-2 text-[11px] tracking-wider uppercase font-bold">
         {THINKING_STAGES.map((s, i) => {
           const state =
             i < currentIdx ? "done" : i === currentIdx ? "active" : "pending";
           const cls =
             state === "active"
-              ? "text-accent font-semibold"
+              ? "text-accent"
               : state === "done"
-              ? "text-ink-soft"
-              : "text-stone-300";
+              ? "text-ink"
+              : "text-line-strong";
           return (
             <span key={s.key} className={cls}>
+              <span className="text-ink-soft font-mono ml-2">0{i + 1}</span>
               {s.label}
             </span>
           );
         })}
       </div>
       {detail && (
-        <div className="mt-3 text-xs text-ink-soft text-center">{detail}</div>
+        <div className="mt-3 text-xs text-ink-soft">{detail}</div>
       )}
     </section>
   );
@@ -574,25 +585,29 @@ function RecentQuestions({ onPick }: { onPick: (q: string) => void }) {
   if (questions === null || questions.length === 0) return null;
 
   return (
-    <section className="mt-6 p-6 bg-white border border-stone-200 rounded-2xl shadow-soft animate-fade-up">
-      <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
-        שאלות אחרונות
+    <section className="mt-10 animate-fade-up">
+      <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4 flex items-center gap-3">
+        <span>שאלות אחרונות</span>
+        <span className="flex-1 h-px bg-line" />
       </div>
-      <p className="text-xs text-ink-soft mb-4 leading-relaxed">
-        שאלות שנשאלו לאחרונה במאגר הזה. לחץ על אחת כדי לשאול שוב.
-      </p>
-      <ul className="space-y-1.5">
-        {questions.map((q) => (
-          <li key={q}>
+      <ul className="border border-line">
+        {questions.map((q, i) => (
+          <li
+            key={q}
+            className={i > 0 ? "border-t border-line" : ""}
+          >
             <button
               type="button"
               onClick={() => onPick(q)}
-              className="group w-full text-right px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 hover:bg-accent/5 hover:border-accent/40 transition text-sm text-ink"
+              className="group w-full text-right px-4 py-3 hover:bg-line/40 transition flex items-baseline gap-4 text-sm text-ink"
             >
-              <span className="text-ink-soft text-xs mr-2 group-hover:text-accent transition">
-                ›
+              <span className="font-mono text-xs text-ink-soft group-hover:text-accent transition w-6 shrink-0">
+                {String(i + 1).padStart(2, "0")}
               </span>
-              {q}
+              <span className="flex-1">{q}</span>
+              <span className="text-ink-soft group-hover:text-accent transition text-xs opacity-0 group-hover:opacity-100">
+                ←
+              </span>
             </button>
           </li>
         ))}
@@ -602,66 +617,79 @@ function RecentQuestions({ onPick }: { onPick: (q: string) => void }) {
 }
 
 function HowItWorks() {
+  const steps: { title: string; body: React.ReactNode }[] = [
+    {
+      title: "פירוק מסמכים",
+      body: (
+        <>
+          כל תקנון מחולק אוטומטית לסעיפים, פרקים ונהלים — היחידה הקטנה
+          ביותר של משמעות בשפה משפטית.
+        </>
+      ),
+    },
+    {
+      title: "טביעת אצבע סמנטית",
+      body: (
+        <>
+          מודל שפה מתרגם כל קטע לייצוג מספרי שלוכד את <em>המשמעות</em>, לא
+          רק את המילים. שני קטעים שמדברים על אותו דבר במילים שונות יקבלו
+          טביעות אצבע דומות.
+        </>
+      ),
+    },
+    {
+      title: "התאמה לשאלה",
+      body: (
+        <>
+          השאלה מתורגמת לטביעת אצבע משלה. המערכת מאתרת את הקטעים הקרובים
+          אליה ביותר במשמעות, ובמקביל גם חיפוש מילולי לאיתור מספרי סעיפים
+          ספציפיים. מנוע דירוג ייעודי מעלה את הרלוונטיים ביותר לראש.
+        </>
+      ),
+    },
+    {
+      title: "ניסוח עם מקורות",
+      body: (
+        <>
+          הקטעים הרלוונטיים נשלחים ל-Claude שמנסח תשובה תוך ציטוט המקור
+          המדויק. אם אין מספיק עוגן במסמכים — המערכת תאמר שלא מצאה תשובה,
+          ולא תמציא.
+        </>
+      ),
+    },
+  ];
+
   return (
-    <section className="mt-2 mb-6 p-6 bg-white border border-stone-200 rounded-2xl shadow-soft animate-fade-up">
-      <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
-        איך זה עובד?
+    <section className="mt-4 animate-fade-up">
+      <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4 flex items-center gap-3">
+        <span>איך זה עובד</span>
+        <span className="flex-1 h-px bg-line" />
       </div>
-      <p className="text-sm text-ink-soft leading-relaxed mb-5">
+
+      <p className="text-sm text-ink-soft leading-relaxed mb-6 max-w-2xl">
         זה לא חיפוש מילים כמו Ctrl+F — המערכת קוראת את התקנונים
         <strong className="text-ink"> לפי משמעות </strong>
-        ומשתמשת ב-AI כדי לנסח תשובה מבוססת מקורות. הנה התהליך:
+        ומשתמשת ב-AI כדי לנסח תשובה מבוססת מקורות.
       </p>
 
-      <ol className="space-y-3 text-sm leading-relaxed">
-        <li className="flex gap-3">
-          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
-            1
-          </span>
-          <span className="text-ink">
-            <strong>פירוק מסמכים לקטעים.</strong> כל תקנון מחולק אוטומטית
-            לסעיפים, פרקים, ונהלים — היחידה הקטנה ביותר של משמעות בשפה
-            משפטית.
-          </span>
-        </li>
-        <li className="flex gap-3">
-          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
-            2
-          </span>
-          <span className="text-ink">
-            <strong>טביעת אצבע סמנטית לכל קטע.</strong> מודל שפה מתרגם כל קטע
-            לייצוג מספרי שלוכד את <em>המשמעות</em>, לא רק את המילים. שני קטעים
-            שמדברים על אותו דבר במילים שונות יקבלו טביעות אצבע דומות.
-          </span>
-        </li>
-        <li className="flex gap-3">
-          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
-            3
-          </span>
-          <span className="text-ink">
-            <strong>השאלה שלך עוברת את אותו תהליך.</strong> השאלה מתורגמת
-            לטביעת אצבע משלה והמערכת מאתרת את הקטעים הקרובים אליה ביותר
-            במשמעות. במקביל רץ גם חיפוש מילולי לאיתור שמות ומספרי סעיפים
-            ספציפיים. שני הזרמים מתמזגים, ומדורג מחדש מנוע ייעודי שמעלה את
-            הרלוונטיים ביותר לראש.
-          </span>
-        </li>
-        <li className="flex gap-3">
-          <span className="shrink-0 w-7 h-7 rounded-full bg-accent/10 text-accent font-bold flex items-center justify-center text-xs">
-            4
-          </span>
-          <span className="text-ink">
-            <strong>תשובה בעברית מבוססת מקורות.</strong> הקטעים הרלוונטיים
-            נשלחים ל-Claude שמנסח תשובה תוך ציטוט המקור המדויק. אם אין מספיק
-            עוגן במסמכים — המערכת תאמר שלא מצאה תשובה, ולא תמציא.
-          </span>
-        </li>
+      <ol className="grid md:grid-cols-2 gap-px bg-line border border-line">
+        {steps.map((s, i) => (
+          <li key={s.title} className="bg-surface p-5">
+            <div className="flex items-baseline gap-3 mb-2">
+              <span className="font-mono text-accent font-bold text-sm">
+                0{i + 1}
+              </span>
+              <h3 className="font-display font-bold text-ink">{s.title}</h3>
+            </div>
+            <p className="text-sm text-ink-soft leading-relaxed">{s.body}</p>
+          </li>
+        ))}
       </ol>
 
-      <div className="mt-5 pt-4 border-t border-stone-200 text-xs text-ink-soft leading-relaxed">
-        <strong className="text-ink">זמן תגובה:</strong> בדרך כלל 5–15 שניות.
-        זה לא Google — המערכת קוראת, מבינה, ומחברת בין סעיפים בכל שאלה.
-        סבלנות שווה תשובה איכותית.
+      <div className="mt-4 pt-4 border-t border-line text-xs text-ink-soft leading-relaxed">
+        <span className="text-ink font-semibold">זמן תגובה:</span> בדרך כלל 5–15
+        שניות. המערכת קוראת, מבינה, ומחברת בין סעיפים בכל שאלה. סבלנות שווה
+        תשובה איכותית.
       </div>
     </section>
   );
