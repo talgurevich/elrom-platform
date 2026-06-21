@@ -38,10 +38,15 @@ export default function Authoritative() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">תשובות מאושרות</h1>
-        <p className="text-ink-soft mt-1 text-sm">
-          הספרייה שמייצרת את "המטמון" — שאלות עתידיות דומות יענו ישירות מכאן.
+      <header className="mb-10">
+        <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+          ספרייה
+        </div>
+        <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+          תשובות מאושרות
+        </h1>
+        <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+          הספרייה שמייצרת את"המטמון" — שאלות עתידיות דומות יענו ישירות מכאן.
         </p>
       </header>
 
@@ -60,7 +65,7 @@ export default function Authoritative() {
       ) : (
         <div className="space-y-3">
           {items.map((it) => (
-            <div key={it.id} className="bg-white border border-stone-200 rounded-md p-4">
+            <div key={it.id} className="bg-white border border-line rounded-md p-4">
               <div className="flex items-start gap-3 mb-2">
                 <div className="flex-1">
                   <div className="font-semibold text-ink">{it.canonical_question}</div>

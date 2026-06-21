@@ -75,9 +75,16 @@ export default function Review() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">תור בדיקה</h1>
-        <p className="text-ink-soft mt-1 text-sm">סקירת שאלות, סימון תשובות כסמכותיות, או דחייה.</p>
+      <header className="mb-10">
+        <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+          ביקורת
+        </div>
+        <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+          תור בדיקה
+        </h1>
+        <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+          סקירת שאלות שנשאלו, סימון תשובות כסמכותיות, או דחייה.
+        </p>
       </header>
 
       <div className="mb-4 flex gap-2 text-sm">
@@ -86,13 +93,13 @@ export default function Review() {
             key={f}
             onClick={() => setFilter(f)}
             className={`px-3 py-1 rounded ${
-              filter === f ? "bg-accent text-white" : "bg-stone-100 hover:bg-stone-200"
+              filter === f ? "bg-ink text-surface" : "bg-line hover:bg-line-strong"
             }`}
           >
             {f === "needs_review" ? "ממתינות לבדיקה" : f === "feedback" ? "עם משוב" : "הכול"}
           </button>
         ))}
-        <button onClick={load} className="ml-auto px-3 py-1 rounded text-ink-soft hover:bg-stone-100">
+        <button onClick={load} className="ml-auto px-3 py-1 rounded text-ink-soft hover:bg-line">
           רענן
         </button>
       </div>
@@ -112,7 +119,7 @@ export default function Review() {
           {queries.map((q) => {
             const isEditing = editingId === q.id;
             return (
-              <div key={q.id} className="bg-white border border-stone-200 rounded-md p-5">
+              <div key={q.id} className="bg-white border border-line rounded-md p-5">
                 <div className="flex items-start gap-2 mb-3">
                   <div className="flex-1">
                     <div className="text-xs text-ink-soft mb-1">
@@ -123,10 +130,14 @@ export default function Review() {
                         </span>
                       )}
                       {q.feedback === "positive" && (
-                        <span className="mr-2 text-emerald-600">👍</span>
+                        <span className="mr-2 inline-block border border-emerald-600 text-emerald-700 px-2 py-0.5 text-[10px] tracking-wider uppercase font-bold">
+                          חיובי
+                        </span>
                       )}
                       {q.feedback === "negative" && (
-                        <span className="mr-2 text-red-600">👎</span>
+                        <span className="mr-2 inline-block border border-accent text-accent px-2 py-0.5 text-[10px] tracking-wider uppercase font-bold">
+                          שלילי
+                        </span>
                       )}
                       {q.reviewer_action && (
                         <span className="mr-2 inline-block bg-stone-200 px-2 py-0.5 rounded text-[10px]">
@@ -149,7 +160,7 @@ export default function Review() {
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
                       rows={4}
-                      className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                      className="w-full px-3 py-2 border border-line-strong rounded text-sm"
                     />
                   ) : (
                     <div className="text-ink whitespace-pre-wrap text-sm leading-relaxed">
@@ -167,7 +178,7 @@ export default function Review() {
                       value={editNote}
                       onChange={(e) => setEditNote(e.target.value)}
                       placeholder="למה אישרת? לאיזה הקשר זה תקף?"
-                      className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                      className="w-full px-3 py-2 border border-line-strong rounded text-sm"
                     />
                   </div>
                 )}
@@ -235,7 +246,7 @@ export default function Review() {
                           setEditText("");
                           setEditNote("");
                         }}
-                        className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
+                        className="px-3 py-1.5 bg-line hover:bg-stone-200 rounded"
                       >
                         ביטול
                       </button>
@@ -255,7 +266,7 @@ export default function Review() {
                           setEditText(q.answer || "");
                         }}
                         disabled={busy}
-                        className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
+                        className="px-3 py-1.5 bg-line hover:bg-stone-200 rounded"
                       >
                         ערוך + אשר
                       </button>

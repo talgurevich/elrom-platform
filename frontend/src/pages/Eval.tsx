@@ -25,7 +25,7 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="px-4 py-2 bg-white border border-stone-300 hover:border-accent rounded-full text-sm font-semibold text-ink-soft hover:text-accent transition"
+        className="px-4 py-2 bg-white border border-line-strong hover:border-accent rounded-full text-sm font-semibold text-ink-soft hover:text-accent transition"
       >
         + הוסף שאלת זהב
       </button>
@@ -63,14 +63,14 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <div className="p-5 bg-white border border-stone-200 rounded-xl shadow-soft space-y-3">
+    <div className="p-5 bg-white border border-line  space-y-3">
       <div>
         <label className="block text-xs font-semibold text-ink-soft mb-1">שאלה</label>
         <textarea
           value={form.question}
           onChange={(e) => setForm({ ...form, question: e.target.value })}
           rows={2}
-          className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
+          className="w-full px-3 py-2 border border-line-strong rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
         />
       </div>
       <div>
@@ -82,7 +82,7 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
           onChange={(e) => setFilenamesStr(e.target.value)}
           rows={2}
           placeholder="תקנון קיבוץ אלרום 2009.pdf"
-          className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs font-mono focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
+          className="w-full px-3 py-2 border border-line-strong rounded-lg text-xs font-mono focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
         />
       </div>
       <div>
@@ -94,7 +94,7 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
           value={keywordsStr}
           onChange={(e) => setKeywordsStr(e.target.value)}
           placeholder="קומה שנייה, רוב מיוחס"
-          className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
+          className="w-full px-3 py-2 border border-line-strong rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
         />
       </div>
       <div>
@@ -103,7 +103,7 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
           type="text"
           value={form.notes || ""}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
+          className="w-full px-3 py-2 border border-line-strong rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/15 outline-none"
         />
       </div>
       {error && (
@@ -115,7 +115,7 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
         <button
           onClick={submit}
           disabled={busy || !form.question.trim()}
-          className="px-4 py-2 bg-brand-gradient text-white font-semibold rounded-full text-sm disabled:opacity-50"
+          className="px-4 py-2 bg-accent text-white font-semibold rounded-full text-sm disabled:opacity-50"
         >
           {busy ? "שומר..." : "שמור"}
         </button>
@@ -175,30 +175,36 @@ export default function Eval() {
 
   return (
     <>
-      <header className="mb-8 flex items-end justify-between gap-4 flex-wrap">
+      <header className="mb-10 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="font-display text-4xl font-bold tracking-tight">הערכה (Eval)</h1>
-          <p className="text-ink-soft mt-2 text-sm">
-            מאגר שאלות זהב להרצה חוזרת. מודד דיוק שליפה וניסוח אחרי כל שינוי במערכת.
+          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+            הערכה
+          </div>
+          <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+            שאלות זהב
+          </h1>
+          <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+            מאגר שאלות מבחן להרצה חוזרת. מודד דיוק שליפה וניסוח אחרי כל
+            שינוי במערכת.
           </p>
         </div>
         <button
           onClick={run}
           disabled={running || goldens.length === 0}
-          className="px-5 py-2.5 bg-brand-gradient text-white font-semibold rounded-full shadow-soft hover:shadow-lift disabled:opacity-50 transition"
+          className="px-6 py-3 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition"
         >
           {running ? "מריץ..." : `הרץ הערכה (${goldens.length})`}
         </button>
       </header>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-sm">
+        <div className="mb-6 p-4 bg-red-50 border border-red-200  text-red-900 text-sm">
           {error}
         </div>
       )}
 
       {summary && (
-        <div className="mb-8 p-5 bg-white border border-stone-200 rounded-xl shadow-soft animate-fade-up">
+        <div className="mb-8 p-5 bg-white border border-line  animate-fade-up">
           <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
             תוצאות אחרונות
           </div>
@@ -247,7 +253,7 @@ export default function Eval() {
           {goldens.map((g) => (
             <div
               key={g.id}
-              className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
+              className="p-4 bg-white border border-line "
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">

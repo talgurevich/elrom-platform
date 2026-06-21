@@ -74,7 +74,7 @@ function QualityBadge({ doc }: { doc: DocumentItem }) {
   }
   return (
     <span
-      className="text-[10px] px-2 py-0.5 bg-stone-100 text-ink-soft rounded-full"
+      className="text-[10px] px-2 py-0.5 bg-line text-ink-soft rounded-full"
       title="המסמך הוטען לפני שהמערכת תיעדה מדדי איכות"
     >
       ? ישן
@@ -213,10 +213,16 @@ export default function Upload() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">העלאת מסמכים</h1>
-        <p className="text-ink-soft mt-1 text-sm">
-          תקנונים, פרוטוקולים, החלטות. נתמך: PDF, Word, טקסט. סריקות PDF עוברות OCR אוטומטי.
+      <header className="mb-10">
+        <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+          מסמכים
+        </div>
+        <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+          העלאה וניהול
+        </h1>
+        <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+          תקנונים, פרוטוקולים, החלטות. נתמך: PDF, Word, טקסט. סריקות PDF
+          עוברות OCR אוטומטי, ומסמכים מסווגים אוטומטית עם כותרת בעברית.
         </p>
       </header>
 
@@ -236,7 +242,7 @@ export default function Upload() {
         className={`mb-4 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
           dragOver
             ? "border-accent bg-accent/10"
-            : "border-stone-300 bg-white hover:border-accent/50 hover:bg-stone-100"
+            : "border-line-strong bg-white hover:border-accent/50 hover:bg-line"
         }`}
       >
         <input
@@ -261,7 +267,7 @@ export default function Upload() {
         <select
           value={defaultDocType}
           onChange={(e) => setDefaultDocType(e.target.value)}
-          className="px-2 py-1 border border-stone-300 rounded"
+          className="px-2 py-1 border border-line-strong rounded"
         >
           {docTypes.map((dt) => (
             <option key={dt.value} value={dt.value}>
@@ -280,7 +286,7 @@ export default function Upload() {
         {queue.some((e) => e.status.kind === "done") && (
           <button
             onClick={clearDone}
-            className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
+            className="px-3 py-1.5 bg-line hover:bg-stone-200 rounded"
           >
             נקה גמורים
           </button>
@@ -301,7 +307,7 @@ export default function Upload() {
             {queue.map((entry) => (
               <div
                 key={entry.id}
-                className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded text-sm"
+                className="flex items-center gap-3 p-3 bg-white border border-line rounded text-sm"
               >
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink truncate">{entry.file.name}</div>
@@ -343,7 +349,7 @@ export default function Upload() {
                     )
                   }
                   disabled={entry.status.kind !== "queued"}
-                  className="px-2 py-1 border border-stone-300 rounded text-xs"
+                  className="px-2 py-1 border border-line-strong rounded text-xs"
                 >
                   {docTypes.map((dt) => (
                     <option key={dt.value} value={dt.value}>
@@ -389,10 +395,10 @@ export default function Upload() {
               <button
                 onClick={() => classify(false)}
                 disabled={classifying}
-                className="px-3 py-1.5 bg-white border border-stone-300 hover:border-accent text-xs rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
+                className="px-3 py-1.5 bg-white border border-line-strong hover:border-accent text-xs rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
                 title="קרא את תוכן כל מסמך עם Claude, תן לו כותרת ותקציר"
               >
-                {classifying ? "מסווג..." : "✨ סווג מסמכים חדשים"}
+                {classifying ? "מסווג..." : "סווג מסמכים חדשים"}
               </button>
               <button
                 onClick={() => classify(true)}
@@ -430,7 +436,7 @@ export default function Upload() {
             {docs.map((d) => (
               <div
                 key={d.id}
-                className="p-4 bg-white border border-stone-200 rounded-xl shadow-soft"
+                className="p-4 bg-white border border-line "
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
@@ -442,7 +448,7 @@ export default function Upload() {
                         </span>
                       )}
                       {d.doc_type && (
-                        <span className="text-[10px] px-2 py-0.5 bg-stone-100 text-ink-soft rounded-full">
+                        <span className="text-[10px] px-2 py-0.5 bg-line text-ink-soft rounded-full">
                           {d.doc_type}
                         </span>
                       )}

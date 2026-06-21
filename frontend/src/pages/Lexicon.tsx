@@ -102,20 +102,26 @@ export default function Lexicon() {
 
   return (
     <>
-      <header className="mb-6 flex items-end justify-between flex-wrap gap-3">
+      <header className="mb-10 flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">מילון מונחים</h1>
-          <p className="text-ink-soft mt-1 text-sm">
-            מונחים תחומיים שאלרום מסבירה ל-AI לפני שהוא עונה.
+          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+            לקסיקון
+          </div>
+          <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+            מילון מונחים
+          </h1>
+          <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+            מונחים תחומיים שאלרום מסבירה ל-AI לפני שהוא עונה — כדי שמילים
+            ייחודיות לקיבוץ לא תפורשנה לא נכון.
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={generateSuggestions}
             disabled={suggesting}
-            className="px-3 py-1.5 bg-white border border-stone-300 hover:border-accent text-sm rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
+            className="px-3 py-1.5 bg-white border border-line-strong hover:border-accent text-sm rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
           >
-            {suggesting ? "מנתח..." : "✨ הצע מתוך שאלות שנכשלו"}
+            {suggesting ? "מנתח..." : "הצע מתוך שאלות שנכשלו"}
           </button>
           {editingId === null && (
             <button
@@ -125,7 +131,7 @@ export default function Lexicon() {
                 setExpansion("");
                 setNotes("");
               }}
-              className="px-3 py-1.5 bg-brand-gradient text-white text-sm rounded-full"
+              className="px-3 py-1.5 bg-accent text-white text-sm rounded-full"
             >
               + הוסף מונח
             </button>
@@ -134,7 +140,7 @@ export default function Lexicon() {
       </header>
 
       {suggestions !== null && (
-        <div className="mb-6 p-4 bg-white border border-amber-300 rounded-xl shadow-soft">
+        <div className="mb-6 p-4 bg-white border border-amber-300 ">
           <div className="text-xs font-bold text-amber-900 tracking-wide mb-3">
             הצעות מתוך {suggestions.length} שאלות שנכשלו לאחרונה
           </div>
@@ -170,7 +176,7 @@ export default function Lexicon() {
                           cur ? cur.filter((x) => x.term !== s.term) : cur
                         )
                       }
-                      className="text-xs px-2 py-1 text-ink-soft hover:bg-stone-100 rounded"
+                      className="text-xs px-2 py-1 text-ink-soft hover:bg-line rounded"
                     >
                       דחה
                     </button>
@@ -199,7 +205,7 @@ export default function Lexicon() {
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
                 placeholder='למשל: "השינוי"'
-                className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                className="w-full px-3 py-2 border border-line-strong rounded text-sm"
               />
             </div>
             <div>
@@ -211,7 +217,7 @@ export default function Lexicon() {
                 onChange={(e) => setExpansion(e.target.value)}
                 rows={3}
                 placeholder="למשל: המעבר מקיבוץ שיתופי לקיבוץ מתחדש..."
-                className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                className="w-full px-3 py-2 border border-line-strong rounded text-sm"
               />
             </div>
             <div>
@@ -221,7 +227,7 @@ export default function Lexicon() {
               <input
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                className="w-full px-3 py-2 border border-line-strong rounded text-sm"
               />
             </div>
             <div className="flex gap-2 text-sm">
@@ -234,7 +240,7 @@ export default function Lexicon() {
               </button>
               <button
                 onClick={cancel}
-                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded"
+                className="px-3 py-1.5 bg-line hover:bg-stone-200 rounded"
               >
                 ביטול
               </button>
@@ -250,7 +256,7 @@ export default function Lexicon() {
       ) : (
         <div className="space-y-2">
           {items.map((it) => (
-            <div key={it.id} className="bg-white border border-stone-200 rounded-md p-4">
+            <div key={it.id} className="bg-white border border-line rounded-md p-4">
               <div className="flex items-start gap-3">
                 <div className="flex-1">
                   <div className="font-semibold text-ink">{it.term}</div>

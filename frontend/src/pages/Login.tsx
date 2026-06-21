@@ -88,36 +88,36 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-lift border border-stone-200/70 p-10 animate-fade-up">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-14 h-14 rounded-2xl bg-brand-gradient flex items-center justify-center shadow-soft mb-5">
-              <span className="text-white font-display font-bold text-xl">א</span>
-            </div>
-            <h1 className="font-display text-3xl font-bold text-ink">אלרום</h1>
-            <p className="text-ink-soft mt-2 text-sm">
-              זיכרון ארגוני לקיבוצים ולמושבים
-            </p>
+      <div className="w-full max-w-md border-2 border-ink bg-surface p-12 animate-fade-up">
+        <div className="text-center">
+          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+            Organizational Memory
           </div>
-
-          <div className="mt-10 flex flex-col items-center gap-4">
-            <div ref={btnRef} className={busy ? "opacity-50 pointer-events-none" : ""} />
-            {busy && (
-              <div className="text-xs text-ink-soft animate-pulse">מתחבר…</div>
-            )}
-            {error && (
-              <div className="w-full mt-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-900 text-sm text-center">
-                {error}
-              </div>
-            )}
-          </div>
-
-          <p className="mt-10 text-xs text-ink-soft text-center leading-relaxed">
-            הגישה למערכת מוגבלת למשתמשים מאושרים בלבד.
-            <br />
-            אם אתה לא מצליח להתחבר — פנה למנהל המערכת.
+          <h1 className="font-display text-6xl font-black text-ink leading-none">
+            אלרום
+          </h1>
+          <p className="text-ink-soft mt-4 text-sm">
+            זיכרון ארגוני לקיבוצים ולמושבים
           </p>
         </div>
+
+        <div className="mt-12 pt-6 border-t border-line flex flex-col items-center gap-3">
+          <div ref={btnRef} className={busy ? "opacity-50 pointer-events-none" : ""} />
+          {busy && (
+            <div className="text-xs text-ink-soft animate-pulse">מתחבר…</div>
+          )}
+          {error && (
+            <div className="w-full mt-2 px-4 py-3 border-r-4 border-accent bg-surface text-ink text-sm text-center">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <p className="mt-10 text-xs text-ink-soft text-center leading-relaxed">
+          הגישה למערכת מוגבלת למשתמשים מאושרים בלבד.
+          <br />
+          אם אינך מצליח להתחבר — פנה למנהל המערכת.
+        </p>
       </div>
     </div>
   );

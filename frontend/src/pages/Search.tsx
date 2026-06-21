@@ -370,6 +370,14 @@ export default function Search() {
                 </button>
               </div>
             )}
+
+            {result.confidence !== "refused" && (
+              <ShareActions
+                question={result.question}
+                answer={result.answer}
+                references={result.references || []}
+              />
+            )}
           </article>
 
           {/* 3. Cited clauses — index-card aesthetic */}
@@ -561,6 +569,120 @@ function ThinkingProgress({
         <div className="mt-3 text-xs text-ink-soft">{detail}</div>
       )}
     </section>
+  );
+}
+
+const POWERED_BY = "Powered by זכרון ארגוני";
+
+function buildShareText({
+  question,
+  answer,
+  references,
+}: {
+  question: string;
+  answer: string;
+  references: { title: string; section_number: string }[];
+}): { plain: string; markdown: string } {
+  const refsList = references.length
+    ? references.map(
+        (r) =>
+          `${r.title}${r.section_number ? ` — סעיף ${r.section_number}` : ""}`
+      )
+    : [];
+
+  const plain = [
+    `שאלה: ${question}`,
+    "",
+    `תשובה:`,
+    answer,
+    refsList.length ? "\nמקורות:" : "",
+    ...refsList.map((r) => `• ${r}`),
+    "",
+    "—",
+    POWERED_BY,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+
+  const markdown = [
+    `### ${question}`,
+    "",
+    answer,
+    refsList.length ? "\n**מקורות:**" : "",
+    ...refsList.map((r) => `- ${r}`),
+    "",
+    "---",
+    `_${POWERED_BY}_`,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+
+  return { plain, markdown };
+}
+
+function ShareActions({
+  question,
+  answer,
+  references,
+}: {
+  question: string;
+  answer: string;
+  references: { title: string; section_number: string }[];
+}) {
+  const [copied, setCopied] = useState<"plain" | "markdown" | null>(null);
+  const { plain, markdown } = buildShareText({ question, answer, references });
+
+  const copyToClipboard = async (which: "plain" | "markdown") => {
+    const text = which === "plain" ? plain : markdown;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1800);
+    } catch {
+      // Fallback: very-old browsers — silently noop, the textarea trick is
+      // overkill for an internal tool.
+    }
+  };
+
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(plain)}`;
+  const mailtoUrl =
+    `mailto:?subject=${encodeURIComponent(`תשובה לשאלה: ${question}`)}` +
+    `&body=${encodeURIComponent(plain)}`;
+
+  return (
+    <div className="mt-4 pt-4 border-t border-line">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-ink-soft ml-2">שלח / העתק:</span>
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+        >
+          WhatsApp
+        </a>
+        <a
+          href={mailtoUrl}
+          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+        >
+          אימייל
+        </a>
+        <button
+          type="button"
+          onClick={() => copyToClipboard("markdown")}
+          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+        >
+          {copied === "markdown" ? "הועתק ✓" : "העתק Markdown"}
+        </button>
+        <button
+          type="button"
+          onClick={() => copyToClipboard("plain")}
+          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+        >
+          {copied === "plain" ? "הועתק ✓" : "העתק טקסט"}
+        </button>
+      </div>
+    </div>
   );
 }
 
