@@ -1,4 +1,5 @@
 """Ingest endpoints — text body or file upload, both share the same indexing path."""
+import asyncio
 import tempfile
 from pathlib import Path
 from uuid import UUID
@@ -174,8 +175,12 @@ async def ingest_upload(
     # Default to OCR for PDFs — see docstring for rationale.
     use_ocr = prefer_ocr if prefer_ocr is not None else (suffix == ".pdf")
 
+    # Extraction is fully synchronous (Azure SDK + pymupdf + pdfplumber) and can
+    # take 30-60s on a multi-page scanned PDF. Run it in a worker thread so the
+    # event loop stays free to answer /api/health — otherwise Render thinks the
+    # instance is dead and restarts the worker mid-upload.
     try:
-        extraction = extract_file(tmp_path, prefer_ocr=use_ocr)
+        extraction = await asyncio.to_thread(extract_file, tmp_path, prefer_ocr=use_ocr)
     finally:
         try:
             tmp_path.unlink()
@@ -218,11 +223,15 @@ async def ingest_upload(
     db.add(doc)
     db.flush()
 
-    structural_chunks = chunk_document(extraction.text)
+    # Chunking + embedding are also synchronous and can be slow (Cohere call
+    # latency + tokenizer). Push them off the event loop too.
+    structural_chunks = await asyncio.to_thread(chunk_document, extraction.text)
     if not structural_chunks:
         raise HTTPException(400, "Document produced no chunks.")
 
-    embeddings = embed_texts([sc.text for sc in structural_chunks])
+    embeddings = await asyncio.to_thread(
+        embed_texts, [sc.text for sc in structural_chunks]
+    )
 
     for sc, embedding in zip(structural_chunks, embeddings, strict=True):
         chunk = Chunk(
