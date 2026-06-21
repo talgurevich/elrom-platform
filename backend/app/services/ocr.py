@@ -22,6 +22,22 @@ log = structlog.get_logger()
 
 DEFAULT_MODEL = "prebuilt-read"
 
+
+class PartialOcrError(RuntimeError):
+    """Raised when one or more OCR batches failed.
+
+    Carries the partial text and the list of failed batch indices (1-based)
+    so callers can decide whether to persist a partial result or refuse.
+    """
+
+    def __init__(self, partial_text: str, failed_batches: list[int], total_batches: int):
+        self.partial_text = partial_text
+        self.failed_batches = failed_batches
+        self.total_batches = total_batches
+        super().__init__(
+            f"OCR failed on {len(failed_batches)}/{total_batches} batches: {failed_batches}"
+        )
+
 # Azure Free F0 limit is 4 MB. We split anything above 3.5 MB to leave headroom.
 MAX_FILE_BYTES = 3_500_000
 # Target pages per split chunk when we have to split.
@@ -130,6 +146,7 @@ def ocr_pdf(path: Path, model: str = DEFAULT_MODEL) -> str:
     log.info("ocr.split", path=str(path), batches=len(batches))
 
     parts: list[str] = []
+    failed: list[int] = []
     for i, batch_path in enumerate(batches, 1):
         try:
             chunk_text, _ = _ocr_single(batch_path, model)
@@ -137,6 +154,7 @@ def ocr_pdf(path: Path, model: str = DEFAULT_MODEL) -> str:
                 parts.append(chunk_text)
             log.info("ocr.batch_done", batch=i, of=len(batches), chars=len(chunk_text))
         except Exception as e:
+            failed.append(i)
             log.warning("ocr.batch_failed", batch=i, error=str(e)[:200])
         finally:
             try:
@@ -145,5 +163,13 @@ def ocr_pdf(path: Path, model: str = DEFAULT_MODEL) -> str:
                 pass
 
     combined = "\n\n".join(parts)
-    log.info("ocr.done", path=str(path), chars=len(combined), total_batches=len(batches))
+    log.info(
+        "ocr.done",
+        path=str(path),
+        chars=len(combined),
+        total_batches=len(batches),
+        failed_batches=failed,
+    )
+    if failed:
+        raise PartialOcrError(combined, failed, len(batches))
     return combined

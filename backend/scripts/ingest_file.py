@@ -20,31 +20,41 @@ import sys
 from pathlib import Path
 from urllib import request
 
-from app.services.extraction import SUPPORTED_EXTENSIONS
+from app.services.extraction import SUPPORTED_EXTENSIONS, ExtractionResult
 from app.services.extraction import extract_text as _extract_via_service
 
 
-def extract_text(path: Path) -> str:
+def extract(path: Path) -> ExtractionResult:
     """Thin wrapper around the extraction service so this script stays a one-liner."""
     result = _extract_via_service(path)
     if result.note:
         print(f"  ⓘ {result.note}", file=sys.stderr)
     if result.used_ocr:
         print(f"  ⓘ used Azure OCR (extractor={result.extractor})", file=sys.stderr)
-    return result.text
+    return result
 
 
-def ingest_one(path: Path, *, doc_type: str, tenant_id: str | None, api: str, dry_run: bool) -> None:
+def ingest_one(
+    path: Path,
+    *,
+    doc_type: str,
+    tenant_id: str | None,
+    api: str,
+    dry_run: bool,
+    force: bool,
+) -> None:
     print(f"\n▶ {path.name}")
     try:
-        text = extract_text(path)
+        result = extract(path)
     except Exception as e:
         print(f"  ✗ extraction failed: {e}", file=sys.stderr)
         return
 
+    text = result.text
     n_chars = len(text)
     n_words = len(text.split())
-    print(f"  extracted {n_chars} chars / ~{n_words} words")
+    density = f"{n_chars / result.pages:.0f} chars/page" if result.pages else ""
+    print(f"  extracted {n_chars} chars / ~{n_words} words / {result.pages or '?'} pages {density}")
 
     if not text.strip():
         print("  ✗ no text content; skipping", file=sys.stderr)
@@ -58,6 +68,12 @@ def ingest_one(path: Path, *, doc_type: str, tenant_id: str | None, api: str, dr
         "filename": path.name,
         "text": text,
         "doc_type": doc_type,
+        "extractor": result.extractor,
+        "used_ocr": result.used_ocr,
+        "pages": result.pages,
+        "extraction_partial": result.partial,
+        "extraction_note": result.note,
+        "force": force,
     }
     if tenant_id:
         body["tenant_id"] = tenant_id
@@ -94,6 +110,7 @@ def main() -> None:
     parser.add_argument("--tenant-id", default=None)
     parser.add_argument("--api", default="http://localhost:8000")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--force", action="store_true", help="bypass density / partial-extraction sanity checks")
     args = parser.parse_args()
 
     if not args.path.exists():
@@ -117,6 +134,7 @@ def main() -> None:
             tenant_id=args.tenant_id,
             api=args.api,
             dry_run=args.dry_run,
+            force=args.force,
         )
 
     print("\nDone.")

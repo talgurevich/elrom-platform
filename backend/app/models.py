@@ -45,6 +45,13 @@ class Document(Base):
     source_uri: Mapped[str | None] = mapped_column(String)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
+    extractor: Mapped[str | None] = mapped_column(String)
+    used_ocr: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    pages: Mapped[int | None] = mapped_column(Integer)
+    chars_extracted: Mapped[int | None] = mapped_column(Integer)
+    chunks_created: Mapped[int | None] = mapped_column(Integer)
+    extraction_partial: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    extraction_note: Mapped[str | None] = mapped_column(Text)
 
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 

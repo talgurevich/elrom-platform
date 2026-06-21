@@ -24,6 +24,12 @@ class IngestRequest(BaseModel):
     text: str
     tenant_id: UUID | None = None  # if omitted, uses the first tenant (dev convenience)
     doc_type: str | None = None  # bylaw | sub_bylaw | minutes | decision | other
+    extractor: str | None = None  # set by CLI script when extraction happened client-side
+    used_ocr: bool = False
+    pages: int | None = None
+    extraction_partial: bool = False
+    extraction_note: str | None = None
+    force: bool = False  # bypass density sanity check
 
 
 class IngestResponse(BaseModel):
@@ -32,6 +38,14 @@ class IngestResponse(BaseModel):
     used_ocr: bool = False
     extractor: str | None = None
     note: str | None = None
+    pages: int | None = None
+    chars_extracted: int | None = None
+    partial: bool = False
+
+
+# Refuse to persist a PDF that yielded fewer chars per page than this — almost
+# always means OCR mostly failed or the file was scanned without OCR configured.
+MIN_CHARS_PER_PAGE = 200
 
 
 @router.post("", response_model=IngestResponse)
@@ -48,10 +62,34 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
             raise HTTPException(400, "No tenant exists. Create one first.")
         tenant_id = tenant.id
 
+    # Density sanity check — refuse PDFs that produced suspiciously little text
+    # per page (usually means OCR was needed but didn't run, or partial OCR).
+    if req.pages and req.pages > 0 and not req.force:
+        density = len(req.text) / req.pages
+        if density < MIN_CHARS_PER_PAGE:
+            raise HTTPException(
+                400,
+                f"Refusing to ingest: extracted only {len(req.text)} chars across "
+                f"{req.pages} pages ({density:.0f}/page < {MIN_CHARS_PER_PAGE} threshold). "
+                f"Likely an OCR failure. Re-extract or pass force=true to override.",
+            )
+    if req.extraction_partial and not req.force:
+        raise HTTPException(
+            400,
+            f"Refusing to ingest: extraction was partial ({req.extraction_note}). "
+            f"Fix the source or pass force=true.",
+        )
+
     doc = Document(
         tenant_id=tenant_id,
         filename=req.filename,
         doc_type=req.doc_type,
+        extractor=req.extractor,
+        used_ocr=req.used_ocr,
+        pages=req.pages,
+        chars_extracted=len(req.text),
+        extraction_partial=req.extraction_partial,
+        extraction_note=req.extraction_note,
     )
     db.add(doc)
     db.flush()  # get the id without committing
@@ -78,6 +116,7 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
             {"cid": chunk.id},
         )
 
+    doc.chunks_created = len(structural_chunks)
     db.commit()
     log.info(
         "ingest.complete",
@@ -85,7 +124,16 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
         chunks=len(structural_chunks),
         with_section_path=sum(1 for c in structural_chunks if c.section_path),
     )
-    return IngestResponse(document_id=doc.id, chunks_created=len(structural_chunks))
+    return IngestResponse(
+        document_id=doc.id,
+        chunks_created=len(structural_chunks),
+        used_ocr=req.used_ocr,
+        extractor=req.extractor,
+        note=req.extraction_note,
+        pages=req.pages,
+        chars_extracted=len(req.text),
+        partial=req.extraction_partial,
+    )
 
 
 @router.post("/upload", response_model=IngestResponse)
@@ -132,7 +180,33 @@ async def ingest_upload(
             extraction.note or "No text could be extracted from the file.",
         )
 
-    doc = Document(tenant_id=resolved_tenant, filename=filename, doc_type=doc_type)
+    # Density sanity check
+    if extraction.pages and extraction.pages > 0:
+        density = len(extraction.text) / extraction.pages
+        if density < MIN_CHARS_PER_PAGE:
+            raise HTTPException(
+                400,
+                f"Refusing to ingest {filename}: {len(extraction.text)} chars across "
+                f"{extraction.pages} pages ({density:.0f}/page < {MIN_CHARS_PER_PAGE}). "
+                f"Likely OCR failure. {extraction.note or ''}".strip(),
+            )
+    if extraction.partial:
+        raise HTTPException(
+            400,
+            f"Refusing to ingest {filename}: extraction was partial. {extraction.note}",
+        )
+
+    doc = Document(
+        tenant_id=resolved_tenant,
+        filename=filename,
+        doc_type=doc_type,
+        extractor=extraction.extractor,
+        used_ocr=extraction.used_ocr,
+        pages=extraction.pages,
+        chars_extracted=len(extraction.text),
+        extraction_partial=extraction.partial,
+        extraction_note=extraction.note,
+    )
     db.add(doc)
     db.flush()
 
@@ -158,6 +232,7 @@ async def ingest_upload(
             {"cid": chunk.id},
         )
 
+    doc.chunks_created = len(structural_chunks)
     db.commit()
     log.info(
         "ingest.upload_complete",
@@ -165,6 +240,8 @@ async def ingest_upload(
         chunks=len(structural_chunks),
         extractor=extraction.extractor,
         used_ocr=extraction.used_ocr,
+        pages=extraction.pages,
+        chars=len(extraction.text),
     )
     return IngestResponse(
         document_id=doc.id,
@@ -172,4 +249,7 @@ async def ingest_upload(
         used_ocr=extraction.used_ocr,
         extractor=extraction.extractor,
         note=extraction.note,
+        pages=extraction.pages,
+        chars_extracted=len(extraction.text),
+        partial=extraction.partial,
     )
