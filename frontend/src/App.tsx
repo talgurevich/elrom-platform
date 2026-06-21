@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
 import Lexicon from "./pages/Lexicon";
@@ -7,6 +7,7 @@ import Review from "./pages/Review";
 import Search from "./pages/Search";
 import Upload from "./pages/Upload";
 import { useAuth } from "./lib/auth";
+import { api, type TenantItem } from "./lib/api";
 
 type Tab = "search" | "upload" | "review" | "authoritative" | "lexicon" | "eval";
 
@@ -29,9 +30,33 @@ function InitialAvatar({ name }: { name: string }) {
 }
 
 export default function App() {
-  const { state, signOut } = useAuth();
+  const { state, signOut, switchTenant, exitSwitch } = useAuth();
   const [tab, setTab] = useState<Tab>("search");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [tenants, setTenants] = useState<TenantItem[]>([]);
+
+  const isSuper =
+    state.kind === "signed_in" && state.user.is_super_admin === true;
+  const isViewingOther =
+    state.kind === "signed_in" && state.user.viewing_other_tenant === true;
+
+  // Lazy-load the tenant list for super-admins once on mount.
+  useEffect(() => {
+    if (!isSuper) return;
+    let cancelled = false;
+    api
+      .listTenants()
+      .then((ts) => {
+        if (!cancelled) setTenants(ts);
+      })
+      .catch(() => {
+        if (!cancelled) setTenants([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuper]);
 
   if (state.kind === "loading") {
     return (
@@ -49,14 +74,70 @@ export default function App() {
     <div className="min-h-screen flex flex-col text-ink font-sans">
       <nav className="bg-surface border-b border-ink sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
-          {/* Wordmark — driven by the current tenant's name */}
-          <div className="flex items-baseline gap-3 shrink-0">
-            <span className="font-display font-black text-ink text-2xl leading-none tracking-tight">
-              {user.tenant_name || "—"}
-            </span>
-            <span className="hidden sm:inline text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
-              Organizational Memory
-            </span>
+          {/* Wordmark — driven by the current tenant's name. For super-admins,
+              it becomes a dropdown that lists every tenant. */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => isSuper && setSwitcherOpen((o) => !o)}
+              onBlur={() => setTimeout(() => setSwitcherOpen(false), 120)}
+              className={`flex items-baseline gap-3 ${
+                isSuper ? "cursor-pointer hover:opacity-80" : "cursor-default"
+              }`}
+              disabled={!isSuper}
+              title={isSuper ? "החלף ארגון (super-admin)" : undefined}
+            >
+              <span
+                className={`font-display font-black text-2xl leading-none tracking-tight ${
+                  isViewingOther ? "text-accent" : "text-ink"
+                }`}
+              >
+                {user.tenant_name || "—"}
+              </span>
+              {isSuper && (
+                <span className="text-ink-soft text-xs leading-none">▾</span>
+              )}
+              <span className="hidden sm:inline text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
+                Organizational Memory
+              </span>
+            </button>
+            {switcherOpen && isSuper && (
+              <div className="absolute right-0 mt-3 min-w-[240px] bg-surface border border-ink overflow-hidden animate-fade-up">
+                <div className="px-3 py-2 text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold border-b border-line">
+                  צפייה כארגון
+                </div>
+                {tenants.map((t) => {
+                  const isCurrent = t.id === user.tenant_id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setSwitcherOpen(false);
+                        void switchTenant(t.id);
+                      }}
+                      className={`w-full text-right px-3 py-2 text-sm hover:bg-line/60 flex items-center justify-between ${
+                        isCurrent ? "bg-line/40 font-semibold" : ""
+                      }`}
+                    >
+                      <span>{t.name}</span>
+                      {isCurrent && (
+                        <span className="text-[10px] text-accent">●</span>
+                      )}
+                    </button>
+                  );
+                })}
+                {isViewingOther && (
+                  <button
+                    onClick={() => {
+                      setSwitcherOpen(false);
+                      void exitSwitch();
+                    }}
+                    className="w-full text-right px-3 py-2 text-sm border-t border-line hover:bg-line/60 text-accent"
+                  >
+                    חזרה ל-{user.home_tenant_name || "ארגון הבית"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Nav — flat underline-on-active, no pills */}
@@ -117,6 +198,27 @@ export default function App() {
           </div>
         </div>
       </nav>
+
+      {isViewingOther && (
+        <div className="bg-accent text-surface">
+          <div className="max-w-6xl mx-auto px-6 py-2 text-xs flex flex-wrap items-center justify-between gap-3">
+            <span>
+              <span className="font-bold tracking-wide">צפייה בלבד</span>
+              <span className="opacity-90 mr-3">
+                אתה צופה כ-{user.tenant_name}. פעולות כתיבה (העלאה, מחיקה,
+                סיווג, אישור) חסומות. שאלות בחיפוש כן עובדות וייכתבו ליומן של
+                ארגון זה.
+              </span>
+            </span>
+            <button
+              onClick={() => void exitSwitch()}
+              className="text-surface underline underline-offset-2 hover:no-underline whitespace-nowrap"
+            >
+              חזרה ל-{user.home_tenant_name || "ארגון הבית"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-12 animate-fade-up">
         {tab === "search" && <Search />}

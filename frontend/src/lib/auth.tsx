@@ -19,6 +19,8 @@ type AuthContextValue = {
   signInWithGoogle: (credential: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
+  switchTenant: (tenantId: string) => Promise<void>;
+  exitSwitch: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -53,9 +55,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ kind: "anonymous" });
   }, []);
 
+  const switchTenant = useCallback(async (tenantId: string) => {
+    const user = await api.switchTenant(tenantId);
+    setState({ kind: "signed_in", user });
+  }, []);
+
+  const exitSwitch = useCallback(async () => {
+    const user = await api.exitSwitch();
+    setState({ kind: "signed_in", user });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ state, signInWithGoogle, signOut, refresh }),
-    [state, signInWithGoogle, signOut, refresh]
+    () => ({ state, signInWithGoogle, signOut, refresh, switchTenant, exitSwitch }),
+    [state, signInWithGoogle, signOut, refresh, switchTenant, exitSwitch]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

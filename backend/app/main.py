@@ -1,13 +1,45 @@
 """FastAPI application entry point."""
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.routes import auth, documents, eval as eval_routes, health, ingest, reviewer, search
 
 log = structlog.get_logger()
+
+
+# Paths a super-admin in switch-mode may still POST to. Everything else
+# (uploads, deletes, classifications, approvals, lexicon edits…) is blocked
+# while viewing another tenant — see auth.current_user for the override logic.
+_SWITCH_MODE_POST_WHITELIST = {
+    "/api/search",
+    "/api/search/stream",
+    "/api/auth/logout",
+    "/api/auth/switch-tenant",
+    "/api/auth/exit-switch",
+}
+
+
+def _is_allowed_in_switch_mode(method: str, path: str) -> bool:
+    """Decide whether a request is allowed while super-admin is viewing
+    another tenant. Read methods are always fine; mutating methods need to
+    match the whitelist (literal paths, or /api/search/<id>/feedback or
+    /failure-mode for in-flow query feedback)."""
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return True
+    if method != "POST":
+        # No PUT/PATCH/DELETE allowed in switch mode.
+        return False
+    if path in _SWITCH_MODE_POST_WHITELIST:
+        return True
+    if path.startswith("/api/search/") and (
+        path.endswith("/feedback") or path.endswith("/failure-mode")
+    ):
+        return True
+    return False
 
 app = FastAPI(
     title="Elrom Platform",
@@ -34,6 +66,26 @@ app.add_middleware(
     https_only=settings.app_env != "development",
     max_age=60 * 60 * 24 * 30,  # 30 days
 )
+
+@app.middleware("http")
+async def enforce_super_admin_read_only(request: Request, call_next):
+    """If the caller is a super-admin in switch-mode (session has both
+    is_super_admin=True and viewing_tenant_id set), block mutating requests
+    that aren't in the read-only whitelist."""
+    session = request.scope.get("session") or {}
+    if session.get("is_super_admin") and session.get("viewing_tenant_id"):
+        if not _is_allowed_in_switch_mode(request.method, request.url.path):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "מצב צפייה בלבד (super-admin viewing another tenant). "
+                        "פעולת כתיבה זו חסומה. לחזרה לארגון הבית — לחץ 'חזור'."
+                    )
+                },
+            )
+    return await call_next(request)
+
 
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

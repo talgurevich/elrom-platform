@@ -212,6 +212,16 @@ export type CurrentUser = {
   role: string;
   tenant_id: string;
   tenant_name: string | null;
+  is_super_admin?: boolean;
+  home_tenant_id?: string | null;
+  home_tenant_name?: string | null;
+  viewing_other_tenant?: boolean;
+};
+
+export type TenantItem = {
+  id: string;
+  name: string;
+  segment: string;
 };
 
 export type UploadResponse = {
@@ -235,6 +245,16 @@ export const api = {
       body: JSON.stringify({ credential }),
     }),
   logout: () => request<{ status: string }>("/api/auth/logout", { method: "POST" }),
+
+  // Super-admin only — driving the tenant switcher
+  listTenants: () => request<TenantItem[]>("/api/auth/tenants"),
+  switchTenant: (tenantId: string) =>
+    request<CurrentUser>("/api/auth/switch-tenant", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }),
+  exitSwitch: () =>
+    request<CurrentUser>("/api/auth/exit-switch", { method: "POST" }),
 
   search: (question: string) =>
     request<SearchResponse>("/api/search", {
