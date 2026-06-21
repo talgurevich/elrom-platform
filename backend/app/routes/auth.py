@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import User
+from app.models import Tenant, User
 
 router = APIRouter()
 
@@ -27,15 +27,18 @@ class MeResponse(BaseModel):
     display_name: str | None
     role: str
     tenant_id: str
+    tenant_name: str | None = None
 
 
-def _user_to_response(user: User) -> MeResponse:
+def _user_to_response(user: User, db: Session) -> MeResponse:
+    tenant = db.get(Tenant, user.tenant_id)
     return MeResponse(
         id=str(user.id),
         email=user.email,
         display_name=user.display_name,
         role=user.role,
         tenant_id=str(user.tenant_id),
+        tenant_name=tenant.name if tenant else None,
     )
 
 
@@ -83,12 +86,15 @@ def google_login(
         db.commit()
 
     request.session["user_id"] = str(user.id)
-    return _user_to_response(user)
+    return _user_to_response(user, db)
 
 
 @router.get("/me", response_model=MeResponse)
-def me(user: User = Depends(current_user)) -> MeResponse:
-    return _user_to_response(user)
+def me(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    return _user_to_response(user, db)
 
 
 @router.post("/logout")

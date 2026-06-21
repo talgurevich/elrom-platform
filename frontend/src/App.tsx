@@ -49,10 +49,10 @@ export default function App() {
     <div className="min-h-screen flex flex-col text-ink font-sans">
       <nav className="bg-surface border-b border-ink sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
-          {/* Wordmark — confident type, no decorative box */}
+          {/* Wordmark — driven by the current tenant's name */}
           <div className="flex items-baseline gap-3 shrink-0">
             <span className="font-display font-black text-ink text-2xl leading-none tracking-tight">
-              אלרום
+              {user.tenant_name || "—"}
             </span>
             <span className="hidden sm:inline text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
               Organizational Memory

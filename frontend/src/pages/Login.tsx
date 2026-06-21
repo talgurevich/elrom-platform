@@ -93,11 +93,11 @@ export default function Login() {
           <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
             Organizational Memory
           </div>
-          <h1 className="font-display text-6xl font-black text-ink leading-none">
-            אלרום
+          <h1 className="font-display text-5xl md:text-6xl font-black text-ink leading-[0.95]">
+            זיכרון ארגוני
           </h1>
           <p className="text-ink-soft mt-4 text-sm">
-            זיכרון ארגוני לקיבוצים ולמושבים
+            לקיבוצים, למושבים, ולכל מי שצריך להגיע מהר לתקנון.
           </p>
         </div>
 

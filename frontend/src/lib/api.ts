@@ -211,6 +211,7 @@ export type CurrentUser = {
   display_name: string | null;
   role: string;
   tenant_id: string;
+  tenant_name: string | null;
 };
 
 export type UploadResponse = {
