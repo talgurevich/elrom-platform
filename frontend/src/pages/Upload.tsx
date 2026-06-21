@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type DocumentItem, type UploadResponse } from "../lib/api";
+
+type SortKey = "recent" | "alpha" | "chunks";
+type GroupKey = "none" | "type";
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  bylaw: "תקנון",
+  sub_bylaw: "תקנון משנה",
+  minutes: "פרוטוקול",
+  decision: "החלטה",
+  other: "אחר",
+  unclassified: "ללא סיווג",
+};
+
+const DOC_TYPE_ORDER = ["bylaw", "sub_bylaw", "decision", "minutes", "other", "unclassified"];
 
 type FileStatus =
   | { kind: "queued" }
@@ -194,6 +208,56 @@ export default function Upload() {
   const [classifying, setClassifying] = useState(false);
   const [classifyMsg, setClassifyMsg] = useState<string | null>(null);
 
+  // Library controls — sort, group, filter. All client-side over the
+  // already-loaded docs array; the API doesn't need to know.
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
+  const [groupKey, setGroupKey] = useState<GroupKey>("none");
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+
+  const filteredSortedDocs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let out = docs.filter((d) => {
+      if (typeFilter && (d.doc_type || "unclassified") !== typeFilter) return false;
+      if (!q) return true;
+      const hay = `${d.filename} ${d.summary || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+    out = [...out].sort((a, b) => {
+      if (sortKey === "alpha") return a.filename.localeCompare(b.filename, "he");
+      if (sortKey === "chunks") return b.chunks - a.chunks;
+      // "recent" — newest first; mirror the API default
+      return new Date(b.ingested_at).getTime() - new Date(a.ingested_at).getTime();
+    });
+    return out;
+  }, [docs, search, sortKey, typeFilter]);
+
+  // Counts per type, computed over the *unfiltered* set so the chips show the
+  // total even when one is selected.
+  const typeCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const d of docs) {
+      const k = d.doc_type || "unclassified";
+      m[k] = (m[k] || 0) + 1;
+    }
+    return m;
+  }, [docs]);
+
+  // Group the (already-filtered+sorted) list by doc_type when requested.
+  const groupedDocs = useMemo(() => {
+    if (groupKey === "none") return null;
+    const m: Record<string, DocumentItem[]> = {};
+    for (const d of filteredSortedDocs) {
+      const k = d.doc_type || "unclassified";
+      (m[k] ||= []).push(d);
+    }
+    return DOC_TYPE_ORDER.filter((k) => m[k]?.length).map((k) => ({
+      key: k,
+      label: DOC_TYPE_LABELS[k] || k,
+      items: m[k],
+    }));
+  }, [filteredSortedDocs, groupKey]);
+
   const classify = async (force = false) => {
     setClassifying(true);
     setClassifyMsg(null);
@@ -386,110 +450,215 @@ export default function Upload() {
 
       {/* Existing documents */}
       <section>
-        <div className="flex items-end justify-between mb-3 flex-wrap gap-2">
-          <h2 className="text-sm font-bold text-accent uppercase tracking-wider">
-            מסמכים במאגר
-          </h2>
+        <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4 flex items-center gap-3">
+          <span>מסמכים במאגר</span>
           {docs.length > 0 && (
-            <div className="flex gap-2">
+            <span className="font-mono text-ink-soft normal-case tracking-normal">
+              ({docs.length})
+            </span>
+          )}
+          <span className="flex-1 h-px bg-line" />
+          {docs.length > 0 && (
+            <div className="flex gap-1 normal-case tracking-normal">
               <button
                 onClick={() => classify(false)}
                 disabled={classifying}
-                className="px-3 py-1.5 bg-white border border-line-strong hover:border-accent text-xs rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
+                className="px-3 py-1.5 border border-line-strong hover:border-accent text-xs text-ink-soft hover:text-accent transition disabled:opacity-50"
                 title="קרא את תוכן כל מסמך עם Claude, תן לו כותרת ותקציר"
               >
-                {classifying ? "מסווג..." : "סווג מסמכים חדשים"}
+                {classifying ? "מסווג..." : "סווג חדשים"}
               </button>
               <button
                 onClick={() => classify(true)}
                 disabled={classifying}
-                className="px-3 py-1.5 text-xs text-ink-soft hover:text-ink rounded-full disabled:opacity-50"
+                className="px-3 py-1.5 text-xs text-ink-soft hover:text-ink disabled:opacity-50"
                 title="סווג מחדש את כל המסמכים, כולל כאלה שכבר סווגו"
               >
                 סווג הכל מחדש
               </button>
               <button
                 onClick={deleteAllDocs}
-                className="px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 rounded-full transition"
+                className="px-3 py-1.5 text-xs text-accent hover:bg-surface border border-transparent hover:border-accent transition"
                 title="מחיקת כל המסמכים מהמאגר"
               >
-                🗑 מחק הכל
+                מחק הכל
               </button>
             </div>
           )}
         </div>
 
         {classifyMsg && (
-          <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-900 text-sm">
+          <div className="mb-4 px-4 py-3 bg-surface border-r-4 border-accent text-sm text-ink">
             {classifyMsg}
+          </div>
+        )}
+
+        {/* Library toolbar — search + sort + group + type filter */}
+        {docs.length > 0 && (
+          <div className="mb-5 border border-line bg-surface">
+            <div className="flex items-stretch flex-wrap">
+              <input
+                type="text"
+                placeholder="חיפוש בשם או בתקציר…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 min-w-[200px] px-4 py-2.5 bg-transparent text-sm placeholder:text-ink-soft outline-none border-l border-line"
+              />
+              <label className="flex items-center px-3 border-l border-line text-xs text-ink-soft">
+                <span className="ml-2">מיון:</span>
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as SortKey)}
+                  className="bg-transparent py-2.5 text-sm text-ink outline-none cursor-pointer"
+                >
+                  <option value="recent">אחרון שעודכן</option>
+                  <option value="alpha">א–ת</option>
+                  <option value="chunks">מספר קטעים</option>
+                </select>
+              </label>
+              <label className="flex items-center px-3 text-xs text-ink-soft">
+                <span className="ml-2">קיבוץ:</span>
+                <select
+                  value={groupKey}
+                  onChange={(e) => setGroupKey(e.target.value as GroupKey)}
+                  className="bg-transparent py-2.5 text-sm text-ink outline-none cursor-pointer"
+                >
+                  <option value="none">ללא</option>
+                  <option value="type">לפי סוג מסמך</option>
+                </select>
+              </label>
+            </div>
+
+            {/* Type filter chips — show only types that have at least one doc */}
+            <div className="flex flex-wrap gap-px bg-line border-t border-line">
+              <button
+                onClick={() => setTypeFilter(null)}
+                className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
+                  typeFilter === null
+                    ? "bg-ink text-surface"
+                    : "bg-surface hover:bg-line text-ink"
+                }`}
+              >
+                <span>הכל</span>
+                <span className="font-mono text-[10px] opacity-70">{docs.length}</span>
+              </button>
+              {DOC_TYPE_ORDER.filter((k) => typeCounts[k]).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setTypeFilter(typeFilter === k ? null : k)}
+                  className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
+                    typeFilter === k
+                      ? "bg-ink text-surface"
+                      : "bg-surface hover:bg-line text-ink"
+                  }`}
+                >
+                  <span>{DOC_TYPE_LABELS[k]}</span>
+                  <span className="font-mono text-[10px] opacity-70">
+                    {typeCounts[k]}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {loadingDocs ? (
           <div className="text-ink-soft text-sm">טוען...</div>
         ) : docs.length === 0 ? (
-          <div className="text-ink-soft py-8 text-center text-sm">
+          <div className="border border-line p-12 text-center text-sm text-ink-soft">
             אין מסמכים. העלה את הראשון.
+          </div>
+        ) : filteredSortedDocs.length === 0 ? (
+          <div className="border border-line p-12 text-center text-sm text-ink-soft">
+            לא נמצאו מסמכים תואמים. נסה לאפס את הפילטר.
+          </div>
+        ) : groupedDocs ? (
+          <div className="space-y-8">
+            {groupedDocs.map((g) => (
+              <div key={g.key}>
+                <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3 flex items-baseline gap-3">
+                  <span>{g.label}</span>
+                  <span className="font-mono text-ink-soft text-[10px] normal-case tracking-normal">
+                    {g.items.length}
+                  </span>
+                  <span className="flex-1 h-px bg-line" />
+                </div>
+                <div className="space-y-2">
+                  {g.items.map((d) => (
+                    <DocumentRow key={d.id} doc={d} onDelete={() => deleteDoc(d)} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-2">
-            {docs.map((d) => (
-              <div
-                key={d.id}
-                className="p-4 bg-white border border-line "
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-semibold text-ink text-base">{d.filename}</span>
-                      {d.ai_classified && (
-                        <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full">
-                          ✨ סווג AI
-                        </span>
-                      )}
-                      {d.doc_type && (
-                        <span className="text-[10px] px-2 py-0.5 bg-line text-ink-soft rounded-full">
-                          {d.doc_type}
-                        </span>
-                      )}
-                    </div>
-                    {d.summary && (
-                      <div className="text-sm text-ink-soft mt-1.5 leading-relaxed">
-                        {d.summary}
-                      </div>
-                    )}
-                    <div className="text-xs text-ink-soft mt-2 flex gap-3 flex-wrap items-center">
-                      <QualityBadge doc={d} />
-                      <span>{d.chunks} קטעים</span>
-                      <span>{formatChars(d.chars)}</span>
-                      {d.pages != null && <span>{d.pages} עמודים</span>}
-                      {d.extractor && (
-                        <span title="מנוע חילוץ הטקסט">
-                          {d.extractor === "azure_ocr"
-                            ? "OCR"
-                            : d.extractor === "pdfplumber"
-                            ? "PDF native"
-                            : d.extractor}
-                        </span>
-                      )}
-                      <span>{new Date(d.ingested_at).toLocaleString("he-IL")}</span>
-                    </div>
-                    {d.extraction_note && (
-                      <div className="text-xs text-amber-700 mt-1">⚠ {d.extraction_note}</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => deleteDoc(d)}
-                    className="text-xs px-2 py-1 text-red-700 hover:bg-red-50 rounded shrink-0"
-                  >
-                    מחק
-                  </button>
-                </div>
-              </div>
+            {filteredSortedDocs.map((d) => (
+              <DocumentRow key={d.id} doc={d} onDelete={() => deleteDoc(d)} />
             ))}
           </div>
         )}
       </section>
     </>
+  );
+}
+
+function DocumentRow({
+  doc,
+  onDelete,
+}: {
+  doc: DocumentItem;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="p-4 bg-surface border border-line">
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="font-semibold text-ink text-base">{doc.filename}</span>
+            {doc.ai_classified && (
+              <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent border border-accent px-1.5 py-0.5">
+                AI
+              </span>
+            )}
+            {doc.doc_type && (
+              <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-ink-soft border border-line-strong px-1.5 py-0.5">
+                {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
+              </span>
+            )}
+          </div>
+          {doc.summary && (
+            <div className="text-sm text-ink-soft mt-1.5 leading-relaxed">
+              {doc.summary}
+            </div>
+          )}
+          <div className="text-xs text-ink-soft mt-2 flex gap-3 flex-wrap items-center">
+            <QualityBadge doc={doc} />
+            <span>{doc.chunks} קטעים</span>
+            <span>{formatChars(doc.chars)}</span>
+            {doc.pages != null && <span>{doc.pages} עמודים</span>}
+            {doc.extractor && (
+              <span title="מנוע חילוץ הטקסט">
+                {doc.extractor === "azure_ocr"
+                  ? "OCR"
+                  : doc.extractor === "pdfplumber"
+                  ? "PDF native"
+                  : doc.extractor}
+              </span>
+            )}
+            <span>{new Date(doc.ingested_at).toLocaleString("he-IL")}</span>
+          </div>
+          {doc.extraction_note && (
+            <div className="text-xs text-amber-700 mt-1">⚠ {doc.extraction_note}</div>
+          )}
+        </div>
+        <button
+          onClick={onDelete}
+          className="text-xs px-3 py-1.5 text-ink-soft hover:text-accent hover:border-accent border border-transparent transition shrink-0"
+        >
+          מחק
+        </button>
+      </div>
+    </div>
   );
 }
