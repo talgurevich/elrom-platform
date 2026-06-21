@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
@@ -87,27 +87,8 @@ export default function Login() {
   }, [signInWithGoogle]);
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
-      {/* Background — close-up of tree bark from Unsplash (photo by Annie Spratt).
-          Heavily blurred + darkened so it reads as texture, not a photo, and the
-          card on top stays the visual subject. Slight scale to hide blur edges. */}
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{
-          backgroundImage:
-            "url('https://images.unsplash.com/photo-1523440775332-daeb15e69286?fm=jpg&q=60&w=2400&auto=format&fit=crop&ixlib=rb-4.1.0')",
-          filter: "blur(6px) brightness(0.45) saturate(0.85)",
-          transform: "scale(1.06)",
-        }}
-        aria-hidden="true"
-      />
-      {/* Warm ink wash to tie the bark hues into the modernist palette. */}
-      <div
-        className="absolute inset-0"
-        style={{ backgroundColor: "rgba(23, 23, 23, 0.35)" }}
-        aria-hidden="true"
-      />
-
+    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden bg-surface">
+      <NeuralMesh />
       <div className="relative w-full max-w-md border-2 border-ink bg-surface p-12 animate-fade-up">
         <div className="text-center">
           <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
@@ -140,5 +121,133 @@ export default function Login() {
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Neural mesh background — nodes + connecting lines suggesting synapses.
+ * Pure SVG, no external asset. A few nodes pulse in accent to hint at activity.
+ *
+ * Layout: jittered grid (more uniform than pure random, less clumpy). Edges
+ * connect each node to its 2 nearest neighbors. Generated once at mount and
+ * memoized — no re-shuffle between renders.
+ */
+function NeuralMesh() {
+  const W = 1000;
+  const H = 1000;
+  const COLS = 9;
+  const ROWS = 9;
+  const ACTIVE_COUNT = 5;
+  const NEIGHBORS = 2;
+
+  const { nodes, edges } = useMemo(() => {
+    // Seeded pseudo-random so the pattern is stable across renders / users.
+    let seed = 0xc0ffee;
+    const rand = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+
+    type Node = { x: number; y: number; active: boolean };
+    const ns: Node[] = [];
+    const cellW = W / COLS;
+    const cellH = H / ROWS;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        ns.push({
+          x: cellW * c + cellW * (0.2 + rand() * 0.6),
+          y: cellH * r + cellH * (0.2 + rand() * 0.6),
+          active: false,
+        });
+      }
+    }
+    const activeIdx = new Set<number>();
+    while (activeIdx.size < ACTIVE_COUNT) {
+      activeIdx.add(Math.floor(rand() * ns.length));
+    }
+    activeIdx.forEach((i) => (ns[i].active = true));
+
+    // Edges: each node → 2 nearest neighbors. Dedup symmetric pairs.
+    const es: { a: number; b: number }[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < ns.length; i++) {
+      const dists = ns
+        .map((n, j) => ({ j, d: (n.x - ns[i].x) ** 2 + (n.y - ns[i].y) ** 2 }))
+        .filter((x) => x.j !== i)
+        .sort((a, b) => a.d - b.d)
+        .slice(0, NEIGHBORS);
+      for (const { j } of dists) {
+        const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          es.push({ a: i, b: j });
+        }
+      }
+    }
+    return { nodes: ns, edges: es };
+  }, []);
+
+  return (
+    <>
+      <style>{`
+        @keyframes neural-pulse {
+          0%, 100% { opacity: 0.95; }
+          50% { opacity: 0.35; }
+        }
+        .neural-active { animation: neural-pulse 3.6s ease-in-out infinite; }
+        .neural-active-2 { animation-delay: 0.9s; }
+        .neural-active-3 { animation-delay: 1.8s; }
+        .neural-active-4 { animation-delay: 2.7s; }
+      `}</style>
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+      >
+        <g stroke="#171717" strokeOpacity="0.07" strokeWidth="0.8">
+          {edges.map((e, i) => (
+            <line
+              key={`e-${i}`}
+              x1={nodes[e.a].x}
+              y1={nodes[e.a].y}
+              x2={nodes[e.b].x}
+              y2={nodes[e.b].y}
+            />
+          ))}
+        </g>
+        <g>
+          {nodes.map((n, i) =>
+            n.active ? (
+              <circle
+                key={`n-${i}`}
+                cx={n.x}
+                cy={n.y}
+                r={4}
+                fill="#b8412b"
+                className={`neural-active ${
+                  i % 4 === 1
+                    ? "neural-active-2"
+                    : i % 4 === 2
+                    ? "neural-active-3"
+                    : i % 4 === 3
+                    ? "neural-active-4"
+                    : ""
+                }`}
+              />
+            ) : (
+              <circle
+                key={`n-${i}`}
+                cx={n.x}
+                cy={n.y}
+                r={2}
+                fill="#171717"
+                fillOpacity={0.18}
+              />
+            )
+          )}
+        </g>
+      </svg>
+    </>
   );
 }
