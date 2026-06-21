@@ -71,6 +71,18 @@ export type SearchResponse = {
   near_misses: NearMiss[];
 };
 
+export type SearchPipelineStage =
+  | "analyzing"
+  | "searching"
+  | "ranking"
+  | "generating";
+
+export type SearchStreamEvent =
+  | { type: "stage"; stage: SearchPipelineStage }
+  | { type: "detail"; text: string }
+  | { type: "done"; response: SearchResponse }
+  | { type: "error"; detail: string };
+
 export type LexiconSuggestion = {
   term: string;
   expansion: string;
@@ -227,6 +239,71 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ question }),
     }),
+
+  /**
+   * Streaming search via Server-Sent Events. Calls `onEvent` for every
+   * progress event as the pipeline runs. Resolves with the final
+   * SearchResponse from the "done" event.
+   *
+   * EventSource doesn't support POST, so we use fetch + ReadableStream.
+   */
+  searchStream: async (
+    question: string,
+    onEvent: (ev: SearchStreamEvent) => void
+  ): Promise<SearchResponse> => {
+    const r = await fetch(`${BASE}/api/search/stream`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ question }),
+    });
+    if (!r.ok || !r.body) {
+      const body = await r.text().catch(() => "");
+      throw new ApiError(r.status, body || r.statusText);
+    }
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let finalResponse: SearchResponse | null = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line. Each event has one or more
+      // "data: ..." lines whose payloads (here) are JSON objects.
+      let idx: number;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const rawEvent = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const dataLines = rawEvent
+          .split("\n")
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trimStart());
+        if (!dataLines.length) continue;
+        const payloadStr = dataLines.join("\n");
+        let payload: SearchStreamEvent;
+        try {
+          payload = JSON.parse(payloadStr);
+        } catch {
+          continue;
+        }
+        onEvent(payload);
+        if (payload.type === "done") {
+          finalResponse = payload.response;
+        } else if (payload.type === "error") {
+          throw new ApiError(500, payload.detail);
+        }
+      }
+    }
+
+    if (!finalResponse) {
+      throw new ApiError(500, "Stream ended without a result");
+    }
+    return finalResponse;
+  },
 
   feedback: (queryId: string, feedback: "positive" | "negative") =>
     request<{ status: string; cached_answer_retired?: boolean }>(

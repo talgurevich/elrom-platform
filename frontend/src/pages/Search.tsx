@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { api, type FailureMode, type RetrievalDebugRow, type SearchResponse } from "../lib/api";
+import {
+  api,
+  type FailureMode,
+  type RetrievalDebugRow,
+  type SearchPipelineStage,
+  type SearchResponse,
+} from "../lib/api";
 
 const confidenceColors: Record<string, string> = {
   confident: "bg-emerald-50 text-emerald-900 border-emerald-200",
@@ -113,6 +119,8 @@ export default function Search() {
   const [promoting, setPromoting] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [justRetried, setJustRetried] = useState(false);
+  const [stage, setStage] = useState<SearchPipelineStage | null>(null);
+  const [stageDetail, setStageDetail] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,12 +132,20 @@ export default function Search() {
     setFailureMode(null);
     setPromoted(false);
     setJustRetried(false);
+    setStage(null);
+    setStageDetail(null);
     try {
-      setResult(await api.search(question));
+      const fresh = await api.searchStream(question, (ev) => {
+        if (ev.type === "stage") setStage(ev.stage);
+        else if (ev.type === "detail") setStageDetail(ev.text);
+      });
+      setResult(fresh);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      setStage(null);
+      setStageDetail(null);
     }
   };
 
@@ -224,7 +240,7 @@ export default function Search() {
         </div>
       </form>
 
-      {loading && <ThinkingProgress />}
+      {loading && <ThinkingProgress stage={stage} detail={stageDetail} />}
 
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-sm whitespace-pre-wrap">
@@ -434,42 +450,60 @@ export default function Search() {
   );
 }
 
-// Approximate stage durations of the real pipeline. Sum gives a reasonable
-// total of ~12s for the typical request. The bar fills proportionally to
-// elapsed time, capped at 95% so we never claim "100% done" before the actual
-// response arrives — the bar snaps to 100% only when the request lands.
-const THINKING_STAGES: { label: string; duration: number }[] = [
-  { label: "ניתוח השאלה", duration: 700 },
-  { label: "חיפוש בארכיון", duration: 1500 },
-  { label: "דירוג מקורות", duration: 1800 },
-  { label: "ניסוח תשובה", duration: 8000 },
+// Stages match the backend's SearchPipelineStage. Each stage maps to a fixed
+// bar position so real events from the server snap the bar to that point;
+// within a stage the bar inches forward by time so it doesn't look frozen
+// while we wait for the next event.
+const THINKING_STAGES: {
+  key: SearchPipelineStage;
+  label: string;
+  pct: number;        // bar % when this stage starts
+  typicalMs: number;  // typical time spent in this stage
+}[] = [
+  { key: "analyzing",  label: "ניתוח השאלה",  pct: 0,  typicalMs: 800 },
+  { key: "searching",  label: "חיפוש בארכיון", pct: 20, typicalMs: 1500 },
+  { key: "ranking",    label: "דירוג מקורות",  pct: 45, typicalMs: 800 },
+  { key: "generating", label: "ניסוח תשובה",   pct: 65, typicalMs: 8000 },
 ];
-const THINKING_TOTAL = THINKING_STAGES.reduce((a, s) => a + s.duration, 0);
+const FINAL_PCT = 95; // bar cap until real "done" event lands
 
-function ThinkingProgress() {
-  const [elapsed, setElapsed] = useState(0);
+function ThinkingProgress({
+  stage,
+  detail,
+}: {
+  stage: SearchPipelineStage | null;
+  detail: string | null;
+}) {
+  // Tick so the bar inches forward within the active stage.
+  const [tick, setTick] = useState(0);
+  // Mark when each stage was entered so within-stage progress is computed
+  // relative to that point in time, not from page load.
+  const [stageEnteredAt, setStageEnteredAt] = useState<number>(() => Date.now());
+
   useEffect(() => {
-    const start = Date.now();
-    const id = setInterval(() => setElapsed(Date.now() - start), 100);
+    setStageEnteredAt(Date.now());
+  }, [stage]);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 150);
     return () => clearInterval(id);
   }, []);
+  // touch tick so React doesn't warn it's unused; the value itself is irrelevant
+  void tick;
 
-  // Capped at 95 so we don't visually "complete" before the response lands.
-  // Slight easing as we approach the cap so it doesn't look stuck.
-  const rawPct = (elapsed / THINKING_TOTAL) * 100;
-  const pct = rawPct < 90 ? rawPct : 90 + (95 - 90) * (1 - Math.exp(-(rawPct - 90) / 20));
+  const stageIdx = THINKING_STAGES.findIndex((s) => s.key === stage);
+  const currentIdx = stageIdx >= 0 ? stageIdx : 0;
+  const current = THINKING_STAGES[currentIdx];
+  const next = THINKING_STAGES[currentIdx + 1];
+  const stageStartPct = current.pct;
+  const stageEndPct = next ? next.pct : FINAL_PCT;
 
-  // Locate active stage by walking the cumulative duration.
-  let stageIdx = 0;
-  let acc = 0;
-  for (let i = 0; i < THINKING_STAGES.length; i++) {
-    acc += THINKING_STAGES[i].duration;
-    if (elapsed < acc) {
-      stageIdx = i;
-      break;
-    }
-    stageIdx = i; // past the end → stay on last stage
-  }
+  // Time-based fill within this stage: ramp toward stageEndPct over typicalMs,
+  // but ease so we approach (don't cross) the end. If the stage is slow, we
+  // sit near the boundary; once the next stage event fires, we jump cleanly.
+  const elapsedInStage = Date.now() - stageEnteredAt;
+  const progressRatio = 1 - Math.exp(-elapsedInStage / current.typicalMs);
+  const pct = stageStartPct + (stageEndPct - stageStartPct) * progressRatio;
 
   return (
     <section
@@ -481,13 +515,13 @@ function ThinkingProgress() {
       <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden mb-4">
         <div
           className="h-full bg-brand-gradient transition-[width] duration-300 ease-out"
-          style={{ width: `${pct}%` }}
+          style={{ width: `${Math.min(pct, FINAL_PCT)}%` }}
         />
       </div>
       <div className="grid grid-cols-4 gap-2 text-xs text-center">
         {THINKING_STAGES.map((s, i) => {
           const state =
-            i < stageIdx ? "done" : i === stageIdx ? "active" : "pending";
+            i < currentIdx ? "done" : i === currentIdx ? "active" : "pending";
           const cls =
             state === "active"
               ? "text-accent font-semibold"
@@ -495,12 +529,15 @@ function ThinkingProgress() {
               ? "text-ink-soft"
               : "text-stone-300";
           return (
-            <span key={s.label} className={cls}>
+            <span key={s.key} className={cls}>
               {s.label}
             </span>
           );
         })}
       </div>
+      {detail && (
+        <div className="mt-3 text-xs text-ink-soft text-center">{detail}</div>
+      )}
     </section>
   );
 }
