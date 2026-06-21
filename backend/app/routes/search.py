@@ -236,7 +236,12 @@ class FeedbackRequest(BaseModel):
 def submit_feedback(
     query_id: UUID, req: FeedbackRequest, db: Session = Depends(get_db)
 ) -> dict:
-    """👍 / 👎 on a returned answer — the in-flow signal Ido gives."""
+    """👍 / 👎 on a returned answer — the in-flow signal Ido gives.
+
+    A 👎 on an answer served from the authoritative cache also retires that
+    cached answer, so the next ask of a similar question falls through to
+    fresh retrieve+LLM instead of returning the same wrong cached answer.
+    """
     if req.feedback not in {"positive", "negative"}:
         raise HTTPException(400, "feedback must be 'positive' or 'negative'")
 
@@ -245,8 +250,18 @@ def submit_feedback(
         raise HTTPException(404, "Query not found")
 
     query.feedback = req.feedback
+
+    cached_answer_retired = False
+    if req.feedback == "negative" and query.authoritative_answer_id:
+        from app.models import AuthoritativeAnswer
+
+        authoritative = db.get(AuthoritativeAnswer, query.authoritative_answer_id)
+        if authoritative is not None and authoritative.status == "active":
+            authoritative.status = "retired"
+            cached_answer_retired = True
+
     db.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "cached_answer_retired": cached_answer_retired}
 
 
 class FailureModeRequest(BaseModel):

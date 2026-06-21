@@ -145,6 +145,8 @@ export default function Search() {
   const [failureMode, setFailureMode] = useState<FailureMode | null>(null);
   const [promoted, setPromoted] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [justRetried, setJustRetried] = useState(false);
 
   const stage = useStageLabel(loading);
 
@@ -157,6 +159,7 @@ export default function Search() {
     setFeedback(null);
     setFailureMode(null);
     setPromoted(false);
+    setJustRetried(false);
     try {
       setResult(await api.search(question));
     } catch (err) {
@@ -170,7 +173,23 @@ export default function Search() {
     if (!result) return;
     setFeedback(kind);
     try {
-      await api.feedback(result.query_id, kind);
+      const resp = await api.feedback(result.query_id, kind);
+      // If the user 👎'd an answer that came from the authoritative cache,
+      // the backend retires it. Immediately re-run the same question so the
+      // user sees a fresh attempt instead of having to re-type and re-ask.
+      if (kind === "negative" && resp.cached_answer_retired) {
+        setRetrying(true);
+        try {
+          const fresh = await api.search(question);
+          setResult(fresh);
+          setFeedback(null);
+          setFailureMode(null);
+          setPromoted(false);
+          setJustRetried(true);
+        } finally {
+          setRetrying(false);
+        }
+      }
     } catch (err) {
       setFeedback(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -289,6 +308,13 @@ export default function Search() {
               </div>
             </div>
           )}
+          {/* 0. Retry banner (one-shot notice after auto-retry from 👎 on cached answer) */}
+          {justRetried && (
+            <div className="px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-900">
+              ✓ התשובה הקודמת הוסרה מהמטמון. הנה ניסיון חדש מבוסס מקורות.
+            </div>
+          )}
+
           {/* 1. Confidence header */}
           <div
             className={`inline-flex items-center gap-3 px-4 py-2 rounded-full border ${
@@ -352,10 +378,12 @@ export default function Search() {
 
             {result.confidence !== "refused" && (
               <div className="mt-4 pt-4 border-t border-stone-200 flex flex-wrap items-center gap-3">
-                <span className="text-xs text-ink-soft">האם התשובה מדויקת?</span>
+                <span className="text-xs text-ink-soft">
+                  {retrying ? "מחפש שוב…" : "האם התשובה מדויקת?"}
+                </span>
                 <button
                   onClick={() => submitFeedback("positive")}
-                  disabled={feedback !== null}
+                  disabled={feedback !== null || retrying}
                   className={`px-3 py-1 text-sm rounded-full transition ${
                     feedback === "positive"
                       ? "bg-emerald-600 text-white"
@@ -366,7 +394,7 @@ export default function Search() {
                 </button>
                 <button
                   onClick={() => submitFeedback("negative")}
-                  disabled={feedback !== null}
+                  disabled={feedback !== null || retrying}
                   className={`px-3 py-1 text-sm rounded-full transition ${
                     feedback === "negative"
                       ? "bg-red-600 text-white"

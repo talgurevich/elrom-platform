@@ -229,10 +229,10 @@ export const api = {
     }),
 
   feedback: (queryId: string, feedback: "positive" | "negative") =>
-    request<{ status: string }>(`/api/search/${queryId}/feedback`, {
-      method: "POST",
-      body: JSON.stringify({ feedback }),
-    }),
+    request<{ status: string; cached_answer_retired?: boolean }>(
+      `/api/search/${queryId}/feedback`,
+      { method: "POST", body: JSON.stringify({ feedback }) }
+    ),
 
   tagFailureMode: (queryId: string, failureMode: FailureMode) =>
     request<{ status: string }>(`/api/search/${queryId}/failure-mode`, {
