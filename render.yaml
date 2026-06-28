@@ -59,6 +59,55 @@ services:
       - key: FRONTEND_URL
         sync: false
 
+  ## Nightly lexicon learner — scans the past 24h of conversations for
+  ## refinement pairs (clarify→answer, thumbs-down→retry), proposes lexicon
+  ## entries via Claude Haiku, inserts them with source="learned" /
+  ## status="pending". Pending entries surface in the Lexicon tab with
+  ## ✓ אשר / דחה buttons. Nothing in retrieval changes until a reviewer
+  ## approves. Safe to run nightly; idempotent (existing terms are skipped).
+  ##
+  ## Schedule: 03:00 UTC = 06:00 Israel — runs after the daily activity
+  ## window but before anyone reviews in the morning.
+  ##
+  ## The cron service shares the backend's env vars (database + Claude key).
+  ## After first apply, set ANTHROPIC_API_KEY on this service in the Render
+  ## UI — Render doesn't automatically share `sync: false` vars across
+  ## services.
+  - type: cron
+    name: elrom-lexicon-learner
+    runtime: python
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    schedule: "0 3 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m scripts.learn_lexicon --since 24h
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.13
+      - key: DATABASE_URL
+        fromDatabase:
+          name: elrom-postgres
+          property: connectionString
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: EMBEDDING_PROVIDER
+        value: cohere
+      - key: COHERE_EMBED_MODEL
+        value: embed-multilingual-v3.0
+      - key: CLAUDE_ANSWER_MODEL
+        value: claude-sonnet-4-6
+      - key: CLAUDE_EXTRACT_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: SESSION_SECRET
+        value: cron-job-no-session-needed
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+
   - type: web
     name: elrom-frontend
     runtime: static

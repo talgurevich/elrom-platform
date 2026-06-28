@@ -316,12 +316,38 @@ def run_for_tenant(
     return {"pairs": len(pairs), "inserted": inserted_total}
 
 
+_RELATIVE_RE = __import__("re").compile(r"^\s*(\d+)\s*([dhm])\s*$")
+
+
+def _parse_since(raw: str | None) -> datetime:
+    """Accept ISO date, relative duration (``7d``/``24h``/``90m``), or None
+    (defaults to 7 days back). Returns a tz-aware UTC datetime."""
+    if not raw:
+        return datetime.now(timezone.utc) - timedelta(days=7)
+    m = _RELATIVE_RE.match(raw)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2)
+        delta = {"d": timedelta(days=n), "h": timedelta(hours=n), "m": timedelta(minutes=n)}[unit]
+        return datetime.now(timezone.utc) - delta
+    # Fall back to ISO. Treat naive dates as UTC midnight.
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--tenant", help="Limit to a single tenant by name.")
     p.add_argument(
         "--since",
-        help="ISO date (YYYY-MM-DD) — only consider conversations updated since.",
+        help=(
+            "Lower bound for conversations.updated_at. Accepts either an ISO "
+            "date (YYYY-MM-DD) or a relative duration like '7d' / '24h' / "
+            "'90m'. Defaults to 7d. The relative form is what the nightly cron "
+            "uses so the job is self-contained."
+        ),
     )
     p.add_argument("--max-pairs", type=int, default=200)
     p.add_argument(
@@ -332,11 +358,7 @@ def main() -> None:
     )
     args = p.parse_args()
 
-    since = (
-        datetime.fromisoformat(args.since).replace(tzinfo=timezone.utc)
-        if args.since
-        else datetime.now(timezone.utc) - timedelta(days=7)
-    )
+    since = _parse_since(args.since)
 
     db = SessionLocal()
     try:
