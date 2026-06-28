@@ -96,6 +96,36 @@ class SearchResponse(BaseModel):
     near_misses: list[NearMiss] = []
 
 
+# Phrases that show up when the answerer LLM realizes mid-generation that it
+# doesn't have enough context. If we detect any of these, the right reflex is
+# to surface the response as a clarification turn instead of an answer turn —
+# the LLM is telling us the triage upstream missed an ambiguity.
+_SELF_CLARIFICATION_MARKERS = (
+    "אינה ברורה",
+    "השאלה לא ברורה",
+    "אינה ברורה דיה",
+    "השאלה אינה ברורה דיה",
+    "אנא פרט",
+    "פרט את שאלתך",
+    "הכוונה אינה ברורה",
+    "לא ברור לי",
+    "לא ברורה לי",
+    "אנא הבהר",
+)
+
+
+def _looks_like_self_clarification(answer: str) -> bool:
+    """Heuristic: did the answerer LLM produce a 'I need clarification' answer?
+
+    Triggered ONLY by explicit Hebrew clarification asks. Substring matching
+    is fine here — these phrases don't appear in legitimate substantive
+    answers about kibbutz bylaws.
+    """
+    if not answer:
+        return False
+    return any(marker in answer for marker in _SELF_CLARIFICATION_MARKERS)
+
+
 def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
     if not chunk_ids:
         return []
@@ -382,6 +412,57 @@ async def search_pipeline(
             chunks=retrieved,
             lexicon_block=lexicon_block,
         )
+
+        # Post-hoc safety net: if the answerer itself signals it didn't have
+        # enough to go on ("השאלה אינה ברורה" / "אנא פרט" / similar), the
+        # triage upstream missed an ambiguity. Convert this turn to a
+        # clarification instead of persisting a "tried but confused" answer.
+        # Cheaper than re-prompting; protects against future triage regressions.
+        if _looks_like_self_clarification(llm_result.answer):
+            log.info(
+                "search_pipeline.answer_self_clarifies",
+                question=question[:120],
+                snippet=llm_result.answer[:160],
+            )
+            yield {"type": "detail", "text": "התשובה לא הספיקה — מבקש הבהרה"}
+            clar_message = (
+                llm_result.answer
+                if llm_result.answer.strip()
+                else "השאלה לא ברורה לי דיה — אפשר להבהיר על מה בדיוק אתה שואל?"
+            )
+            query_log = Query(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
+                question=question,
+                question_embedding=question_embedding,
+                answer=clar_message,
+                confidence="clarifying",
+                llm_used=True,
+                retrieval_debug={**debug_dict, "self_clarification": True},
+            )
+            db.add(query_log)
+            db.commit()
+            db.refresh(query_log)
+            response = SearchResponse(
+                query_id=query_log.id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
+                mode="clarify",
+                canonical_query=retrieval_query if retrieval_query != question else None,
+                clarifying_message=clar_message,
+                candidate_docs=triage.candidate_docs,
+                question=question,
+                answer=clar_message,
+                confidence="clarifying",
+                sources=[],
+                llm_used=True,
+                served_from="clarify",
+                retrieval_debug={**debug_dict, "self_clarification": True},
+            )
+            yield {"type": "done", "response": response.model_dump(mode="json")}
+            return
 
         near_miss_rows = await asyncio.to_thread(
             find_near_misses, db, tenant_id=tenant_id, question_embedding=question_embedding
