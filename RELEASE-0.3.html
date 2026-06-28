@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>הערות שחרור — אלרום v0.3</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Heebo",
+          "Assistant", "Helvetica Neue", Arial, sans-serif;
+        background: #f7f5f1;
+        color: #1f2933;
+        margin: 0;
+        padding: 32px 16px;
+        line-height: 1.65;
+      }
+      .container {
+        max-width: 760px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #e8e4dc;
+        border-radius: 14px;
+        padding: 40px 48px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        color: #0f2231;
+        letter-spacing: -0.01em;
+      }
+      .meta {
+        color: #7c8794;
+        font-size: 14px;
+        margin: 0 0 24px;
+      }
+      .lede {
+        background: #f4f8f9;
+        border-right: 4px solid #2a6f7a;
+        padding: 14px 18px;
+        border-radius: 8px;
+        margin: 0 0 32px;
+        font-size: 15px;
+        color: #28384a;
+      }
+      h2 {
+        font-size: 20px;
+        margin: 36px 0 10px;
+        color: #0f2231;
+        border-bottom: 1px solid #ece9e2;
+        padding-bottom: 8px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 22px 0 6px;
+        color: #1f2933;
+      }
+      p {
+        margin: 8px 0;
+      }
+      ul {
+        margin: 8px 0 12px;
+        padding-right: 22px;
+      }
+      li {
+        margin: 4px 0;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas",
+          monospace;
+        font-size: 13px;
+        direction: ltr;
+        text-align: left;
+        unicode-bidi: embed;
+      }
+      code {
+        background: #f1efe9;
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: #5b3c00;
+      }
+      pre {
+        background: #0f1d28;
+        color: #d8e4f0;
+        padding: 16px 18px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 12px 0;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      .pill {
+        display: inline-block;
+        background: #eef3f4;
+        color: #2a6f7a;
+        font-size: 12px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        margin-left: 6px;
+      }
+      .pill.fix {
+        background: #fef2e7;
+        color: #9a4a14;
+      }
+      .pill.perf {
+        background: #ecf3ec;
+        color: #2c6f3a;
+      }
+      .pill.tenancy {
+        background: #f0eafe;
+        color: #5933c1;
+      }
+      .pill.ui {
+        background: #fef0f4;
+        color: #a8265f;
+      }
+      .pill.flagship {
+        background: #fff6e0;
+        color: #8a5a00;
+      }
+      a {
+        color: #2a6f7a;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(42, 111, 122, 0.3);
+      }
+      a:hover {
+        border-bottom-color: #2a6f7a;
+      }
+      .known {
+        background: #fdfaf3;
+        border: 1px solid #ecddb5;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-top: 24px;
+        font-size: 14px;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 16px;
+        border-top: 1px solid #ece9e2;
+        font-size: 13px;
+        color: #7c8794;
+        text-align: center;
+      }
+      .footer a {
+        color: #7c8794;
+        border-bottom-color: rgba(124, 135, 148, 0.3);
+      }
+      strong {
+        color: #0f2231;
+      }
+      .example {
+        background: #fafaf6;
+        border: 1px solid #ece9e2;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 10px 0;
+        font-size: 14px;
+      }
+      .example .label {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: #7c8794;
+        margin-bottom: 4px;
+      }
+      .example .user {
+        color: #0f2231;
+      }
+      .example .bot {
+        color: #2a6f7a;
+        margin-top: 6px;
+      }
+      @media (max-width: 600px) {
+        .container {
+          padding: 24px 18px;
+        }
+        h1 {
+          font-size: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>הערות שחרור — אלרום <span class="pill">v0.3</span></h1>
+      <p class="meta">28 ביוני 2026</p>
+
+      <p class="lede">
+        גרסה זו מסמנת שינוי פרדיגמה: מ"שאלה אחת → תשובה אחת" ל
+        <strong>שיחה</strong>. המערכת מבינה מתי שאלה לא ברורה דיה, שואלת
+        הבהרה קצרה לפני שהיא רצה לתת תשובה, וזוכרת את ההקשר לאורך השיחה. בו-זמנית
+        תוקנו שני פערים שמגיעים מתשתית האחזור — דקדוק עברי במנוע BM25 והרחבת
+        השאילתה לפי מילון המונחים — שביחד מצמצמים מהותית את "תשובה שגויה כי
+        ה-AI לא הבין את המינוח".
+      </p>
+
+      <h2>שיחה במקום שאלה בודדת <span class="pill flagship">שינוי פרדיגמה</span></h2>
+
+      <h3>ממשק שיחה — חיפוש הפך לדיאלוג</h3>
+      <p>
+        עמוד החיפוש שוכתב לגמרי כעמוד שיחה: שאלת המשתמש ותשובת המערכת מופיעות
+        זו אחרי זו, ניתן להמשיך לשאול שאלות המשך שמשתמשות בהקשר הקודם, ו-
+        <strong>"שיחה חדשה +"</strong> מנקה את ההקשר ומתחיל פתיחה חדשה.
+        כתובת ה-URL שומרת את מזהה השיחה כך שריענון דף לא מאבד את ההיסטוריה.
+        השיחות האחרונות מופיעות במסך הבית כקיצור לחזרה אליהן.
+      </p>
+
+      <h3>הבהרה לפני תשובה — בקשת בירור חכמה</h3>
+      <p>
+        לפני שהמערכת רצה לתשובה, היא בודקת אם השאלה ברורה דיה. אם לא — היא
+        עוצרת ושואלת שאלת הבהרה אחת קצרה, ורק לאחר תגובת המשתמש ניגשת לחיפוש
+        ולניסוח התשובה. זה מאוד מצמצם את כמות התשובות הלא רלוונטיות שמתקבלות
+        משאלות עמומות.
+      </p>
+
+      <p>הטריגרים שמפעילים שאלת הבהרה:</p>
+      <ul>
+        <li>
+          <strong>תפקיד לא מצוין</strong> כשהוא משנה את התשובה — חבר, יורש,
+          לא-חבר, בן ממשיך.
+        </li>
+        <li>
+          <strong>מספר תקנונים אפשריים</strong> — לדוגמה תקנון שיוך דירות מול
+          הסדר רישום דירות, כשהמערכת לא יכולה להחליט בלי קלט מהמשתמש.
+        </li>
+        <li>
+          <strong>כינויי גוף עמומים</strong> כמו "הם", "זה", "ההוא" כשהתור
+          הקודם הזכיר כמה דברים שונים שהמילה יכולה להפנות אליהם.
+        </li>
+        <li>
+          <strong>חוסר הסכמה ללא פירוט</strong> — שאלות שמתחילות ב"אבל…", "אבל
+          להבנתי…", "זה לא נכון" ולא מציינות על מה הוויכוח.
+        </li>
+        <li>
+          <strong>שאלת המשך קצרה</strong> אחרי תשובה ארוכה שכיסתה כמה נושאים.
+        </li>
+      </ul>
+
+      <div class="example">
+        <span class="label">דוגמה</span>
+        <div class="user"><strong>שאלה:</strong> ירשתי בית בקיבוץ ואני לא חבר. מה עושים?</div>
+        <div class="bot">
+          <strong>המערכת:</strong> כדי לתת תשובה מדויקת — האם מדובר בירושה
+          לפי תקנון שיוך דירות, או רישום על שם יורש לפי הסדר רישום דירות?
+          <br />
+          <em>(בלחיצה אחת מתוך הצעות המסמכים שהמערכת מציעה — או פשוט להמשיך
+          לכתוב.)</em>
+        </div>
+      </div>
+
+      <h3>בקרת מעקף — אם אתה כבר יודע מה אתה רוצה</h3>
+      <p>
+        המערכת מזהה ניסוחים כמו "ענה ישירות", "תן תשובה מהירה", "תשובה קצרה"
+        ועונים מיידית בלי שלב הבהרה. כך משתמש מנוסה לא מתעכב.
+      </p>
+
+      <h3>רשת ביטחון: כשהמערכת עצמה מודה שאינה בטוחה</h3>
+      <p>
+        תוקנה תקלה עדינה שבה לפעמים המערכת התחילה לענות, גילתה תוך כדי שהשאלה
+        לא ברורה ("השאלה אינה ברורה דיה… אנא פרט"), אבל המשיכה להגיש את התשובה
+        הלא-ממוקדת. כעת — אם הניסוח הסופי כולל ניסוחי בלבול כאלה, המערכת
+        ממירה את התגובה לשאלת הבהרה אוטומטית במקום להגיש תשובה מבולבלת.
+      </p>
+
+      <h3>סדר עדיפויות בניסוח התשובה <span class="pill fix">תיקון משמעותי</span></h3>
+      <p>
+        תוקנה תקלת מסגור: כאשר תקנון משנה ספציפי קובע מסגרת אופרטיבית לנושא,
+        והתקנון הראשי כולל לגביו <em>איסור גורף</em> שמשמש כברירת מחדל
+        (לדוגמה: סעיף 97 לתקנון הראשי קובע שאין חלוקת רווחים — בעוד שתקנון
+        שיוך פירות נכסים קובע איך חברים מקבלים מענקים בפועל), המערכת הייתה
+        נוטה לפתוח את התשובה ב"אין X" ולהוסיף את המסגרת האופרטיבית כתוספת
+        משנית. כתוצאה — המשתמש קיבל את ההפך מהתשובה הנכונה במשקל הפסיכולוגי.
+      </p>
+      <p>
+        ה-prompt עודכן עם "כלל מסגור" מפורש: כשתקנון משנה קובע מסגרת
+        אופרטיבית לנושא — היא הכותרת, היא התשובה המעשית. סעיף בתקנון הראשי
+        שנראה כסותר אינו תשובה חלופית אלא הכלל הכללי שהמסגרת מסייגת. נוספה
+        דוגמה מלאה (חלוקת רווחים) שמדגימה את ההבדל בין מסגור נכון לשגוי,
+        ועודכן כלל "סעיפי איסור גוברים על סעיפי הסדר" כדי שיחול
+        <strong>בתוך אותו תקנון בלבד</strong> ולא יחצה את היררכיית
+        המקורות.
+      </p>
+
+      <h2>חיפוש עברי הוגן <span class="pill fix">תיקון משמעותי</span></h2>
+
+      <h3>BM25 שמבין עברית — קצוות שלא היו</h3>
+      <p>
+        עד גרסה זו, החיפוש המילולי (BM25) ב-PostgreSQL התעלם מ
+        <strong>סיומות וקידומות</strong> עברית — כלומר השאלה "מה דין הירושה"
+        לא הצליחה למצוא קטעים שמכילים "ירושה", השאלה "בבית" לא הצליחה למצוא
+        קטעים שמכילים "בית", וכן הלאה. בפועל כמעט כל שאילתה עברית חזרה ריקה
+        מצד ה-BM25, ורק החיפוש הסמנטי (וקטור) נשא את משקל האחזור.
+      </p>
+      <p>
+        כעת המערכת מנרמלת אוטומטית את הטקסט המאוחסן ואת השאילתה: מסירה
+        קידומות הצרפת (<code>ה</code>, <code>ב</code>, <code>ל</code>,
+        <code>ש</code>, <code>ו</code>, <code>מ</code>, <code>כ</code>) וסיומות
+        כינוי גוף (<code>ים</code>, <code>ות</code>, <code>הם</code>,
+        <code>נו</code>, וכד׳), ומפיקה את הצורה הבסיסית של כל מילה — כך
+        ש<strong>"הירושה" ו"ירושה" נחשבות לאותה מילה</strong> במנוע ה-FTS.
+        זה החזיר אחוזים גדולים של אחזור שאיבדנו בלי לדעת.
+      </p>
+
+      <h3>מילון מונחים — מעכשיו עובד גם בחיפוש עצמו</h3>
+      <p>
+        עד עכשיו, המילון הפנים-קיבוצי שימש להסביר ל-Claude מונחים מיוחדים
+        בשלב <em>ניסוח התשובה</em>, אבל לא השפיע על שלב ה<em>איתור</em> של
+        הקטעים הרלוונטיים. התוצאה: שאלה בניסוח עממי ("מה אם ירשתי בית") לא
+        מצאה תקנונים שמשתמשים בניסוח התקנוני המקביל ("שיוך", "רישום דירות",
+        "מקבל הזכות").
+      </p>
+      <p>
+        כעת — כשהשאלה מכילה מונח מהמילון, המערכת מרחיבה אוטומטית את שאילתת
+        החיפוש עם המונחים הקשורים <em>לפני</em> שהיא מחפשת, כך שגם הצד
+        הסמנטי וגם הצד המילולי מאתרים את התקנונים הנכונים מההתחלה.
+      </p>
+
+      <h2>מילון לומד מהשיחה <span class="pill perf">תשתית חדשה</span></h2>
+
+      <h3>למידה אוטומטית — השיחה מאמנת את המילון</h3>
+      <p>
+        השיחה לא רק עוזרת למשתמש להגיע לתשובה — היא גם
+        <strong>מאמנת את המערכת לפעם הבאה</strong>. בכל פעם שמשתמש שואל
+        שאלה בניסוח עממי, מקבל בקשת הבהרה, ומגיע לתשובה טובה אחרי הבהרה —
+        המערכת זיהתה זוג שאלות: ניסוח עממי שלא עבד, ניסוח שעבד. זה בדיוק
+        המידע שצריך כדי לבנות ערך מילון חדש.
+      </p>
+      <p>
+        סקריפט שמופעל מעת לעת (<code>scripts/learn_lexicon.py</code>) סורק
+        את כל זוגות התורים האלה, מבקש מ-Claude לזהות את התרגום
+        "עממי → תקנוני", ומכניס את המיפויים החדשים למילון
+        <strong>כממתינים לאישור</strong>. הם לא משפיעים על אחזור עד שמישהו
+        אישר אותם בעמוד המילון.
+      </p>
+
+      <h3>אישור או דחייה של ערכים נלמדים — בלחיצה אחת</h3>
+      <p>
+        בעמוד המילון, ערכים שהמערכת למדה מהשיחה מסומנים בתג
+        <strong>"נלמד · ממתין"</strong> + אחוז ביטחון של המודל. ניתן ללחוץ
+        <strong>"✓ אשר"</strong> כדי להעלות אותם לסטטוס פעיל, או
+        <strong>"דחה"</strong> כדי להשתיק. הראיה — זוג השאלות המקורי + הסבר
+        — מופיעה בלחיצה על "מקור הזיהוי", כך שההחלטה ממוקדת ולא מצריכה ניחושים.
+      </p>
+
+      <h2>תשתית ומבנה נתונים</h2>
+
+      <h3>טבלאות חדשות לתמיכה בשיחות</h3>
+      <ul>
+        <li>
+          טבלת <code>conversations</code> חדשה — כל שיחה היא רשומה אחת
+          שמקבצת את כל התורים שלה.
+        </li>
+        <li>
+          טבלת <code>queries</code> הקיימת קיבלה שדות
+          <code>conversation_id</code> ו-<code>turn_index</code> — כל שאלה
+          היא תור בתוך שיחה, גם אם הוא תור יחיד.
+        </li>
+        <li>
+          טבלת <code>lexicon</code> הקיימת קיבלה שדות פרובננס:
+          <code>source</code> (manual/learned), <code>status</code>
+          (active/pending/rejected), <code>confidence</code>,
+          <code>evidence</code>, ו-<code>learned_from_query_id</code>.
+        </li>
+      </ul>
+      <p>
+        ערכים קיימים שמרו את ההתנהגות הקודמת שלהם (<code>source=manual</code>,
+        <code>status=active</code>). אין שום שינוי בהתנהגות עבור מילונים
+        שנערכו ידנית.
+      </p>
+
+      <h3>נקודות קצה חדשות לניהול שיחות</h3>
+      <ul>
+        <li>
+          <code>GET /api/conversations</code> — רשימת שיחות עם תקציר אחרון.
+        </li>
+        <li>
+          <code>GET /api/conversations/{id}</code> — כל התורים של שיחה
+          מסוימת, כולל מקורות.
+        </li>
+        <li>
+          <code>PATCH /api/conversations/{id}</code> /
+          <code>DELETE</code> — שינוי כותרת או הסרת שיחה (השאלות עצמן
+          נשמרות לתיעוד).
+        </li>
+        <li>
+          <code>POST /api/search</code> ו-<code>POST /api/search/stream</code>
+          מקבלים כעת <code>conversation_id</code> אופציונלי. אם לא ניתן —
+          המערכת יוצרת שיחה חדשה אוטומטית. ה-API הישן עובד בלי שינוי.
+        </li>
+      </ul>
+
+      <h2>פעולות שיש לבצע לאחר שדרוג</h2>
+      <pre><code>alembic upgrade head
+python -m scripts.rebuild_text_search</code></pre>
+      <p>
+        המיגרציה מוסיפה את הטבלאות החדשות; הסקריפט בונה מחדש את עמודת
+        החיפוש העברי (text_search) של כל הקטעים הקיימים עם הנירמול החדש. על
+        קורפוס בסדר גודל של 25 מסמכים זה לוקח דקות בודדות.
+      </p>
+      <p>
+        להפעלת לומד המילון אחרי שצברתם שיחות:
+      </p>
+      <pre><code>python -m scripts.learn_lexicon --since YYYY-MM-DD</code></pre>
+
+      <div class="known">
+        <strong>ידוע לנו (ייכנס לגרסאות הבאות):</strong>
+        <ul>
+          <li>
+            <strong>סט שאלות זהב</strong> עדיין לא בנוי באופן ממשי. נקודת
+            הקצה קיימת ולחצן "סמן כשאלת זהב" עובד, אבל אין עדיין מערכת
+            ציון אוטומטית שמשווה גרסאות חיפוש שונות זו לזו. זה יהיה התשתית
+            הראשית של מדידה ב-v0.4.
+          </li>
+          <li>
+            <strong>נתיב סעיף היררכי</strong> (פרק → סעיף → תת-סעיף)
+            עדיין לא מאוחסן — סעיפים נקראים כעת רק במספרם הישיר.
+          </li>
+          <li>
+            <strong>סינון עמודי תוכן עניינים</strong> טרם הוטמע — כ-15-20%
+            מהקורפוס עדיין כולל רעש של תוכן עניינים שמדלל את האיכות הסמנטית.
+          </li>
+        </ul>
+      </div>
+
+      <div class="footer">
+        © כל הזכויות שמורות לאלרום סטודיוס בע״מ ·
+        <a href="mailto:tal@elrom.tv">tal@elrom.tv</a>
+      </div>
+    </div>
+  </body>
+</html>

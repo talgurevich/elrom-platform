@@ -53,7 +53,7 @@ def _is_allowed_in_switch_mode(method: str, path: str) -> bool:
 app = FastAPI(
     title="Elrom Platform",
     description="Kibbutz bylaws & decisions search — backend",
-    version="0.1.0",
+    version="0.3.0",
 )
 
 _origins = [o.strip() for o in settings.frontend_url.split(",") if o.strip()]

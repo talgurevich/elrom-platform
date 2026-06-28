@@ -250,7 +250,7 @@ export default function App() {
               עדכוני פיתוח
             </a>
             <span className="text-line-strong">·</span>
-            <span>גרסה 0.2</span>
+            <span>גרסה 0.3</span>
           </span>
         </div>
       </footer>
