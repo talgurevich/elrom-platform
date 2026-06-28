@@ -411,6 +411,7 @@ async def search_pipeline(
             question=question,
             chunks=retrieved,
             lexicon_block=lexicon_block,
+            prior_turns=prior_turns,
         )
 
         # Post-hoc safety net: if the answerer itself signals it didn't have

@@ -13,6 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import settings
 from app.models import Chunk
+from app.services.query_rewriter import PriorTurn
 
 log = structlog.get_logger()
 
@@ -25,6 +26,28 @@ def _claude_client():
 
 
 SYSTEM_PROMPT = """אתה יועץ תקנון של קיבוץ אל-רום. תפקידך לענות על שאלות חברים בנושאי תקנוני הקיבוץ **על בסיס המקורות המצורפים בלבד**.
+
+---
+
+## 0. הקשר השיחה — קרא לפני שאתה עונה
+
+לפני שאתה מנסח תשובה, **קרא את כל "שיחה עד כה"** אם הוצגה לך. השיחה היא המקור הראשון לפענוח השאלה הנוכחית — לפני המקורות.
+
+**מילים שמחייבות חזרה לשיחה הקודמת:**
+- כינויי גוף: "הם", "זה", "אותו", "ההוא", "אלה".
+- הפניות סתומות: "הסעיף הזה", "הסעיף הקודם", "התקנון ההוא", "מה שאמרת".
+- שאלות-המשך מקוצרות: "ומה אם...", "ובמקרה ההפוך?", "ומה לגבי X?".
+- חוסר הסכמה: "אבל...", "אבל להבנתי...", "זה לא נכון", "אני לא בטוח".
+- הסכמה/חיוב: "כן", "נכון", "בדיוק", "אכן" — משמעותם שהמשתמש מאשר תור הבהרה קודם של המערכת.
+
+**איך לעבוד עם השיחה:**
+1. כשמופיע כינוי או רמיזה — חזור לאחור בשיחה ומצא את הישות הספציפית. אל תנחש. אם בשיחה דובר על שלוש ישויות שונות והכינוי עמום, **קודם הבהר** (השב בניסוח "האם הכוונה ל-X או ל-Y?") ואל תרוץ לתשובה.
+2. כשהמשתמש חולק על התור הקודם של המערכת בלי לפרט — אל תפיק תשובה חדשה ארוכה. ענה: "באיזו נקודה אתה חולק?" וחכה. הוויכוח לפני הפירוט הוא איתות שעצרת, לא איתות שתרחיב.
+3. כשהמשתמש מאשר תור הבהרה קודם — צרף את הבחירה שלו לשאלה המקורית וענה.
+4. כשהתור הקודם של המערכת ציטט סעיף ספציפי והמשתמש שואל "ומה אם...", הסעיף ההוא הוא נקודת הפתיחה של התשובה החדשה — אל תתחיל מאפס.
+
+**איזון מול מקורות:**
+אם הסעיפים המצורפים סותרים את התור הקודם של המערכת — **תקן את הקודם והסבר במפורש**: "בתשובה קודמת אמרתי X. הנוסח המעודכן בסעיף Y מבהיר שהמצב Z. הסליחה — התשובה הקודמת לא הייתה מדויקת מספיק." אל תיצמד לתשובה קודמת שגויה רק כדי לשמור על עקביות.
 
 ---
 
@@ -269,18 +292,43 @@ _ANSWER_TOOL = {
 }
 
 
+def _format_history_block(prior_turns: list[PriorTurn] | None) -> str:
+    """Render the conversation-up-to-now block that prefixes the user message.
+
+    Cap to the last 8 turns — covers "user wrote a clarification chain" while
+    keeping payload bounded. Claude's prompt cache absorbs the cost of older
+    turns on a hot conversation; new turns add only the incremental tokens.
+    """
+    if not prior_turns:
+        return ""
+    recent = prior_turns[-8:]
+    lines = []
+    for t in recent:
+        speaker = "משתמש" if t.role == "user" else "מערכת"
+        lines.append(f"{speaker}: {t.text.strip()}")
+    body = "\n".join(lines)
+    return f"שיחה עד כה (קרא את זה ראשון):\n{body}\n\n"
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 def answer_with_citations(
     *,
     question: str,
     chunks: list[Chunk],
     lexicon_block: str = "",
+    prior_turns: list[PriorTurn] | None = None,
 ) -> LLMResult:
     """Ask Claude to produce a cited answer using tool-use for structured output.
 
     Tool-use eliminates the whole class of JSON-text-parsing bugs (unescaped
     quotes in Hebrew, ```json fences```, prose-before-JSON, etc.). Claude is
     forced to fill the tool's typed schema directly.
+
+    ``prior_turns`` carries the conversation history when the question is part
+    of a chat thread. Without it, pronouns and follow-ups ("ומה אם…", "הסעיף
+    ההוא…") are unresolvable and Claude has to guess from chunks alone — the
+    "chat forgets context" failure mode. The system prompt's §0 instructs how
+    to read this block.
     """
     sources_block = "\n\n".join(
         f"[{i + 1}] (מקור: {c.document.filename}{(' / ' + c.section_path) if c.section_path else ''})\n{c.text}"
@@ -293,8 +341,11 @@ def answer_with_citations(
         else ""
     )
 
+    history_section = _format_history_block(prior_turns)
+
     user_message = (
-        f"שאלה: {question}\n\n"
+        f"{history_section}"
+        f"שאלה נוכחית: {question}\n\n"
         f"{lexicon_section}"
         f"קטעי הקשר ממסמכי הקיבוץ:\n\n{sources_block}\n\n"
         f"קרא את כל הסעיפים והפעל את הכלי `answer` עם הניסוח הקצר והדטרמיניסטי הדרוש."
