@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type QueryListItem, type SearchResponse } from "../lib/api";
+import { api, type ConversationDetail, type QueryListItem, type SearchResponse } from "../lib/api";
 
 export default function Review() {
   const [queries, setQueries] = useState<QueryListItem[]>([]);
@@ -12,6 +12,28 @@ export default function Review() {
   const [busy, setBusy] = useState(false);
   const [retries, setRetries] = useState<Record<string, SearchResponse>>({});
   const [retrying, setRetrying] = useState<string | null>(null);
+  // Loaded full-conversation threads keyed by query.id. Loading-on-demand —
+  // we only fetch when the user opens the panel, then cache.
+  const [threads, setThreads] = useState<Record<string, ConversationDetail | "loading" | "error">>({});
+
+  const toggleThread = async (q: QueryListItem) => {
+    if (!q.conversation_id) return;
+    const key = q.id;
+    setThreads((cur) => {
+      // Toggle off if already open
+      if (cur[key] && cur[key] !== "loading") {
+        const { [key]: _, ...rest } = cur;
+        return rest;
+      }
+      return { ...cur, [key]: "loading" };
+    });
+    try {
+      const conv = await api.getConversation(q.conversation_id);
+      setThreads((cur) => ({ ...cur, [key]: conv }));
+    } catch {
+      setThreads((cur) => ({ ...cur, [key]: "error" }));
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -217,7 +239,24 @@ export default function Review() {
                   </div>
                 )}
 
+                {q.conversation_id && (
+                  <ThreadPanel
+                    state={threads[q.id]}
+                    currentQueryId={q.id}
+                    onToggle={() => void toggleThread(q)}
+                  />
+                )}
+
                 <div className="flex gap-2 text-sm flex-wrap">
+                  {q.conversation_id && (
+                    <button
+                      onClick={() => void toggleThread(q)}
+                      className="px-3 py-1.5 border border-line-strong hover:border-ink text-ink-soft hover:text-ink rounded"
+                      title="הצג את כל השיחה שהתור הזה חלק ממנה"
+                    >
+                      {threads[q.id] && threads[q.id] !== "loading" ? "סגור שיחה מלאה" : "הצג שיחה מלאה"}
+                    </button>
+                  )}
                   <button
                     onClick={() => retry(q)}
                     disabled={retrying === q.id}
@@ -286,5 +325,99 @@ export default function Review() {
         </div>
       )}
     </>
+  );
+}
+
+// Renders the full conversation thread for a query under review. Shows every
+// turn (clarification, answer, refused) with the *current* query highlighted
+// so the reviewer can see what came before and after.
+function ThreadPanel({
+  state,
+  currentQueryId,
+  onToggle,
+}: {
+  state: ConversationDetail | "loading" | "error" | undefined;
+  currentQueryId: string;
+  onToggle: () => void;
+}) {
+  if (!state) return null;
+  if (state === "loading") {
+    return (
+      <div className="mt-3 mb-4 p-3 bg-stone-50 border border-line rounded-lg text-xs text-ink-soft">
+        טוען שיחה מלאה…
+      </div>
+    );
+  }
+  if (state === "error") {
+    return (
+      <div className="mt-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-900 flex items-center justify-between">
+        <span>שגיאה בטעינת השיחה.</span>
+        <button onClick={onToggle} className="underline hover:no-underline">
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 mb-4 p-4 bg-stone-50 border border-line rounded-lg">
+      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3 flex items-center gap-2">
+        <span>שיחה מלאה</span>
+        <span className="font-mono normal-case tracking-normal">
+          ({state.turns.length} {state.turns.length === 1 ? "תור" : "תורים"})
+        </span>
+        <span className="flex-1 h-px bg-line" />
+      </div>
+      <div className="space-y-4">
+        {state.turns.map((t) => {
+          const isCurrent = t.query_id === currentQueryId;
+          const isClarify = t.mode === "clarify";
+          return (
+            <div
+              key={t.query_id}
+              className={`text-sm ${isCurrent ? "ring-2 ring-accent ring-offset-2 ring-offset-stone-50 rounded p-2 -m-2" : ""}`}
+            >
+              <div className="flex gap-3 mb-1">
+                <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold w-16 shrink-0 pt-0.5">
+                  משתמש
+                </span>
+                <div className="flex-1 text-ink whitespace-pre-wrap leading-relaxed">
+                  {t.question}
+                </div>
+              </div>
+              {t.answer && (
+                <div className="flex gap-3">
+                  <span
+                    className={`text-[10px] tracking-[0.2em] uppercase font-bold w-16 shrink-0 pt-0.5 ${
+                      isClarify ? "text-accent" : "text-ink-soft"
+                    }`}
+                  >
+                    {isClarify ? "הבהרה" : "מערכת"}
+                  </span>
+                  <div className="flex-1 text-ink-soft whitespace-pre-wrap leading-relaxed text-[13px]">
+                    {t.answer}
+                    {t.sources.length > 0 && (
+                      <div className="mt-1.5 text-[11px] text-ink-soft">
+                        {t.sources.map((s) => (
+                          <span
+                            key={s.chunk_id}
+                            className="inline-block mr-2 mt-1 px-1.5 py-0.5 bg-white border border-line rounded"
+                          >
+                            {s.document_filename}
+                            {s.section_path && (
+                              <span className="font-mono"> · {s.section_path}</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

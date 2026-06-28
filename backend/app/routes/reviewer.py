@@ -34,6 +34,10 @@ class QueryListItem(BaseModel):
     reviewer_action: str | None
     served_from_cache: bool
     created_at: str
+    # Thread context — lets the reviewer page surface "show full conversation"
+    # without an extra round-trip per item just to discover the conversation id.
+    conversation_id: UUID | None = None
+    turn_index: int | None = None
 
 
 @router.get("/queries", response_model=list[QueryListItem])
@@ -65,6 +69,8 @@ def list_queries(
             reviewer_action=r.reviewer_action,
             served_from_cache=r.authoritative_answer_id is not None,
             created_at=r.created_at.isoformat() if r.created_at else "",
+            conversation_id=r.conversation_id,
+            turn_index=r.turn_index,
         )
         for r in rows
     ]

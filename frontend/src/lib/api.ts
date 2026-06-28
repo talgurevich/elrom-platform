@@ -198,6 +198,8 @@ export type QueryListItem = {
   reviewer_action: string | null;
   served_from_cache: boolean;
   created_at: string;
+  conversation_id: string | null;
+  turn_index: number | null;
 };
 
 export type AuthoritativeItem = {
