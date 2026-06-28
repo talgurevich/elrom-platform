@@ -6,7 +6,16 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
-from app.routes import auth, documents, eval as eval_routes, health, ingest, reviewer, search
+from app.routes import (
+    auth,
+    conversations,
+    documents,
+    eval as eval_routes,
+    health,
+    ingest,
+    reviewer,
+    search,
+)
 
 log = structlog.get_logger()
 
@@ -91,6 +100,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(ingest.router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(reviewer.router, prefix="/api/reviewer", tags=["reviewer"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(eval_routes.router, prefix="/api/eval", tags=["eval"])

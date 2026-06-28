@@ -16,6 +16,7 @@ from app.routes.auth import current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, chunk_document
 from app.services.embedding import embed_texts
+from app.services.hebrew_text import normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
 
 log = structlog.get_logger()
@@ -118,8 +119,8 @@ def ingest(
         db.add(chunk)
         db.flush()
         db.execute(
-            text("UPDATE chunks SET text_search = to_tsvector('simple', text) WHERE id = :cid"),
-            {"cid": chunk.id},
+            text("UPDATE chunks SET text_search = to_tsvector('simple', :norm) WHERE id = :cid"),
+            {"cid": chunk.id, "norm": normalize_hebrew(sc.text)},
         )
 
     doc.chunks_created = len(structural_chunks)
@@ -258,8 +259,8 @@ async def ingest_upload(
         db.add(chunk)
         db.flush()
         db.execute(
-            text("UPDATE chunks SET text_search = to_tsvector('simple', text) WHERE id = :cid"),
-            {"cid": chunk.id},
+            text("UPDATE chunks SET text_search = to_tsvector('simple', :norm) WHERE id = :cid"),
+            {"cid": chunk.id, "norm": normalize_hebrew(sc.text)},
         )
 
     doc.chunks_created = len(structural_chunks)

@@ -81,11 +81,32 @@ class Chunk(Base):
     document: Mapped[Document] = relationship(back_populates="chunks")
 
 
+class Conversation(Base):
+    """A chat thread — groups successive Query rows into one user-facing
+    conversation. The conversation is the unit the lexicon-learning job reads
+    to find refinement pairs (turn N failed, turn N+1 succeeded → what
+    vocabulary did the user add?)."""
+
+    __tablename__ = "conversations"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
+    title: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Query(Base):
     __tablename__ = "queries"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
     user_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("conversations.id")
+    )
+    turn_index: Mapped[int | None] = mapped_column(Integer)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     question_embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
     answer: Mapped[str | None] = mapped_column(Text)
@@ -142,6 +163,17 @@ class Lexicon(Base):
     term: Mapped[str] = mapped_column(Text, nullable=False)
     expansion: Mapped[str] = mapped_column(Text, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    # source: "manual" (human-curated) | "learned" (proposed by nightly job)
+    source: Mapped[str] = mapped_column(String, default="manual", server_default="manual")
+    # status: "active" (used at retrieval) | "pending" (awaiting human review)
+    # | "rejected" (suppressed). Learned entries above a confidence threshold
+    # land active; below, they wait in pending.
+    status: Mapped[str] = mapped_column(String, default="active", server_default="active")
+    confidence: Mapped[float | None] = mapped_column(Float)
+    evidence: Mapped[dict | None] = mapped_column(JSON)
+    learned_from_query_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("queries.id")
+    )
     updated_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

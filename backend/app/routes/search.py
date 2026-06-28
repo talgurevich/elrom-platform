@@ -26,12 +26,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
-from app.models import AuthoritativeAnswer, Chunk, Query, Tenant, User
+from app.models import AuthoritativeAnswer, Chunk, Conversation, Document, Query, Tenant, User
 from app.routes.auth import current_user
+from app.services.chat_triage import triage_turn
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
+from app.services.query_rewriter import PriorTurn
 from app.services.retrieval import hybrid_retrieve
 
 log = structlog.get_logger()
@@ -41,6 +43,12 @@ router = APIRouter()
 class SearchRequest(BaseModel):
     question: str
     top_k: int = 5
+    # Conversation thread for chat-style refinement. If supplied, prior turns
+    # in the same conversation are used to build a canonical query before
+    # retrieval (see services.query_rewriter). If omitted, a new single-turn
+    # conversation is created behind the scenes so every query is still
+    # addressable as part of a thread.
+    conversation_id: UUID | None = None
 
 
 class SourceCitation(BaseModel):
@@ -66,13 +74,24 @@ class NearMiss(BaseModel):
 
 class SearchResponse(BaseModel):
     query_id: UUID
+    conversation_id: UUID
+    turn_index: int
+    # Clarification-first chat: when the triage step decides the question is
+    # ambiguous, it short-circuits the answer pipeline and returns a single
+    # clarifying question to the user. mode="clarify" means there are no
+    # sources / no LLM answer yet — the next turn from the user resolves the
+    # ambiguity and gets answered.
+    mode: str = "answer"  # "answer" | "clarify"
+    canonical_query: str | None = None  # rewritten query used for retrieval (or best-guess on clarify)
+    clarifying_message: str | None = None  # set when mode == "clarify"
+    candidate_docs: list[str] = []  # optional doc-title hints rendered with the clarification
     question: str
     answer: str
-    confidence: str  # confident | uncertain | refused
+    confidence: str  # confident | uncertain | refused | clarifying
     sources: list[SourceCitation]
     references: list[StructuredReference] = []
     llm_used: bool
-    served_from: str  # "hitl_cache" | "llm" | "no_documents"
+    served_from: str  # "hitl_cache" | "llm" | "no_documents" | "clarify"
     retrieval_debug: dict | None = None
     near_misses: list[NearMiss] = []
 
@@ -98,8 +117,53 @@ def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
     ]
 
 
+def _get_or_create_conversation(
+    db: Session, *, tenant_id: UUID, user_id: UUID | None, conversation_id: UUID | None
+) -> Conversation:
+    """Resolve the Conversation for this search request.
+
+    Cases:
+      - conversation_id provided + belongs to tenant → reuse.
+      - conversation_id provided but not found or wrong tenant → 404. We
+        prefer surfacing the mismatch loudly over silently spawning a new
+        conversation (would lose chat history from the user's POV).
+      - conversation_id omitted → start a fresh single-turn conversation.
+    """
+    if conversation_id is not None:
+        conv = db.get(Conversation, conversation_id)
+        if conv is None or conv.tenant_id != tenant_id:
+            raise HTTPException(404, "Conversation not found")
+        return conv
+    conv = Conversation(tenant_id=tenant_id, user_id=user_id)
+    db.add(conv)
+    db.flush()
+    return conv
+
+
+def _load_prior_turns(db: Session, conversation_id: UUID) -> list[PriorTurn]:
+    rows = (
+        db.query(Query)
+        .filter(Query.conversation_id == conversation_id)
+        .order_by(Query.turn_index.asc().nulls_last(), Query.created_at.asc())
+        .all()
+    )
+    out: list[PriorTurn] = []
+    for r in rows:
+        if r.question:
+            out.append(PriorTurn(role="user", text=r.question))
+        if r.answer:
+            out.append(PriorTurn(role="assistant", text=r.answer))
+    return out
+
+
 async def search_pipeline(
-    db: Session, *, tenant_id: UUID, question: str, top_k: int
+    db: Session,
+    *,
+    tenant_id: UUID,
+    user_id: UUID | None,
+    question: str,
+    top_k: int,
+    conversation_id: UUID | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """The single search pipeline, expressed as an async generator that yields
     progress events as it runs. Both the JSON endpoint and the SSE endpoint
@@ -122,8 +186,100 @@ async def search_pipeline(
 
     try:
         yield {"type": "stage", "stage": "analyzing"}
+
+        # Resolve / create the conversation thread up front so prior turns
+        # (if any) inform the rewrite, and so the final Query row can be
+        # written with the right conversation_id + turn_index.
+        conv = _get_or_create_conversation(
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            conversation_id=conversation_id,
+        )
+        prior_turns = _load_prior_turns(db, conv.id) if conversation_id is not None else []
+        next_turn_index = sum(1 for t in prior_turns if t.role == "user")
+
+        # Lexicon hits + doc index for the triage step. Triage decides
+        # answer-vs-clarify and produces the canonical query.
+        lexicon_entries = await asyncio.to_thread(
+            find_relevant_terms, db, tenant_id=tenant_id, question=question
+        )
+        lexicon_block = format_lexicon_block(lexicon_entries)
+        lexicon_expansions = [(e.term, e.expansion) for e in lexicon_entries]
+
+        # Cheap doc index for triage: just titles, capped to keep prompt size
+        # bounded. The triage uses these to surface "did you mean doc X?".
+        doc_titles_rows = (
+            db.query(Document.filename)
+            .filter(Document.tenant_id == tenant_id)
+            .order_by(Document.ingested_at.desc())
+            .limit(60)
+            .all()
+        )
+        doc_titles = [r[0] for r in doc_titles_rows if r[0]]
+
+        triage = await asyncio.to_thread(
+            triage_turn,
+            question=question,
+            prior_turns=prior_turns,
+            lexicon_expansions=lexicon_expansions,
+            doc_titles=doc_titles,
+        )
+
+        # Clarify mode: short-circuit. No retrieval, no LLM-answer. We persist
+        # the clarification as a Query turn so it shows up in the conversation
+        # thread and feeds the lexicon-learning job later.
+        if triage.mode == "clarify" and triage.clarifying_message:
+            yield {"type": "stage", "stage": "generating"}
+            yield {"type": "detail", "text": "מבקש הבהרה לפני שמחפש"}
+            clar_message = triage.clarifying_message
+            if triage.candidate_docs:
+                clar_message += "\n\n" + "המסמכים שעולים בראש: " + ", ".join(triage.candidate_docs)
+            query_log = Query(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
+                question=question,
+                answer=clar_message,
+                confidence="clarifying",
+                llm_used=True,
+                retrieval_debug={
+                    "triage_reason": triage.reason,
+                    "canonical_query_guess": triage.canonical_query,
+                    "candidate_docs": triage.candidate_docs,
+                },
+            )
+            db.add(query_log)
+            db.commit()
+            db.refresh(query_log)
+            response = SearchResponse(
+                query_id=query_log.id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
+                mode="clarify",
+                canonical_query=triage.canonical_query,
+                clarifying_message=triage.clarifying_message,
+                candidate_docs=triage.candidate_docs,
+                question=question,
+                answer=clar_message,
+                confidence="clarifying",
+                sources=[],
+                llm_used=True,
+                served_from="clarify",
+            )
+            yield {"type": "done", "response": response.model_dump(mode="json")}
+            return
+
+        retrieval_query = triage.canonical_query or question
+        if retrieval_query != question:
+            yield {
+                "type": "detail",
+                "text": "ניסוח השאלה הורחב בהתבסס על השיחה והמילון",
+            }
+
         question_embedding = await asyncio.to_thread(
-            lambda: embed_texts([question], input_type="search_query")[0]
+            lambda: embed_texts([retrieval_query], input_type="search_query")[0]
         )
 
         # HITL cache check — counts as part of "analyzing" since it's fast.
@@ -138,6 +294,9 @@ async def search_pipeline(
             sources = _build_sources(db, list(cached.source_chunk_ids or []))
             query_log = Query(
                 tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
                 question=question,
                 question_embedding=question_embedding,
                 answer=cached.answer,
@@ -145,12 +304,16 @@ async def search_pipeline(
                 confidence="confident",
                 llm_used=False,
                 authoritative_answer_id=cached.id,
+                retrieval_debug={"canonical_query": retrieval_query} if retrieval_query != question else None,
             )
             db.add(query_log)
             db.commit()
             db.refresh(query_log)
             response = SearchResponse(
                 query_id=query_log.id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
+                canonical_query=retrieval_query if retrieval_query != question else None,
                 question=question,
                 answer=cached.answer,
                 confidence="confident",
@@ -166,15 +329,20 @@ async def search_pipeline(
             hybrid_retrieve,
             db,
             tenant_id=tenant_id,
-            query=question,
+            query=retrieval_query,
             query_embedding=question_embedding,
             top_k=top_k,
         )
         debug_dict = debug.to_dict()
+        if retrieval_query != question:
+            debug_dict["canonical_query"] = retrieval_query
 
         if not retrieved:
             query_log = Query(
                 tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
                 question=question,
                 question_embedding=question_embedding,
                 answer="לא נמצאו מסמכים רלוונטיים במאגר.",
@@ -187,6 +355,9 @@ async def search_pipeline(
             db.refresh(query_log)
             response = SearchResponse(
                 query_id=query_log.id,
+                conversation_id=conv.id,
+                turn_index=next_turn_index,
+                canonical_query=retrieval_query if retrieval_query != question else None,
                 question=question,
                 answer="לא נמצאו מסמכים רלוונטיים במאגר. ייתכן שהנושא לא תויק או שיש לבדוק ידנית.",
                 confidence="refused",
@@ -205,10 +376,6 @@ async def search_pipeline(
         await asyncio.sleep(0)  # let the event flush before the LLM call
 
         yield {"type": "stage", "stage": "generating"}
-        lexicon_entries = await asyncio.to_thread(
-            find_relevant_terms, db, tenant_id=tenant_id, question=question
-        )
-        lexicon_block = format_lexicon_block(lexicon_entries)
         llm_result = await asyncio.to_thread(
             answer_with_citations,
             question=question,
@@ -241,6 +408,9 @@ async def search_pipeline(
 
         query_log = Query(
             tenant_id=tenant_id,
+            user_id=user_id,
+            conversation_id=conv.id,
+            turn_index=next_turn_index,
             question=question,
             question_embedding=question_embedding,
             answer=llm_result.answer,
@@ -265,6 +435,9 @@ async def search_pipeline(
 
         response = SearchResponse(
             query_id=query_log.id,
+            conversation_id=conv.id,
+            turn_index=next_turn_index,
+            canonical_query=retrieval_query if retrieval_query != question else None,
             question=question,
             answer=llm_result.answer,
             confidence=llm_result.confidence,
@@ -292,7 +465,12 @@ async def search(
     intermediate progress events."""
     last_event: dict[str, Any] | None = None
     async for ev in search_pipeline(
-        db, tenant_id=user.tenant_id, question=req.question, top_k=req.top_k
+        db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        question=req.question,
+        top_k=req.top_k,
+        conversation_id=req.conversation_id,
     ):
         if ev["type"] in ("done", "error"):
             last_event = ev
@@ -319,7 +497,12 @@ async def search_stream(
     async def event_stream() -> AsyncIterator[bytes]:
         try:
             async for ev in search_pipeline(
-                db, tenant_id=user.tenant_id, question=req.question, top_k=req.top_k
+                db,
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                question=req.question,
+                top_k=req.top_k,
+                conversation_id=req.conversation_id,
             ):
                 payload = json.dumps(ev, ensure_ascii=False)
                 yield f"data: {payload}\n\n".encode("utf-8")

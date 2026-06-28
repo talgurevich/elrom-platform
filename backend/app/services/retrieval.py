@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Chunk
+from app.services.hebrew_text import normalize_hebrew
 from app.services.reranker import rerank
 
 
@@ -85,6 +86,10 @@ def hybrid_retrieve(
 
     vector_chunks = {c.id: (c, dist) for c, dist in vector_results}
 
+    # Normalize the query identically to the way text_search was built at
+    # ingest, so prefix/suffix-attached Hebrew tokens actually match. Without
+    # this, ``הירושה`` in the query and ``ירושה`` in the corpus never collide.
+    bm25_query = normalize_hebrew(query)
     bm25_sql = text(
         """
         SELECT id, ts_rank(text_search, plainto_tsquery('simple', :q)) AS rank
@@ -96,8 +101,8 @@ def hybrid_retrieve(
         """
     )
     bm25_rows = db.execute(
-        bm25_sql, {"q": query, "tenant_id": tenant_id, "limit": top_k * 4}
-    ).fetchall()
+        bm25_sql, {"q": bm25_query, "tenant_id": tenant_id, "limit": top_k * 4}
+    ).fetchall() if bm25_query else []
     bm25_scores = {row.id: row.rank for row in bm25_rows}
 
     if bm25_rows:
