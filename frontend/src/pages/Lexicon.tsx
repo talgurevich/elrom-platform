@@ -255,32 +255,133 @@ export default function Lexicon() {
         <div className="text-ink-soft py-8 text-center">המילון ריק. הוסף מונח ראשון.</div>
       ) : (
         <div className="space-y-2">
-          {items.map((it) => (
-            <div key={it.id} className="bg-white border border-line rounded-md p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1">
-                  <div className="font-semibold text-ink">{it.term}</div>
-                  <div className="text-sm text-ink mt-1 whitespace-pre-wrap">{it.expansion}</div>
-                  {it.notes && <div className="text-xs text-ink-soft mt-2 italic">{it.notes}</div>}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <button
-                    onClick={() => startEdit(it)}
-                    className="text-xs px-2 py-1 text-accent hover:bg-accent/10 rounded"
-                  >
-                    ערוך
-                  </button>
-                  <button
-                    onClick={() => remove(it)}
-                    disabled={busy}
-                    className="text-xs px-2 py-1 text-red-700 hover:bg-red-50 rounded"
-                  >
-                    מחק
-                  </button>
+          {items.map((it) => {
+            const isLearnedPending = it.source === "learned" && it.status === "pending";
+            const evidence = (it.evidence || {}) as {
+              from_question?: string;
+              to_question?: string;
+              why?: string;
+            };
+            const approveLearned = async (newStatus: "active" | "rejected") => {
+              setBusy(true);
+              try {
+                await api.updateLexicon(it.id, { status: newStatus });
+                await load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              } finally {
+                setBusy(false);
+              }
+            };
+            return (
+              <div
+                key={it.id}
+                className={`bg-white border rounded-md p-4 ${
+                  isLearnedPending ? "border-accent" : "border-line"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-ink">{it.term}</span>
+                      {it.source === "learned" && (
+                        <span
+                          className={`text-[10px] tracking-[0.2em] uppercase font-bold ${
+                            it.status === "pending"
+                              ? "text-accent"
+                              : it.status === "rejected"
+                              ? "text-ink-soft"
+                              : "text-ink-soft"
+                          }`}
+                        >
+                          {it.status === "pending"
+                            ? "נלמד · ממתין"
+                            : it.status === "rejected"
+                            ? "נלמד · נדחה"
+                            : "נלמד"}
+                          {typeof it.confidence === "number"
+                            ? ` · ${Math.round(it.confidence * 100)}%`
+                            : ""}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-ink mt-1 whitespace-pre-wrap">
+                      {it.expansion}
+                    </div>
+                    {it.notes && (
+                      <div className="text-xs text-ink-soft mt-2 italic">{it.notes}</div>
+                    )}
+                    {isLearnedPending && (evidence.from_question || evidence.to_question) && (
+                      <details className="mt-3 text-xs text-ink-soft">
+                        <summary className="cursor-pointer hover:text-ink">
+                          מקור הזיהוי (שיחה)
+                        </summary>
+                        <div className="mt-2 space-y-1.5 border-r-2 border-line pr-3">
+                          {evidence.from_question && (
+                            <div>
+                              <span className="font-bold text-ink-soft">תור 1:</span>{" "}
+                              {evidence.from_question}
+                            </div>
+                          )}
+                          {evidence.to_question && (
+                            <div>
+                              <span className="font-bold text-ink-soft">תור 2:</span>{" "}
+                              {evidence.to_question}
+                            </div>
+                          )}
+                          {evidence.why && (
+                            <div className="italic">{evidence.why}</div>
+                          )}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {isLearnedPending ? (
+                      <>
+                        <button
+                          onClick={() => void approveLearned("active")}
+                          disabled={busy}
+                          className="text-xs px-2 py-1 text-accent hover:bg-accent/10 rounded font-bold"
+                        >
+                          ✓ אשר
+                        </button>
+                        <button
+                          onClick={() => void approveLearned("rejected")}
+                          disabled={busy}
+                          className="text-xs px-2 py-1 text-ink-soft hover:bg-stone-100 rounded"
+                        >
+                          דחה
+                        </button>
+                        <button
+                          onClick={() => startEdit(it)}
+                          className="text-xs px-2 py-1 text-ink-soft hover:bg-accent/10 rounded"
+                        >
+                          ערוך
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => startEdit(it)}
+                          className="text-xs px-2 py-1 text-accent hover:bg-accent/10 rounded"
+                        >
+                          ערוך
+                        </button>
+                        <button
+                          onClick={() => remove(it)}
+                          disabled={busy}
+                          className="text-xs px-2 py-1 text-red-700 hover:bg-red-50 rounded"
+                        >
+                          מחק
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

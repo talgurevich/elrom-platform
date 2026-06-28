@@ -1,16 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
+  type ConversationSummary,
   type FailureMode,
+  type RetrievalDebug,
   type RetrievalDebugRow,
   type SearchPipelineStage,
   type SearchResponse,
+  type StructuredReference,
+  type Source,
 } from "../lib/api";
+
+// A single turn in the chat thread. Mirrors the relevant fields of
+// SearchResponse plus mutable per-turn UI state (feedback, golden-promote).
+type ChatTurn = {
+  query_id: string;
+  conversation_id: string;
+  turn_index: number;
+  mode: "answer" | "clarify";
+  question: string;
+  answer: string;
+  confidence: string;
+  sources: Source[];
+  references: StructuredReference[];
+  retrieval_debug: RetrievalDebug | null;
+  candidate_docs: string[];
+  clarifying_message: string | null;
+  served_from: string;
+  // Per-turn mutable UI state
+  feedback: "positive" | "negative" | null;
+  failure_mode: FailureMode | null;
+  promoted: boolean;
+  promoting: boolean;
+  retrying: boolean;
+  just_retried: boolean;
+};
 
 const confidenceLabel: Record<string, string> = {
   confident: "תשובה מבוססת",
   uncertain: "תשובה חלקית",
   refused: "אין תשובה במאגר",
+  clarifying: "מבקש הבהרה",
 };
 
 const failureLabels: Record<FailureMode, string> = {
@@ -18,6 +48,608 @@ const failureLabels: Record<FailureMode, string> = {
   wrong_generation: "הניסוח שגוי",
   other: "אחר",
 };
+
+function responseToTurn(r: SearchResponse): ChatTurn {
+  return {
+    query_id: r.query_id,
+    conversation_id: r.conversation_id,
+    turn_index: r.turn_index,
+    mode: r.mode,
+    question: r.question,
+    answer: r.answer,
+    confidence: r.confidence,
+    sources: r.sources,
+    references: r.references || [],
+    retrieval_debug: r.retrieval_debug,
+    candidate_docs: r.candidate_docs || [],
+    clarifying_message: r.clarifying_message,
+    served_from: r.served_from,
+    feedback: null,
+    failure_mode: null,
+    promoted: false,
+    promoting: false,
+    retrying: false,
+    just_retried: false,
+  };
+}
+
+export default function Search() {
+  // Chat thread state.
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<SearchPipelineStage | null>(null);
+  const [stageDetail, setStageDetail] = useState<string | null>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  // Hydrate from ?c=<id> in the URL on mount, so refreshes preserve the thread.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get("c");
+    if (!c) return;
+    let cancelled = false;
+    api
+      .getConversation(c)
+      .then((conv) => {
+        if (cancelled) return;
+        setConversationId(conv.id);
+        const hydrated: ChatTurn[] = conv.turns.map((t) => ({
+          query_id: t.query_id,
+          conversation_id: conv.id,
+          turn_index: t.turn_index ?? 0,
+          mode: t.mode,
+          question: t.question,
+          answer: t.answer || "",
+          confidence: t.confidence || "",
+          sources: t.sources.map((s) => ({
+            chunk_id: s.chunk_id,
+            document_filename: s.document_filename,
+            section_path: s.section_path,
+            text: "",
+          })),
+          references: [],
+          retrieval_debug: null,
+          candidate_docs: [],
+          clarifying_message: t.mode === "clarify" ? t.answer : null,
+          served_from: t.mode === "clarify" ? "clarify" : "llm",
+          feedback: t.feedback === "positive" || t.feedback === "negative" ? t.feedback : null,
+          failure_mode: null,
+          promoted: false,
+          promoting: false,
+          retrying: false,
+          just_retried: false,
+        }));
+        setTurns(hydrated);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Conversation might have been deleted or not belong to this user;
+        // silently start fresh.
+        setConversationId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Mirror the conversation id into the URL (replaceState — don't pollute
+  // history with a separate entry per turn).
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (conversationId) {
+      url.searchParams.set("c", conversationId);
+    } else {
+      url.searchParams.delete("c");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, [conversationId]);
+
+  // Auto-scroll to the bottom as new turns or the progress bar appear.
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns.length, loading]);
+
+  const runSearch = async (q: string) => {
+    if (!q.trim()) return;
+    setLoading(true);
+    setError(null);
+    setStage(null);
+    setStageDetail(null);
+    setQuestion("");
+    try {
+      const fresh = await api.searchStream(
+        q,
+        (ev) => {
+          if (ev.type === "stage") setStage(ev.stage);
+          else if (ev.type === "detail") setStageDetail(ev.text);
+        },
+        conversationId
+      );
+      if (!conversationId) setConversationId(fresh.conversation_id);
+      setTurns((prev) => [...prev, responseToTurn(fresh)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+      setStage(null);
+      setStageDetail(null);
+    }
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void runSearch(question);
+  };
+
+  const updateTurn = (queryId: string, patch: Partial<ChatTurn>) => {
+    setTurns((prev) => prev.map((t) => (t.query_id === queryId ? { ...t, ...patch } : t)));
+  };
+
+  const submitFeedback = async (turn: ChatTurn, kind: "positive" | "negative") => {
+    updateTurn(turn.query_id, { feedback: kind });
+    try {
+      const resp = await api.feedback(turn.query_id, kind);
+      // If 👎 on a cached answer retired it, re-run the same question on the
+      // same conversation so the user sees a fresh attempt.
+      if (kind === "negative" && resp.cached_answer_retired) {
+        updateTurn(turn.query_id, { retrying: true });
+        try {
+          const fresh = await api.search(turn.question, turn.conversation_id);
+          // Replace this turn in place with the retried response.
+          setTurns((prev) =>
+            prev.map((t) =>
+              t.query_id === turn.query_id
+                ? { ...responseToTurn(fresh), just_retried: true }
+                : t
+            )
+          );
+        } finally {
+          updateTurn(turn.query_id, { retrying: false });
+        }
+      }
+    } catch (err) {
+      updateTurn(turn.query_id, { feedback: null });
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const tagFailure = async (turn: ChatTurn, mode: FailureMode) => {
+    updateTurn(turn.query_id, { failure_mode: mode, feedback: "negative" });
+    try {
+      await api.tagFailureMode(turn.query_id, mode);
+    } catch (err) {
+      updateTurn(turn.query_id, { failure_mode: null });
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const promoteToGolden = async (turn: ChatTurn) => {
+    updateTurn(turn.query_id, { promoting: true });
+    try {
+      await api.promoteQueryToGolden(turn.query_id);
+      updateTurn(turn.query_id, { promoted: true, promoting: false });
+    } catch (err) {
+      updateTurn(turn.query_id, { promoting: false });
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const startNewConversation = () => {
+    setConversationId(null);
+    setTurns([]);
+    setError(null);
+    setQuestion("");
+  };
+
+  const pickClarificationOption = (turn: ChatTurn, doc: string) => {
+    // Convenience: user clicks a candidate doc → preload the input with a
+    // disambiguating follow-up so they don't have to type it.
+    setQuestion(`הכוונה שלי לתקנון: ${doc}. ${turn.question}`);
+  };
+
+  return (
+    <>
+      <header className="mb-8">
+        <div className="flex items-baseline justify-between gap-4 flex-wrap mb-3">
+          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold">
+            שיחה
+          </div>
+          {(turns.length > 0 || conversationId) && (
+            <button
+              onClick={startNewConversation}
+              className="text-xs text-ink-soft hover:text-accent transition underline underline-offset-4"
+              title="התחל שיחה חדשה — מנקה את ההקשר"
+            >
+              שיחה חדשה +
+            </button>
+          )}
+        </div>
+        {turns.length === 0 ? (
+          <>
+            <h1 className="font-display text-5xl md:text-6xl font-black text-ink leading-[0.95]">
+              זיכרון ארגוני
+              <br />
+              <span className="text-ink-soft">בשיחה.</span>
+            </h1>
+            <p className="text-ink-soft mt-5 text-base max-w-xl leading-relaxed">
+              שאל שאלה בעברית. אם משהו לא ברור — המערכת תבקש הבהרה לפני שתחפש,
+              ותלמד מההמשך כדי לענות טוב יותר בפעם הבאה.
+            </p>
+          </>
+        ) : (
+          <h1 className="font-display text-3xl md:text-4xl font-black text-ink leading-tight">
+            {turns[0]?.question.slice(0, 80) || "שיחה"}
+            {turns[0] && turns[0].question.length > 80 && "…"}
+          </h1>
+        )}
+      </header>
+
+      {/* The thread — alternating user / assistant turns. */}
+      <div className="space-y-8 mb-8">
+        {turns.map((turn) => (
+          <TurnView
+            key={turn.query_id}
+            turn={turn}
+            onFeedback={(kind) => void submitFeedback(turn, kind)}
+            onTagFailure={(mode) => void tagFailure(turn, mode)}
+            onPromote={() => void promoteToGolden(turn)}
+            onPickCandidate={(doc) => pickClarificationOption(turn, doc)}
+          />
+        ))}
+      </div>
+
+      {loading && <ThinkingProgress stage={stage} detail={stageDetail} />}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-sm whitespace-pre-wrap">
+          {error}
+        </div>
+      )}
+
+      <div ref={threadEndRef} />
+
+      {/* Composer — sticky-ish at the bottom of the page. */}
+      <form
+        onSubmit={submit}
+        className="mt-6 sticky bottom-4 bg-surface border-2 border-ink p-3 shadow-soft"
+      >
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              void runSearch(question);
+            }
+          }}
+          placeholder={
+            turns.length === 0
+              ? "לדוגמה: ירשתי בית בקיבוץ ואני לא חבר. מה עושים?"
+              : "תגובה / שאלת המשך…"
+          }
+          rows={turns.length === 0 ? 3 : 2}
+          disabled={loading}
+          className="w-full px-3 py-2 bg-surface outline-none text-base resize-none placeholder:text-ink-soft/70 disabled:opacity-60"
+        />
+        <div className="mt-2 flex items-center gap-3 flex-wrap">
+          <button
+            type="submit"
+            disabled={loading || !question.trim()}
+            className="px-6 py-2 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition"
+          >
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block w-2.5 h-2.5 bg-surface animate-pulse" />
+                <span>חושב</span>
+              </span>
+            ) : turns.length === 0 ? (
+              "שאל"
+            ) : (
+              "שלח"
+            )}
+          </button>
+          <span className="text-xs text-ink-soft">Cmd/Ctrl + Enter</span>
+        </div>
+      </form>
+
+      {turns.length === 0 && !loading && !error && (
+        <>
+          <HowItWorks />
+          <RecentConversations onPick={(id) => void hydrateAndLoad(id, setConversationId, setTurns)} />
+        </>
+      )}
+    </>
+  );
+}
+
+// Helper: load a previous conversation when the user clicks one in the
+// "recent" list. Replaces the URL so refresh keeps it.
+async function hydrateAndLoad(
+  id: string,
+  setConversationId: (id: string | null) => void,
+  setTurns: (t: ChatTurn[]) => void
+) {
+  try {
+    const conv = await api.getConversation(id);
+    setConversationId(conv.id);
+    const hydrated: ChatTurn[] = conv.turns.map((t) => ({
+      query_id: t.query_id,
+      conversation_id: conv.id,
+      turn_index: t.turn_index ?? 0,
+      mode: t.mode,
+      question: t.question,
+      answer: t.answer || "",
+      confidence: t.confidence || "",
+      sources: t.sources.map((s) => ({
+        chunk_id: s.chunk_id,
+        document_filename: s.document_filename,
+        section_path: s.section_path,
+        text: "",
+      })),
+      references: [],
+      retrieval_debug: null,
+      candidate_docs: [],
+      clarifying_message: t.mode === "clarify" ? t.answer : null,
+      served_from: t.mode === "clarify" ? "clarify" : "llm",
+      feedback: t.feedback === "positive" || t.feedback === "negative" ? t.feedback : null,
+      failure_mode: null,
+      promoted: false,
+      promoting: false,
+      retrying: false,
+      just_retried: false,
+    }));
+    setTurns(hydrated);
+  } catch {
+    // If the conversation can't be loaded, silently no-op — the user can
+    // still start a fresh one from the composer.
+  }
+}
+
+// ─── Turn view ─────────────────────────────────────────────────────────
+
+function TurnView({
+  turn,
+  onFeedback,
+  onTagFailure,
+  onPromote,
+  onPickCandidate,
+}: {
+  turn: ChatTurn;
+  onFeedback: (kind: "positive" | "negative") => void;
+  onTagFailure: (mode: FailureMode) => void;
+  onPromote: () => void;
+  onPickCandidate: (doc: string) => void;
+}) {
+  return (
+    <div className="animate-fade-up">
+      {/* User bubble */}
+      <div className="flex gap-3 mb-3">
+        <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold pt-1 w-16 shrink-0">
+          את/ה
+        </div>
+        <div className="text-base text-ink whitespace-pre-wrap leading-relaxed flex-1">
+          {turn.question}
+        </div>
+      </div>
+
+      {/* Assistant bubble */}
+      <div className="flex gap-3">
+        <div className="text-[10px] tracking-[0.2em] uppercase text-accent font-bold pt-1 w-16 shrink-0">
+          המערכת
+        </div>
+        <div className="flex-1 space-y-4">
+          {turn.just_retried && (
+            <div className="px-3 py-2 bg-surface border-r-4 border-accent text-sm text-ink">
+              התשובה הקודמת הוסרה מהמטמון. הנה ניסיון חדש מבוסס מקורות.
+            </div>
+          )}
+
+          {/* Confidence + cache badge */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <span
+              className={`text-[11px] tracking-[0.25em] uppercase font-bold ${
+                turn.confidence === "confident"
+                  ? "text-accent"
+                  : turn.confidence === "uncertain"
+                  ? "text-amber-700"
+                  : turn.mode === "clarify"
+                  ? "text-accent"
+                  : "text-ink-soft"
+              }`}
+            >
+              {confidenceLabel[turn.confidence] || turn.confidence}
+            </span>
+            {turn.served_from === "hitl_cache" && (
+              <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
+                מהמטמון המאושר
+              </span>
+            )}
+          </div>
+
+          {/* The answer text — same prominent treatment for both answer and
+              clarify turns. The clarify mode just has no sources/share below. */}
+          <article className="relative bg-surface">
+            <div className="absolute -right-1 top-0 bottom-0 w-1 bg-accent" />
+            <div className="pr-5 py-1">
+              <p className={`whitespace-pre-wrap text-ink leading-relaxed ${
+                turn.mode === "clarify"
+                  ? "font-display text-lg md:text-xl"
+                  : "font-display text-xl md:text-2xl"
+              }`}>
+                {turn.answer}
+              </p>
+            </div>
+          </article>
+
+          {/* Clarify mode: render candidate docs as one-click follow-ups. */}
+          {turn.mode === "clarify" && turn.candidate_docs.length > 0 && (
+            <div className="border border-line p-3 bg-surface">
+              <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-2">
+                המסמכים שעולים בראש
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {turn.candidate_docs.map((doc) => (
+                  <button
+                    key={doc}
+                    onClick={() => onPickCandidate(doc)}
+                    className="px-3 py-1.5 text-sm border border-line-strong hover:border-accent hover:text-accent transition"
+                  >
+                    {doc}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-ink-soft mt-2 leading-relaxed">
+                לחיצה ממלאת את ההמשך עם המסמך שבחרת — אפשר גם פשוט להמשיך לכתוב.
+              </p>
+            </div>
+          )}
+
+          {/* Answer-mode interactions: feedback / share / references / sources. */}
+          {turn.mode === "answer" && turn.confidence !== "refused" && (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-ink-soft ml-2">
+                  {turn.retrying ? "מחפש שוב…" : "האם התשובה מדויקת?"}
+                </span>
+                <button
+                  onClick={() => onFeedback("positive")}
+                  disabled={turn.feedback !== null || turn.retrying}
+                  className={`px-3 py-1.5 text-sm border transition ${
+                    turn.feedback === "positive"
+                      ? "bg-ink text-surface border-ink"
+                      : "bg-surface border-line-strong hover:border-ink"
+                  }`}
+                >
+                  כן
+                </button>
+                <button
+                  onClick={() => onFeedback("negative")}
+                  disabled={turn.feedback !== null || turn.retrying}
+                  className={`px-3 py-1.5 text-sm border transition ${
+                    turn.feedback === "negative"
+                      ? "bg-accent text-surface border-accent"
+                      : "bg-surface border-line-strong hover:border-accent hover:text-accent"
+                  }`}
+                >
+                  לא
+                </button>
+                <button
+                  onClick={onPromote}
+                  disabled={turn.promoting || turn.promoted}
+                  className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface disabled:opacity-50 text-ink-soft transition mr-auto"
+                  title="הפוך לשאלת זהב להרצה חוזרת"
+                >
+                  {turn.promoted
+                    ? "✓ נשמר כשאלת זהב"
+                    : turn.promoting
+                    ? "..."
+                    : "סמן כשאלת זהב"}
+                </button>
+              </div>
+              <ShareActions
+                question={turn.question}
+                answer={turn.answer}
+                references={turn.references}
+              />
+            </>
+          )}
+
+          {turn.mode === "answer" && turn.references && turn.references.length > 0 && (
+            <div>
+              <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-2 flex items-center gap-3">
+                <span>סימוכין</span>
+                <span className="flex-1 h-px bg-line" />
+              </div>
+              <div className="grid gap-px bg-line border border-line">
+                {turn.references.map((r, i) => (
+                  <div
+                    key={`${r.title}-${r.section_number}-${i}`}
+                    className="p-3 bg-surface"
+                  >
+                    <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
+                      <span className="font-semibold text-ink">{r.title}</span>
+                      {r.section_number && (
+                        <span className="text-xs text-accent font-mono tracking-tight">
+                          {r.section_number}
+                        </span>
+                      )}
+                      {r.source_type && (
+                        <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft mr-auto">
+                          {r.source_type}
+                        </span>
+                      )}
+                    </div>
+                    {r.excerpt && (
+                      <blockquote className="text-sm text-ink-soft leading-relaxed">
+                        {r.excerpt}
+                      </blockquote>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {turn.feedback === "negative" && !turn.failure_mode && turn.mode === "answer" && (
+            <div className="border-2 border-ink p-3 bg-surface">
+              <div className="text-[11px] tracking-[0.25em] uppercase font-bold text-ink mb-2">
+                מה השתבש?
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(failureLabels) as FailureMode[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => onTagFailure(m)}
+                    className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-line/40 transition"
+                  >
+                    {failureLabels[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {turn.failure_mode && (
+            <div className="px-3 py-2 bg-surface border-r-4 border-accent text-sm text-ink">
+              נרשם: {failureLabels[turn.failure_mode]}
+            </div>
+          )}
+
+          {turn.mode === "answer" && turn.sources.length > 0 && (
+            <details className="border border-line">
+              <summary className="px-3 py-2 cursor-pointer hover:bg-line/40 text-[11px] tracking-[0.25em] uppercase font-bold text-ink-soft">
+                קטעי טקסט שנשלפו ({turn.sources.length})
+              </summary>
+              <div className="border-t border-line grid gap-px bg-line">
+                {turn.sources.map((s, i) => (
+                  <details key={s.chunk_id} className="bg-surface">
+                    <summary className="px-3 py-2 cursor-pointer hover:bg-line/40 text-sm flex items-baseline gap-3">
+                      <span className="font-mono text-accent">[{i + 1}]</span>
+                      <span className="text-ink">{s.document_filename}</span>
+                      {s.section_path && (
+                        <span className="text-ink-soft font-mono text-xs">
+                          {s.section_path}
+                        </span>
+                      )}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft">
+                      {s.text}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {turn.retrieval_debug && <DebugPanel debug={turn.retrieval_debug} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Debug panel (unchanged from v0.2) ─────────────────────────────────
 
 function DebugRow({ row }: { row: RetrievalDebugRow }) {
   const score =
@@ -41,7 +673,7 @@ function DebugRow({ row }: { row: RetrievalDebugRow }) {
   );
 }
 
-function DebugPanel({ debug }: { debug: SearchResponse["retrieval_debug"] }) {
+function DebugPanel({ debug }: { debug: RetrievalDebug | null }) {
   const [open, setOpen] = useState(false);
   if (!debug) return null;
   return (
@@ -50,13 +682,13 @@ function DebugPanel({ debug }: { debug: SearchResponse["retrieval_debug"] }) {
       onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
       className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-soft"
     >
-      <summary className="px-4 py-3 cursor-pointer hover:bg-stone-50 text-sm font-semibold text-ink-soft flex items-center justify-between">
+      <summary className="px-3 py-2 cursor-pointer hover:bg-stone-50 text-xs font-semibold text-ink-soft flex items-center justify-between">
         <span>פירוט שליפה (debug)</span>
         <span className="text-xs text-ink-soft">
           {debug.reranked.length} נשלפו · {debug.vector.length} וקטור · {debug.bm25.length} BM25
         </span>
       </summary>
-      <div className="px-4 py-3 border-t border-stone-200 grid sm:grid-cols-2 gap-6 bg-stone-50/70">
+      <div className="px-3 py-2 border-t border-stone-200 grid sm:grid-cols-2 gap-4 bg-stone-50/70">
         <div>
           <div className="text-[10px] tracking-wider uppercase text-accent font-bold mb-1">
             סופי (אחרי rerank)
@@ -102,399 +734,20 @@ function DebugPanel({ debug }: { debug: SearchResponse["retrieval_debug"] }) {
   );
 }
 
-export default function Search() {
-  const [question, setQuestion] = useState("");
-  const [result, setResult] = useState<SearchResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<"positive" | "negative" | null>(null);
-  const [failureMode, setFailureMode] = useState<FailureMode | null>(null);
-  const [promoted, setPromoted] = useState(false);
-  const [promoting, setPromoting] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const [justRetried, setJustRetried] = useState(false);
-  const [stage, setStage] = useState<SearchPipelineStage | null>(null);
-  const [stageDetail, setStageDetail] = useState<string | null>(null);
+// ─── ThinkingProgress (unchanged from v0.2) ────────────────────────────
 
-  const runSearch = async (q: string) => {
-    if (!q.trim()) return;
-    setQuestion(q);
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setFeedback(null);
-    setFailureMode(null);
-    setPromoted(false);
-    setJustRetried(false);
-    setStage(null);
-    setStageDetail(null);
-    try {
-      const fresh = await api.searchStream(q, (ev) => {
-        if (ev.type === "stage") setStage(ev.stage);
-        else if (ev.type === "detail") setStageDetail(ev.text);
-      });
-      setResult(fresh);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-      setStage(null);
-      setStageDetail(null);
-    }
-  };
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void runSearch(question);
-  };
-
-  const submitFeedback = async (kind: "positive" | "negative") => {
-    if (!result) return;
-    setFeedback(kind);
-    try {
-      const resp = await api.feedback(result.query_id, kind);
-      // If the user 👎'd an answer that came from the authoritative cache,
-      // the backend retires it. Immediately re-run the same question so the
-      // user sees a fresh attempt instead of having to re-type and re-ask.
-      if (kind === "negative" && resp.cached_answer_retired) {
-        setRetrying(true);
-        try {
-          const fresh = await api.search(question);
-          setResult(fresh);
-          setFeedback(null);
-          setFailureMode(null);
-          setPromoted(false);
-          setJustRetried(true);
-        } finally {
-          setRetrying(false);
-        }
-      }
-    } catch (err) {
-      setFeedback(null);
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const promoteToGolden = async () => {
-    if (!result) return;
-    setPromoting(true);
-    try {
-      await api.promoteQueryToGolden(result.query_id);
-      setPromoted(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPromoting(false);
-    }
-  };
-
-  const tagFailure = async (mode: FailureMode) => {
-    if (!result) return;
-    setFailureMode(mode);
-    setFeedback("negative");
-    try {
-      await api.tagFailureMode(result.query_id, mode);
-    } catch (err) {
-      setFailureMode(null);
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  return (
-    <>
-      <header className="mb-10">
-        <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
-          חיפוש
-        </div>
-        <h1 className="font-display text-5xl md:text-6xl font-black text-ink leading-[0.95]">
-          זיכרון ארגוני
-          <br />
-          <span className="text-ink-soft">נגיש מיידית.</span>
-        </h1>
-        <p className="text-ink-soft mt-5 text-base max-w-xl leading-relaxed">
-          שאל שאלה בעברית. המערכת תקרא את כל התקנונים, תאתר את המקורות
-          הרלוונטיים ביותר, ותחזיר תשובה מבוססת ציטוטים.
-        </p>
-      </header>
-
-      <form onSubmit={submit} className="mb-10">
-        <textarea
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              void runSearch(question);
-            }
-          }}
-          placeholder="לדוגמה: מה הוחלט בעניין קדימות לקומה שנייה?"
-          rows={3}
-          className="w-full px-4 py-3 bg-surface border-2 border-ink focus:border-accent outline-none text-base resize-none transition placeholder:text-ink-soft/70"
-        />
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <button
-            type="submit"
-            disabled={loading || !question.trim()}
-            className="px-8 py-3 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition min-w-[120px]"
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="inline-block w-2.5 h-2.5 bg-surface animate-pulse" />
-                <span>חושב</span>
-              </span>
-            ) : (
-              "שאל"
-            )}
-          </button>
-          <span className="text-xs text-ink-soft">
-            Cmd/Ctrl + Enter לשליחה מהירה
-          </span>
-        </div>
-      </form>
-
-      {loading && <ThinkingProgress stage={stage} detail={stageDetail} />}
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-sm whitespace-pre-wrap">
-          {error}
-        </div>
-      )}
-
-      {/* Virgin-state explainer + recent-questions list. Both shown only before
-          the first query lands; hidden the moment a result / error / loading
-          state appears. */}
-      {!result && !error && !loading && (
-        <>
-          <HowItWorks />
-          <RecentQuestions onPick={(q) => void runSearch(q)} />
-        </>
-      )}
-
-      {result && (
-        <div className="space-y-6 animate-fade-up">
-          {result.near_misses && result.near_misses.length > 0 && (
-            <div className="border-2 border-accent bg-surface">
-              <div className="px-4 py-2 bg-accent text-surface text-[11px] tracking-[0.2em] uppercase font-bold">
-                קיימת תשובה מאושרת קרובה בארכיון
-              </div>
-              <div>
-                {result.near_misses.map((nm) => (
-                  <details
-                    key={nm.authoritative_answer_id}
-                    className="border-t border-line first:border-t-0"
-                  >
-                    <summary className="px-4 py-3 cursor-pointer text-sm hover:bg-line/40">
-                      <span className="text-accent font-bold font-mono">
-                        {Math.round(nm.similarity * 100)}%
-                      </span>
-                      <span className="text-ink mr-3">{nm.canonical_question}</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t border-line text-sm leading-relaxed whitespace-pre-wrap text-ink-soft">
-                      {nm.answer}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* 0. Retry banner (after auto-retry from 👎 on cached answer) */}
-          {justRetried && (
-            <div className="px-4 py-3 bg-surface border-r-4 border-accent text-sm text-ink">
-              התשובה הקודמת הוסרה מהמטמון. הנה ניסיון חדש מבוסס מקורות.
-            </div>
-          )}
-
-          {/* 1. Confidence label — flat, no pill */}
-          <div className="flex items-center gap-4">
-            <span
-              className={`text-[11px] tracking-[0.25em] uppercase font-bold ${
-                result.confidence === "confident"
-                  ? "text-accent"
-                  : result.confidence === "uncertain"
-                  ? "text-amber-700"
-                  : "text-ink-soft"
-              }`}
-            >
-              {confidenceLabel[result.confidence] || result.confidence}
-            </span>
-            {result.served_from === "hitl_cache" && (
-              <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
-                מהמטמון המאושר
-              </span>
-            )}
-          </div>
-
-          {/* 2. Natural-language answer — the artifact */}
-          <article className="relative bg-surface">
-            <div className="absolute -right-1 top-0 bottom-0 w-1 bg-accent" />
-            <div className="pr-6 py-2">
-              <p className="font-display text-xl md:text-2xl leading-relaxed whitespace-pre-wrap text-ink">
-                {result.answer}
-              </p>
-            </div>
-
-            {result.confidence !== "refused" && (
-              <div className="mt-6 pt-4 border-t border-line flex flex-wrap items-center gap-2">
-                <span className="text-xs text-ink-soft ml-2">
-                  {retrying ? "מחפש שוב…" : "האם התשובה מדויקת?"}
-                </span>
-                <button
-                  onClick={() => submitFeedback("positive")}
-                  disabled={feedback !== null || retrying}
-                  className={`px-3 py-1.5 text-sm border transition ${
-                    feedback === "positive"
-                      ? "bg-ink text-surface border-ink"
-                      : "bg-surface border-line-strong hover:border-ink"
-                  }`}
-                >
-                  כן
-                </button>
-                <button
-                  onClick={() => submitFeedback("negative")}
-                  disabled={feedback !== null || retrying}
-                  className={`px-3 py-1.5 text-sm border transition ${
-                    feedback === "negative"
-                      ? "bg-accent text-surface border-accent"
-                      : "bg-surface border-line-strong hover:border-accent hover:text-accent"
-                  }`}
-                >
-                  לא
-                </button>
-                <button
-                  onClick={promoteToGolden}
-                  disabled={promoting || promoted}
-                  className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface disabled:opacity-50 text-ink-soft transition mr-auto"
-                  title="הפוך לשאלת זהב להרצה חוזרת"
-                >
-                  {promoted ? "✓ נשמר כשאלת זהב" : promoting ? "..." : "סמן כשאלת זהב"}
-                </button>
-              </div>
-            )}
-
-            {result.confidence !== "refused" && (
-              <ShareActions
-                question={result.question}
-                answer={result.answer}
-                references={result.references || []}
-              />
-            )}
-          </article>
-
-          {/* 3. Cited clauses — index-card aesthetic */}
-          {result.references && result.references.length > 0 && (
-            <div>
-              <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3 flex items-center gap-3">
-                <span>סימוכין</span>
-                <span className="flex-1 h-px bg-line" />
-              </div>
-              <div className="grid gap-px bg-line border border-line">
-                {result.references.map((r, i) => (
-                  <div
-                    key={`${r.title}-${r.section_number}-${i}`}
-                    className="p-4 bg-surface"
-                  >
-                    <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
-                      <span className="font-semibold text-ink">{r.title}</span>
-                      {r.section_number && (
-                        <span className="text-xs text-accent font-mono tracking-tight">
-                          {r.section_number}
-                        </span>
-                      )}
-                      {r.source_type && (
-                        <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft mr-auto">
-                          {r.source_type}
-                        </span>
-                      )}
-                    </div>
-                    {r.excerpt && (
-                      <blockquote className="text-sm text-ink-soft leading-relaxed">
-                        {r.excerpt}
-                      </blockquote>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {feedback === "negative" && !failureMode && (
-            <div className="border-2 border-ink p-4 bg-surface">
-              <div className="text-[11px] tracking-[0.25em] uppercase font-bold text-ink mb-3">
-                מה השתבש?
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(failureLabels) as FailureMode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => tagFailure(m)}
-                    className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-line/40 transition"
-                  >
-                    {failureLabels[m]}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-ink-soft mt-3 leading-relaxed">
-                "השליפה החטיאה" = החלקים הנכונים לא נמצאו. "הניסוח שגוי" =
-                החלקים נמצאו אבל התשובה לא נכונה.
-              </p>
-            </div>
-          )}
-
-          {failureMode && (
-            <div className="px-4 py-3 bg-surface border-r-4 border-accent text-sm text-ink">
-              נרשם: {failureLabels[failureMode]}
-            </div>
-          )}
-
-          {result.sources.length > 0 && (
-            <details className="border border-line">
-              <summary className="px-4 py-3 cursor-pointer hover:bg-line/40 text-[11px] tracking-[0.25em] uppercase font-bold text-ink-soft">
-                קטעי טקסט שנשלפו ({result.sources.length})
-              </summary>
-              <div className="border-t border-line grid gap-px bg-line">
-                {result.sources.map((s, i) => (
-                  <details key={s.chunk_id} className="bg-surface">
-                    <summary className="px-4 py-2.5 cursor-pointer hover:bg-line/40 text-sm flex items-baseline gap-3">
-                      <span className="font-mono text-accent">[{i + 1}]</span>
-                      <span className="text-ink">{s.document_filename}</span>
-                      {s.section_path && (
-                        <span className="text-ink-soft font-mono text-xs">
-                          {s.section_path}
-                        </span>
-                      )}
-                    </summary>
-                    <div className="px-4 py-3 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft">
-                      {s.text}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {result.retrieval_debug && <DebugPanel debug={result.retrieval_debug} />}
-        </div>
-      )}
-    </>
-  );
-}
-
-// Stages match the backend's SearchPipelineStage. Each stage maps to a fixed
-// bar position so real events from the server snap the bar to that point;
-// within a stage the bar inches forward by time so it doesn't look frozen
-// while we wait for the next event.
 const THINKING_STAGES: {
   key: SearchPipelineStage;
   label: string;
-  pct: number;        // bar % when this stage starts
-  typicalMs: number;  // typical time spent in this stage
+  pct: number;
+  typicalMs: number;
 }[] = [
-  { key: "analyzing",  label: "ניתוח השאלה",  pct: 0,  typicalMs: 800 },
-  { key: "searching",  label: "חיפוש בארכיון", pct: 20, typicalMs: 1500 },
-  { key: "ranking",    label: "דירוג מקורות",  pct: 45, typicalMs: 800 },
-  { key: "generating", label: "ניסוח תשובה",   pct: 65, typicalMs: 8000 },
+  { key: "analyzing", label: "ניתוח השאלה", pct: 0, typicalMs: 800 },
+  { key: "searching", label: "חיפוש בארכיון", pct: 20, typicalMs: 1500 },
+  { key: "ranking", label: "דירוג מקורות", pct: 45, typicalMs: 800 },
+  { key: "generating", label: "ניסוח תשובה", pct: 65, typicalMs: 8000 },
 ];
-const FINAL_PCT = 95; // bar cap until real "done" event lands
+const FINAL_PCT = 95;
 
 function ThinkingProgress({
   stage,
@@ -503,10 +756,7 @@ function ThinkingProgress({
   stage: SearchPipelineStage | null;
   detail: string | null;
 }) {
-  // Tick so the bar inches forward within the active stage.
   const [tick, setTick] = useState(0);
-  // Mark when each stage was entered so within-stage progress is computed
-  // relative to that point in time, not from page load.
   const [stageEnteredAt, setStageEnteredAt] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -517,7 +767,6 @@ function ThinkingProgress({
     const id = setInterval(() => setTick((t) => t + 1), 150);
     return () => clearInterval(id);
   }, []);
-  // touch tick so React doesn't warn it's unused; the value itself is irrelevant
   void tick;
 
   const stageIdx = THINKING_STAGES.findIndex((s) => s.key === stage);
@@ -527,21 +776,18 @@ function ThinkingProgress({
   const stageStartPct = current.pct;
   const stageEndPct = next ? next.pct : FINAL_PCT;
 
-  // Time-based fill within this stage: ramp toward stageEndPct over typicalMs,
-  // but ease so we approach (don't cross) the end. If the stage is slow, we
-  // sit near the boundary; once the next stage event fires, we jump cleanly.
   const elapsedInStage = Date.now() - stageEnteredAt;
   const progressRatio = 1 - Math.exp(-elapsedInStage / current.typicalMs);
   const pct = stageStartPct + (stageEndPct - stageStartPct) * progressRatio;
 
   return (
     <section
-      className="mb-8 py-5 border-y-2 border-ink animate-fade-up"
+      className="mb-6 py-4 border-y-2 border-ink animate-fade-up"
       role="status"
       aria-live="polite"
       aria-label="מתבצע חיפוש"
     >
-      <div className="h-[3px] bg-line overflow-hidden mb-4">
+      <div className="h-[3px] bg-line overflow-hidden mb-3">
         <div
           className="h-full bg-accent transition-[width] duration-300 ease-out"
           style={{ width: `${Math.min(pct, FINAL_PCT)}%` }}
@@ -549,8 +795,7 @@ function ThinkingProgress({
       </div>
       <div className="grid grid-cols-4 gap-2 text-[11px] tracking-wider uppercase font-bold">
         {THINKING_STAGES.map((s, i) => {
-          const state =
-            i < currentIdx ? "done" : i === currentIdx ? "active" : "pending";
+          const state = i < currentIdx ? "done" : i === currentIdx ? "active" : "pending";
           const cls =
             state === "active"
               ? "text-accent"
@@ -565,12 +810,12 @@ function ThinkingProgress({
           );
         })}
       </div>
-      {detail && (
-        <div className="mt-3 text-xs text-ink-soft">{detail}</div>
-      )}
+      {detail && <div className="mt-3 text-xs text-ink-soft">{detail}</div>}
     </section>
   );
 }
+
+// ─── Share (unchanged from v0.2) ───────────────────────────────────────
 
 const POWERED_BY = "Powered by זכרון ארגוני";
 
@@ -585,8 +830,7 @@ function buildShareText({
 }): { plain: string; markdown: string } {
   const refsList = references.length
     ? references.map(
-        (r) =>
-          `${r.title}${r.section_number ? ` — סעיף ${r.section_number}` : ""}`
+        (r) => `${r.title}${r.section_number ? ` — סעיף ${r.section_number}` : ""}`
       )
     : [];
 
@@ -639,8 +883,7 @@ function ShareActions({
       setCopied(which);
       setTimeout(() => setCopied(null), 1800);
     } catch {
-      // Fallback: very-old browsers — silently noop, the textarea trick is
-      // overkill for an internal tool.
+      /* noop */
     }
   };
 
@@ -650,7 +893,7 @@ function ShareActions({
     `&body=${encodeURIComponent(plain)}`;
 
   return (
-    <div className="mt-4 pt-4 border-t border-line">
+    <div className="pt-2 border-t border-line">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-ink-soft ml-2">שלח / העתק:</span>
         <a
@@ -686,49 +929,50 @@ function ShareActions({
   );
 }
 
-function RecentQuestions({ onPick }: { onPick: (q: string) => void }) {
-  const [questions, setQuestions] = useState<string[] | null>(null);
+// ─── Recent conversations sidebar (replaces "recent questions") ────────
+
+function RecentConversations({ onPick }: { onPick: (id: string) => void }) {
+  const [convs, setConvs] = useState<ConversationSummary[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     api
-      .recentQuestions(8)
-      .then((qs) => {
-        if (!cancelled) setQuestions(qs);
+      .listConversations(8)
+      .then((cs) => {
+        if (!cancelled) setConvs(cs);
       })
       .catch(() => {
-        if (!cancelled) setQuestions([]);
+        if (!cancelled) setConvs([]);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (questions === null || questions.length === 0) return null;
+  if (convs === null || convs.length === 0) return null;
 
   return (
     <section className="mt-10 animate-fade-up">
       <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4 flex items-center gap-3">
-        <span>שאלות אחרונות</span>
+        <span>שיחות אחרונות</span>
         <span className="flex-1 h-px bg-line" />
       </div>
       <ul className="border border-line">
-        {questions.map((q, i) => (
-          <li
-            key={q}
-            className={i > 0 ? "border-t border-line" : ""}
-          >
+        {convs.map((c, i) => (
+          <li key={c.id} className={i > 0 ? "border-t border-line" : ""}>
             <button
               type="button"
-              onClick={() => onPick(q)}
+              onClick={() => onPick(c.id)}
               className="group w-full text-right px-4 py-3 hover:bg-line/40 transition flex items-baseline gap-4 text-sm text-ink"
             >
               <span className="font-mono text-xs text-ink-soft group-hover:text-accent transition w-6 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <span className="flex-1">{q}</span>
-              <span className="text-ink-soft group-hover:text-accent transition text-xs opacity-0 group-hover:opacity-100">
-                ←
+              <span className="flex-1 truncate">
+                {c.title || c.last_user_question || "(שיחה ללא כותרת)"}
+              </span>
+              <span className="text-xs text-ink-soft shrink-0">
+                {c.turn_count} {c.turn_count === 1 ? "תור" : "תורים"}
               </span>
             </button>
           </li>
@@ -741,41 +985,38 @@ function RecentQuestions({ onPick }: { onPick: (q: string) => void }) {
 function HowItWorks() {
   const steps: { title: string; body: React.ReactNode }[] = [
     {
-      title: "פירוק מסמכים",
+      title: "תחילת שיחה",
       body: (
         <>
-          כל תקנון מחולק אוטומטית לסעיפים, פרקים ונהלים — היחידה הקטנה
-          ביותר של משמעות בשפה משפטית.
+          שאל שאלה רגילה. אם משהו חסר כדי לתת תשובה מדויקת — המערכת תבקש הבהרה
+          קצרה לפני שתחפש.
         </>
       ),
     },
     {
-      title: "טביעת אצבע סמנטית",
+      title: "הבהרה",
       body: (
         <>
-          מודל שפה מתרגם כל קטע לייצוג מספרי שלוכד את <em>המשמעות</em>, לא
-          רק את המילים. שני קטעים שמדברים על אותו דבר במילים שונות יקבלו
-          טביעות אצבע דומות.
+          לדוגמה: "האם אתה חבר הקיבוץ או יורש בלבד? הכוונה לתקנון השיוך או
+          להסדר רישום הדירות?". תוכל ללחוץ על אחת ההצעות או לכתוב חופשי.
         </>
       ),
     },
     {
-      title: "התאמה לשאלה",
+      title: "אחזור עם הקשר",
       body: (
         <>
-          השאלה מתורגמת לטביעת אצבע משלה. המערכת מאתרת את הקטעים הקרובים
-          אליה ביותר במשמעות, ובמקביל גם חיפוש מילולי לאיתור מספרי סעיפים
-          ספציפיים. מנוע דירוג ייעודי מעלה את הרלוונטיים ביותר לראש.
+          המערכת קוראת את כל ההיסטוריה של השיחה, מאתרת את הסעיפים הרלוונטיים
+          לפי משמעות ולפי מילים, ומדרגת אותם.
         </>
       ),
     },
     {
-      title: "ניסוח עם מקורות",
+      title: "תשובה מצוטטת",
       body: (
         <>
-          הקטעים הרלוונטיים נשלחים ל-Claude שמנסח תשובה תוך ציטוט המקור
-          המדויק. אם אין מספיק עוגן במסמכים — המערכת תאמר שלא מצאה תשובה,
-          ולא תמציא.
+          הקטעים הנבחרים נשלחים ל-Claude שמנסח תשובה תוך ציטוט המקור. אם אין
+          מספיק עוגן במסמכים — המערכת תאמר ולא תמציא.
         </>
       ),
     },
@@ -789,30 +1030,21 @@ function HowItWorks() {
       </div>
 
       <p className="text-sm text-ink-soft leading-relaxed mb-6 max-w-2xl">
-        זה לא חיפוש מילים כמו Ctrl+F — המערכת קוראת את התקנונים
-        <strong className="text-ink"> לפי משמעות </strong>
-        ומשתמשת ב-AI כדי לנסח תשובה מבוססת מקורות.
+        זו לא חיפוש חד-פעמי — זו שיחה. כשאתה מבהיר את הכוונה, המערכת לומדת
+        מההמשך ועונה טוב יותר בפעם הבאה.
       </p>
 
       <ol className="grid md:grid-cols-2 gap-px bg-line border border-line">
         {steps.map((s, i) => (
           <li key={s.title} className="bg-surface p-5">
             <div className="flex items-baseline gap-3 mb-2">
-              <span className="font-mono text-accent font-bold text-sm">
-                0{i + 1}
-              </span>
+              <span className="font-mono text-accent font-bold text-sm">0{i + 1}</span>
               <h3 className="font-display font-bold text-ink">{s.title}</h3>
             </div>
             <p className="text-sm text-ink-soft leading-relaxed">{s.body}</p>
           </li>
         ))}
       </ol>
-
-      <div className="mt-4 pt-4 border-t border-line text-xs text-ink-soft leading-relaxed">
-        <span className="text-ink font-semibold">זמן תגובה:</span> בדרך כלל 5–15
-        שניות. המערכת קוראת, מבינה, ומחברת בין סעיפים בכל שאלה. סבלנות שווה
-        תשובה איכותית.
-      </div>
     </section>
   );
 }

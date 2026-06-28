@@ -26,6 +26,9 @@ def find_relevant_terms(db: Session, *, tenant_id: UUID, question: str) -> list[
     candidates = (
         db.query(Lexicon)
         .filter(Lexicon.tenant_id == tenant_id)
+        # Only active entries influence retrieval. Learned-but-pending entries
+        # stay out of the loop until a reviewer accepts them.
+        .filter(Lexicon.status == "active")
         .all()
     )
     hits = [c for c in candidates if c.term and c.term in question]

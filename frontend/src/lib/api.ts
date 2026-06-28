@@ -58,17 +58,67 @@ export type NearMiss = {
   similarity: number;
 };
 
+export type TurnMode = "answer" | "clarify";
+
 export type SearchResponse = {
   query_id: string;
+  conversation_id: string;
+  turn_index: number;
+  // Chat triage outcome. "answer" = sources + answer in this response.
+  // "clarify" = the assistant asked for clarification; no sources yet.
+  mode: TurnMode;
+  // Rewritten query actually used for retrieval, when it differs from
+  // `question`. Surfaced for debugging / golden-set diagnosis.
+  canonical_query: string | null;
+  clarifying_message: string | null;
+  candidate_docs: string[];
   question: string;
   answer: string;
-  confidence: "confident" | "uncertain" | "refused";
+  // "clarifying" appears alongside the legacy confidence values when
+  // mode == "clarify".
+  confidence: "confident" | "uncertain" | "refused" | "clarifying";
   sources: Source[];
   references: StructuredReference[];
   llm_used: boolean;
-  served_from: "hitl_cache" | "llm" | "no_documents";
+  served_from: "hitl_cache" | "llm" | "no_documents" | "clarify";
   retrieval_debug: RetrievalDebug | null;
   near_misses: NearMiss[];
+};
+
+export type ConversationSummary = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  turn_count: number;
+  last_user_question: string | null;
+  last_assistant_answer: string | null;
+};
+
+export type TurnSource = {
+  chunk_id: string;
+  document_filename: string;
+  section_path: string | null;
+};
+
+export type ConversationTurn = {
+  query_id: string;
+  turn_index: number | null;
+  question: string;
+  answer: string | null;
+  confidence: string | null;
+  mode: TurnMode;
+  sources: TurnSource[];
+  feedback: string | null;
+  created_at: string;
+};
+
+export type ConversationDetail = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  turns: ConversationTurn[];
 };
 
 export type SearchPipelineStage =
@@ -165,6 +215,10 @@ export type LexiconItem = {
   term: string;
   expansion: string;
   notes: string | null;
+  source: "manual" | "learned";
+  status: "active" | "pending" | "rejected";
+  confidence: number | null;
+  evidence: Record<string, unknown> | null;
   updated_at: string;
 };
 
@@ -256,10 +310,10 @@ export const api = {
   exitSwitch: () =>
     request<CurrentUser>("/api/auth/exit-switch", { method: "POST" }),
 
-  search: (question: string) =>
+  search: (question: string, conversationId?: string | null) =>
     request<SearchResponse>("/api/search", {
       method: "POST",
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, conversation_id: conversationId || null }),
     }),
 
   recentQuestions: (limit = 8) =>
@@ -274,13 +328,14 @@ export const api = {
    */
   searchStream: async (
     question: string,
-    onEvent: (ev: SearchStreamEvent) => void
+    onEvent: (ev: SearchStreamEvent) => void,
+    conversationId?: string | null
   ): Promise<SearchResponse> => {
     const r = await fetch(`${BASE}/api/search/stream`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, conversation_id: conversationId || null }),
     });
     if (!r.ok || !r.body) {
       const body = await r.text().catch(() => "");
@@ -406,6 +461,19 @@ export const api = {
     return r.json();
   },
 
+  // Conversations
+  listConversations: (limit = 30) =>
+    request<ConversationSummary[]>(`/api/conversations?limit=${limit}`),
+  getConversation: (id: string) =>
+    request<ConversationDetail>(`/api/conversations/${id}`),
+  renameConversation: (id: string, title: string) =>
+    request<{ status: string }>(`/api/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  deleteConversation: (id: string) =>
+    request<{ status: string }>(`/api/conversations/${id}`, { method: "DELETE" }),
+
   // Lexicon
   listLexicon: () => request<LexiconItem[]>("/api/reviewer/lexicon"),
   suggestLexicon: () =>
@@ -415,7 +483,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  updateLexicon: (id: string, body: Partial<{ term: string; expansion: string; notes: string }>) =>
+  updateLexicon: (
+    id: string,
+    body: Partial<{ term: string; expansion: string; notes: string; status: "active" | "pending" | "rejected" }>
+  ) =>
     request<{ status: string }>(`/api/reviewer/lexicon/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

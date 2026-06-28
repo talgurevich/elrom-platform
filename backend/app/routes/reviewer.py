@@ -238,6 +238,11 @@ class LexiconItem(BaseModel):
     term: str
     expansion: str
     notes: str | None
+    # Provenance fields — let the reviewer page sort learned vs manual entries.
+    source: str = "manual"  # manual | learned
+    status: str = "active"  # active | pending | rejected
+    confidence: float | None = None
+    evidence: dict | None = None
     updated_at: str
 
 
@@ -251,26 +256,38 @@ class UpdateLexiconRequest(BaseModel):
     term: str | None = None
     expansion: str | None = None
     notes: str | None = None
+    # Reviewer-only: approve / reject / re-activate learned entries.
+    status: str | None = None
 
 
 @router.get("/lexicon", response_model=list[LexiconItem])
 def list_lexicon(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
+    status: str | None = None,
 ) -> list[LexiconItem]:
-    """List lexicon entries for the caller's tenant."""
-    rows = (
-        db.query(Lexicon)
-        .filter(Lexicon.tenant_id == user.tenant_id)
-        .order_by(Lexicon.term)
-        .all()
-    )
+    """List lexicon entries for the caller's tenant.
+
+    Without ``status``, returns active + pending entries (so the reviewer
+    sees both their curated lexicon and the queue of learner-proposed
+    additions). Pass ``status=rejected`` to inspect what's been suppressed.
+    """
+    q = db.query(Lexicon).filter(Lexicon.tenant_id == user.tenant_id)
+    if status is not None:
+        q = q.filter(Lexicon.status == status)
+    else:
+        q = q.filter(Lexicon.status.in_(["active", "pending"]))
+    rows = q.order_by(Lexicon.status.desc(), Lexicon.term).all()
     return [
         LexiconItem(
             id=r.id,
             term=r.term,
             expansion=r.expansion,
             notes=r.notes,
+            source=r.source or "manual",
+            status=r.status or "active",
+            confidence=r.confidence,
+            evidence=r.evidence,
             updated_at=r.updated_at.isoformat() if r.updated_at else "",
         )
         for r in rows
@@ -323,6 +340,10 @@ def update_lexicon(
         entry.expansion = req.expansion.strip()
     if req.notes is not None:
         entry.notes = req.notes
+    if req.status is not None:
+        if req.status not in {"active", "pending", "rejected"}:
+            raise HTTPException(400, "status must be active|pending|rejected")
+        entry.status = req.status
     db.commit()
     log.info("lexicon.updated", lex_id=str(lex_id))
     return {"status": "ok"}
