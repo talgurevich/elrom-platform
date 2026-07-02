@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type DocumentItem, type UploadResponse } from "../lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  api,
+  type ChunkPreview,
+  type DocumentItem,
+  type DocumentMetadataPatch,
+  type UploadResponse,
+} from "../lib/api";
 
 type SortKey = "recent" | "alpha" | "chunks";
 type GroupKey = "none" | "type" | "folder";
@@ -311,6 +317,16 @@ export default function Upload() {
   };
 
   const queuedCount = queue.filter((e) => e.status.kind === "queued").length;
+
+  // Drawer state — which document is open for browsing/metadata review.
+  const [openDoc, setOpenDoc] = useState<DocumentItem | null>(null);
+  // Kept fresh so patched metadata immediately reflects in the drawer + row.
+  const refreshOpen = (patched: DocumentItem | null) => {
+    setOpenDoc(patched);
+    if (patched) {
+      setDocs((ds) => ds.map((d) => (d.id === patched.id ? patched : d)));
+    }
+  };
 
   return (
     <>
@@ -678,7 +694,12 @@ export default function Upload() {
                 </div>
                 <div className="space-y-2">
                   {g.items.map((d) => (
-                    <DocumentRow key={d.id} doc={d} onDelete={() => deleteDoc(d)} />
+                    <DocumentRow
+                      key={d.id}
+                      doc={d}
+                      onDelete={() => deleteDoc(d)}
+                      onOpen={() => setOpenDoc(d)}
+                    />
                   ))}
                 </div>
               </div>
@@ -687,11 +708,24 @@ export default function Upload() {
         ) : (
           <div className="space-y-2">
             {filteredSortedDocs.map((d) => (
-              <DocumentRow key={d.id} doc={d} onDelete={() => deleteDoc(d)} />
+              <DocumentRow
+                key={d.id}
+                doc={d}
+                onDelete={() => deleteDoc(d)}
+                onOpen={() => setOpenDoc(d)}
+              />
             ))}
           </div>
         )}
       </section>
+
+      {openDoc && (
+        <DocumentDrawer
+          doc={openDoc}
+          onClose={() => setOpenDoc(null)}
+          onSaved={(patched) => refreshOpen(patched)}
+        />
+      )}
     </>
   );
 }
@@ -699,12 +733,26 @@ export default function Upload() {
 function DocumentRow({
   doc,
   onDelete,
+  onOpen,
 }: {
   doc: DocumentItem;
   onDelete: () => void;
+  onOpen: () => void;
 }) {
+  const needsReview = !!doc.ai_classified && !doc.metadata_reviewed;
   return (
-    <div className="p-4 bg-surface border border-line">
+    <div
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="p-4 bg-surface border border-line hover:border-accent hover:bg-line/30 transition cursor-pointer"
+    >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
@@ -712,6 +760,14 @@ function DocumentRow({
             {doc.ai_classified && (
               <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent border border-accent px-1.5 py-0.5">
                 AI
+              </span>
+            )}
+            {needsReview && (
+              <span
+                className="text-[10px] tracking-[0.2em] uppercase font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5"
+                title="המערכת מילאה מטא־דאטה אוטומטית — כדאי לאשר"
+              >
+                בדיקה
               </span>
             )}
             {doc.doc_type && (
@@ -722,6 +778,14 @@ function DocumentRow({
             {doc.folder && (
               <span className="text-[10px] tracking-[0.2em] uppercase font-bold bg-ink text-surface px-1.5 py-0.5">
                 {doc.folder}
+              </span>
+            )}
+            {doc.effective_date && (
+              <span
+                className="text-[10px] font-mono text-ink-soft border border-line-strong px-1.5 py-0.5"
+                title="תאריך תוקף"
+              >
+                {doc.effective_date}
               </span>
             )}
           </div>
@@ -751,12 +815,416 @@ function DocumentRow({
           )}
         </div>
         <button
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
           className="text-xs px-3 py-1.5 text-ink-soft hover:text-accent hover:border-accent border border-transparent transition shrink-0"
         >
           מחק
         </button>
       </div>
     </div>
+  );
+}
+
+type DrawerTab = "details" | "content";
+
+function DocumentDrawer({
+  doc,
+  onClose,
+  onSaved,
+}: {
+  doc: DocumentItem;
+  onClose: () => void;
+  onSaved: (patched: DocumentItem) => void;
+}) {
+  const [tab, setTab] = useState<DrawerTab>("details");
+  const [chunks, setChunks] = useState<ChunkPreview[] | null>(null);
+  const [chunksLoading, setChunksLoading] = useState(false);
+  const [chunksErr, setChunksErr] = useState<string | null>(null);
+
+  const [form, setForm] = useState<DocumentMetadataPatch>({
+    doc_type: doc.doc_type || undefined,
+    folder: doc.folder || undefined,
+    effective_date: doc.effective_date || undefined,
+    document_date: doc.document_date || undefined,
+    meeting_number: doc.meeting_number || undefined,
+    decision_number: doc.decision_number || undefined,
+    bylaw_section_range: doc.bylaw_section_range || undefined,
+    parties: doc.parties || undefined,
+    summary: doc.summary || undefined,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [chunkQuery, setChunkQuery] = useState("");
+
+  useEffect(() => {
+    if (tab !== "content" || chunks !== null) return;
+    setChunksLoading(true);
+    setChunksErr(null);
+    api
+      .getDocumentChunks(doc.id)
+      .then((rows) => setChunks(rows))
+      .catch((err) =>
+        setChunksErr(err instanceof Error ? err.message : String(err))
+      )
+      .finally(() => setChunksLoading(false));
+  }, [tab, doc.id, chunks]);
+
+  // Escape to close.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const dtype = form.doc_type || doc.doc_type || "";
+  const showMeeting = dtype === "minutes";
+  const showDecision = dtype === "decision";
+  const showBylawRange = dtype === "bylaw" || dtype === "sub_bylaw";
+  const showParties = dtype === "other";
+
+  const filteredChunks = useMemo(() => {
+    if (!chunks || !chunkQuery.trim()) return chunks || [];
+    const q = chunkQuery.trim();
+    return chunks.filter(
+      (c) =>
+        (c.text || "").includes(q) ||
+        (c.section_path || "").includes(q)
+    );
+  }, [chunks, chunkQuery]);
+
+  const save = async () => {
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      // Send only the fields that are non-empty; empty strings clear.
+      const payload: DocumentMetadataPatch = {};
+      const keys: (keyof DocumentMetadataPatch)[] = [
+        "doc_type",
+        "folder",
+        "effective_date",
+        "document_date",
+        "meeting_number",
+        "decision_number",
+        "bylaw_section_range",
+        "summary",
+      ];
+      for (const k of keys) {
+        const v = form[k];
+        if (typeof v === "string") payload[k] = v as never;
+      }
+      if (Array.isArray(form.parties)) payload.parties = form.parties;
+
+      await api.updateDocumentMetadata(doc.id, payload);
+      const patched: DocumentItem = {
+        ...doc,
+        doc_type: payload.doc_type ?? doc.doc_type,
+        folder: payload.folder ?? doc.folder,
+        effective_date: payload.effective_date ?? doc.effective_date,
+        document_date: payload.document_date ?? doc.document_date,
+        meeting_number: payload.meeting_number ?? doc.meeting_number,
+        decision_number: payload.decision_number ?? doc.decision_number,
+        bylaw_section_range:
+          payload.bylaw_section_range ?? doc.bylaw_section_range,
+        parties: payload.parties ?? doc.parties,
+        summary: payload.summary ?? doc.summary,
+        metadata_reviewed: true,
+      };
+      onSaved(patched);
+    } catch (err) {
+      setSaveErr(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-ink/40 z-40 animate-fade-up"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        role="dialog"
+        aria-label={`מסמך: ${doc.filename}`}
+        className="fixed top-0 bottom-0 left-0 w-full max-w-[560px] bg-surface z-50 border-l border-ink flex flex-col animate-fade-up shadow-2xl"
+      >
+        <header className="border-b border-line px-5 py-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-1">
+              {DOC_TYPE_LABELS[doc.doc_type || "unclassified"]}
+              {doc.folder && ` · ${doc.folder}`}
+            </div>
+            <div className="font-display font-black text-lg text-ink leading-tight truncate">
+              {doc.filename}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-ink-soft hover:text-ink text-xl leading-none px-2"
+            aria-label="סגור"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="flex border-b border-line">
+          <button
+            onClick={() => setTab("details")}
+            className={`flex-1 py-2.5 text-sm font-semibold ${
+              tab === "details"
+                ? "bg-ink text-surface"
+                : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            פרטים
+          </button>
+          <button
+            onClick={() => setTab("content")}
+            className={`flex-1 py-2.5 text-sm font-semibold ${
+              tab === "content"
+                ? "bg-ink text-surface"
+                : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            תוכן ({doc.chunks} קטעים)
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {tab === "details" ? (
+            <div className="p-5 space-y-4 text-sm">
+              {doc.ai_classified && !doc.metadata_reviewed && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                  המערכת מילאה את השדות אוטומטית מקריאת המסמך. אנא ודא ותקן
+                  לפני שמירה.
+                </div>
+              )}
+
+              <Field label="סוג מסמך">
+                <select
+                  value={form.doc_type || ""}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, doc_type: e.target.value }))
+                  }
+                  className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                >
+                  <option value="">—</option>
+                  {docTypes.map((dt) => (
+                    <option key={dt.value} value={dt.value}>
+                      {dt.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="תיקייה">
+                <input
+                  type="text"
+                  value={form.folder || ""}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, folder: e.target.value }))
+                  }
+                  placeholder="למשל: פנסיה, שיוך דירות"
+                  className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="תאריך המסמך" hint="מופיע במסמך">
+                  <input
+                    type="date"
+                    value={form.document_date || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, document_date: e.target.value }))
+                    }
+                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  />
+                </Field>
+                <Field label="תאריך תוקף" hint="נכנס לתוקף">
+                  <input
+                    type="date"
+                    value={form.effective_date || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, effective_date: e.target.value }))
+                    }
+                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  />
+                </Field>
+              </div>
+
+              {showMeeting && (
+                <Field label="מספר ישיבה">
+                  <input
+                    type="text"
+                    value={form.meeting_number || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, meeting_number: e.target.value }))
+                    }
+                    placeholder="למשל: 234"
+                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  />
+                </Field>
+              )}
+              {showDecision && (
+                <Field label="מספר החלטה">
+                  <input
+                    type="text"
+                    value={form.decision_number || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        decision_number: e.target.value,
+                      }))
+                    }
+                    placeholder="למשל: 47/22"
+                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  />
+                </Field>
+              )}
+              {showBylawRange && (
+                <Field label="טווח סעיפים">
+                  <input
+                    type="text"
+                    value={form.bylaw_section_range || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        bylaw_section_range: e.target.value,
+                      }))
+                    }
+                    placeholder="למשל: סעיפים 12-18"
+                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  />
+                </Field>
+              )}
+              {showParties && (
+                <Field label="צדדים" hint="שורה לכל צד">
+                  <textarea
+                    value={(form.parties || []).join("\n")}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        parties: e.target.value
+                          .split("\n")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      }))
+                    }
+                    rows={3}
+                    className="w-full px-2 py-1.5 border border-line-strong bg-white font-mono text-xs"
+                  />
+                </Field>
+              )}
+
+              <Field label="תקציר">
+                <textarea
+                  value={form.summary || ""}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, summary: e.target.value }))
+                  }
+                  rows={3}
+                  className="w-full px-2 py-1.5 border border-line-strong bg-white leading-relaxed"
+                />
+              </Field>
+
+              {saveErr && (
+                <div className="p-2 bg-red-50 border border-red-200 text-red-800 text-xs">
+                  {saveErr}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={save}
+                  disabled={saving}
+                  className="px-4 py-2 bg-accent text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  {saving ? "שומר..." : "שמור ואשר"}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm text-ink-soft hover:text-ink"
+                >
+                  ביטול
+                </button>
+                {doc.metadata_reviewed && (
+                  <span className="mr-auto text-[10px] tracking-[0.2em] uppercase text-emerald-700 self-center">
+                    ✓ אושר
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col h-full">
+              <div className="p-3 border-b border-line bg-surface sticky top-0">
+                <input
+                  type="text"
+                  placeholder="חיפוש בטקסט המסמך…"
+                  value={chunkQuery}
+                  onChange={(e) => setChunkQuery(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-line-strong bg-white text-sm"
+                />
+              </div>
+              {chunksLoading ? (
+                <div className="p-5 text-sm text-ink-soft">טוען קטעים...</div>
+              ) : chunksErr ? (
+                <div className="p-5 text-sm text-red-700">{chunksErr}</div>
+              ) : filteredChunks.length === 0 ? (
+                <div className="p-5 text-sm text-ink-soft">
+                  {chunks && chunks.length === 0
+                    ? "אין קטעים במסמך."
+                    : "לא נמצא טקסט תואם."}
+                </div>
+              ) : (
+                <div className="divide-y divide-line">
+                  {filteredChunks.map((c) => (
+                    <div key={c.position} className="p-4">
+                      <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-2 flex gap-3">
+                        <span>#{c.position + 1}</span>
+                        {c.section_path && <span>{c.section_path}</span>}
+                        <span className="font-mono">{c.chars} תווים</span>
+                      </div>
+                      <div className="text-sm text-ink leading-relaxed whitespace-pre-wrap">
+                        {c.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-1 flex items-baseline gap-2">
+        <span>{label}</span>
+        {hint && (
+          <span className="normal-case tracking-normal text-ink-soft/70 font-normal">
+            {hint}
+          </span>
+        )}
+      </div>
+      {children}
+    </label>
   );
 }

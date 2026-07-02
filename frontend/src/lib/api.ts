@@ -260,7 +260,34 @@ export type DocumentItem = {
   extraction_partial?: boolean;
   extraction_note?: string | null;
   quality?: "ok" | "partial" | "low_density" | "suspect" | "unknown";
+  // AI-extracted / user-editable metadata surfaced in the review dialog.
+  effective_date?: string | null;
+  document_date?: string | null;
+  meeting_number?: string | null;
+  decision_number?: string | null;
+  bylaw_section_range?: string | null;
+  parties?: string[] | null;
+  metadata_reviewed?: boolean;
 };
+
+export type ChunkPreview = {
+  position: number;
+  section_path: string | null;
+  chars: number;
+  text: string;
+};
+
+export type DocumentMetadataPatch = Partial<{
+  doc_type: string;
+  folder: string;
+  effective_date: string;
+  document_date: string;
+  meeting_number: string;
+  decision_number: string;
+  bylaw_section_range: string;
+  parties: string[];
+  summary: string;
+}>;
 
 export type ClassifyResult = {
   document_id: string;
@@ -463,6 +490,13 @@ export const api = {
       `/api/documents?confirm=true`,
       { method: "DELETE" }
     ),
+  getDocumentChunks: (id: string) =>
+    request<ChunkPreview[]>(`/api/documents/${id}/chunks`),
+  updateDocumentMetadata: (id: string, patch: DocumentMetadataPatch) =>
+    request<{ status: string }>(`/api/documents/${id}/metadata`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
   classifyDocuments: (force = false) =>
     request<ClassifySummary>(
       `/api/documents/classify${force ? "?force=true" : ""}`,

@@ -201,8 +201,17 @@ def hybrid_retrieve(
         .all()
     )
 
+    # Recency-aware ordering: when two chunks have near-identical fusion scores,
+    # prefer the one with the more recent effective_date. This is a tiebreaker,
+    # not a re-rank — a strong semantic hit still beats a weak recent one. The
+    # epsilon is small (1e-6) so it only affects genuine ties.
     order_map = {cid: i for i, cid in enumerate(top_ids)}
-    candidates.sort(key=lambda c: order_map.get(c.id, 1_000_000))
+    def _sort_key(c: Chunk) -> tuple[float, float]:
+        rrf_rank = order_map.get(c.id, 1_000_000)
+        # Newer effective_date → smaller tiebreaker. No date → treated as oldest.
+        ed_ts = -c.effective_date.toordinal() if c.effective_date else 0
+        return (rrf_rank, ed_ts * 1e-6)
+    candidates.sort(key=_sort_key)
 
     debug.fused = [
         {

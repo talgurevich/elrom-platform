@@ -1,12 +1,13 @@
 """Document management endpoints — list, delete, and AI-classify."""
 import json
 import re
+from datetime import date
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query as QParam
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -47,6 +48,15 @@ class DocumentItem(BaseModel):
     extraction_partial: bool = False
     extraction_note: str | None = None
     quality: str = "unknown"  # ok | low_density | partial | suspect | unknown
+    # AI-extracted / user-editable metadata surfaced for the review dialog and
+    # the retrieval-time date filters.
+    effective_date: str | None = None  # canonical column, ISO YYYY-MM-DD
+    document_date: str | None = None   # date printed on the doc
+    meeting_number: str | None = None
+    decision_number: str | None = None
+    bylaw_section_range: str | None = None
+    parties: list[str] | None = None
+    metadata_reviewed: bool = False  # user confirmed via the review dialog
 
 
 def _quality_verdict(
@@ -94,6 +104,7 @@ def list_documents(
             Document.extraction_partial,
             Document.extraction_note,
             Document.folder,
+            Document.effective_date,
             func.count(Chunk.id).label("chunks"),
             func.coalesce(func.sum(func.length(Chunk.text)), 0).label("chars"),
         )
@@ -104,6 +115,9 @@ def list_documents(
     )
     rows = db.execute(stmt).all()
 
+    def _md(r) -> dict:
+        return r.doc_metadata or {}
+
     return [
         DocumentItem(
             id=r.id,
@@ -112,8 +126,8 @@ def list_documents(
             chunks=int(r.chunks),
             chars=int(r.chars),
             ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",
-            summary=(r.doc_metadata or {}).get("summary") if r.doc_metadata else None,
-            ai_classified=bool((r.doc_metadata or {}).get("ai_classified")) if r.doc_metadata else False,
+            summary=_md(r).get("summary"),
+            ai_classified=bool(_md(r).get("ai_classified")),
             folder=r.folder,
             extractor=r.extractor,
             used_ocr=bool(r.used_ocr),
@@ -127,6 +141,13 @@ def list_documents(
                 extraction_partial=bool(r.extraction_partial),
                 chunks=int(r.chunks),
             ),
+            effective_date=r.effective_date.isoformat() if r.effective_date else None,
+            document_date=_md(r).get("document_date"),
+            meeting_number=_md(r).get("meeting_number"),
+            decision_number=_md(r).get("decision_number"),
+            bylaw_section_range=_md(r).get("bylaw_section_range"),
+            parties=_md(r).get("parties"),
+            metadata_reviewed=bool(_md(r).get("metadata_reviewed")),
         )
         for r in rows
     ]
@@ -175,12 +196,18 @@ class ClassifySummary(BaseModel):
     results: list[ClassifyResult]
 
 
-_CLASSIFY_SYSTEM_BASE = """אתה מסווג מסמכים של קיבוץ אל-רום. קבל קטע מתחילת המסמך וחזור JSON תקין (ללא markdown) עם 4 שדות:
+_CLASSIFY_SYSTEM_BASE = """אתה מסווג מסמכים של קיבוץ אל-רום. קבל קטע מתחילת המסמך וחזור JSON תקין (ללא markdown) עם השדות הבאים. שדות שאינם רלוונטיים או שלא נמצאו במסמך — החזר null.
 {
   "title": "כותרת קצרה בעברית, 3-8 מילים, שמתארת את התוכן (למשל: 'תקנון שיוך דירות', 'פרוטוקול אסיפה 23.11.2022', 'החלטה על נוהל הקדמה לקומה שנייה')",
   "doc_type": "אחד מ: bylaw, sub_bylaw, minutes, decision, other",
-  "folder": "שם תיקייה נושאית קצרה (1-2 מילים) בעברית, מתאר את התחום של המסמך — לדוגמה: 'פנסיה', 'קליטה', 'סיעוד', 'מבנה ארגוני', 'שיוך דירות'. לא 'תקנון פנסיה' (זה כותרת, לא תיקייה).",
-  "summary": "משפט אחד עד שניים על מה המסמך, בעברית"
+  "folder": "שם תיקייה נושאית קצרה (1-2 מילים) בעברית — לדוגמה: 'פנסיה', 'קליטה', 'סיעוד', 'מבנה ארגוני', 'שיוך דירות'. לא 'תקנון פנסיה' (זה כותרת, לא תיקייה).",
+  "summary": "משפט אחד עד שניים על מה המסמך, בעברית",
+  "document_date": "התאריך המופיע על המסמך (תאריך חתימה / הדפסה / כתיבה), פורמט ISO YYYY-MM-DD. null אם לא מופיע.",
+  "effective_date": "תאריך תוקף של המסמך (מתי הוא נכנס לתוקף / קיבל אישור). לרוב שווה ל-document_date עבור החלטות ופרוטוקולים. פורמט YYYY-MM-DD. null אם לא ניתן להסיק.",
+  "meeting_number": "מספר ישיבה (רק ל-minutes) — לדוגמה '234' עבור 'ישיבת מזכירות מס' 234'. null אחרת.",
+  "decision_number": "מספר החלטה (רק ל-decision) — לדוגמה '47/22'. null אחרת.",
+  "bylaw_section_range": "טווח סעיפים (רק ל-bylaw / sub_bylaw) — לדוגמה 'סעיפים 12-18'. null אחרת.",
+  "parties": "רשימת צדדים לחוזה (רק ל-other כשמדובר בחוזה/הסכם) — מערך מחרוזות. null אחרת."
 }
 
 doc_type:
@@ -189,6 +216,8 @@ doc_type:
 - אם זה פרוטוקול אסיפה — doc_type = minutes.
 - אם זו החלטה ספציפית — doc_type = decision.
 - אחרת — other.
+
+תאריכים עבריים (למשל "כ״ב בחשוון תשפ״ג") — המר לגרגוריאני אם ברור, אחרת null.
 
 JSON בלבד, ללא הסברים, ללא ```fences."""
 
@@ -298,6 +327,31 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
         folder = str(data.get("folder") or "").strip() or None
         summary = str(data.get("summary") or "").strip()
 
+        # New structured metadata fields (all optional, all can be null).
+        def _iso_date(v) -> str | None:
+            if not v:
+                return None
+            s = str(v).strip()
+            try:
+                date.fromisoformat(s)
+                return s
+            except ValueError:
+                return None
+
+        document_date = _iso_date(data.get("document_date"))
+        effective_date = _iso_date(data.get("effective_date")) or document_date
+        meeting_number = (str(data.get("meeting_number")).strip() if data.get("meeting_number") else None)
+        decision_number = (str(data.get("decision_number")).strip() if data.get("decision_number") else None)
+        bylaw_section_range = (
+            str(data.get("bylaw_section_range")).strip() if data.get("bylaw_section_range") else None
+        )
+        parties_raw = data.get("parties")
+        parties = (
+            [str(p).strip() for p in parties_raw if str(p).strip()]
+            if isinstance(parties_raw, list)
+            else None
+        )
+
         new_filename = doc.filename
         original_filename = meta.get("original_filename") or doc.filename
         filename_changed = False
@@ -310,13 +364,45 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
             doc.doc_type = doc_type
         if folder:
             doc.folder = folder
+        # effective_date lives on its own column — populate it if we extracted
+        # something and it isn't already set by a human. (Never overwrite a
+        # user-confirmed value with a fresh AI guess on re-classify.)
+        user_reviewed = bool(meta.get("metadata_reviewed"))
+        if effective_date and not user_reviewed:
+            try:
+                doc.effective_date = date.fromisoformat(effective_date)
+            except ValueError:
+                pass
         doc.doc_metadata = {
             **meta,
             "ai_classified": True,
             "ai_title": title,
             "summary": summary,
             "original_filename": original_filename,
+            # Only overwrite structured fields when the user hasn't confirmed
+            # them yet. Once metadata_reviewed=True, the user's edits win over
+            # any future re-classification.
+            **(
+                {}
+                if user_reviewed
+                else {
+                    "document_date": document_date,
+                    "meeting_number": meeting_number,
+                    "decision_number": decision_number,
+                    "bylaw_section_range": bylaw_section_range,
+                    "parties": parties,
+                }
+            ),
         }
+        # Denormalize the doc's effective_date onto its chunks so retrieval
+        # can filter/rank by date without a join. Chunks always mirror the
+        # parent doc — no per-chunk overrides here.
+        if doc.effective_date is not None:
+            db.execute(
+                update(Chunk)
+                .where(Chunk.document_id == doc.id)
+                .values(effective_date=doc.effective_date)
+            )
         db.commit()
 
         # If the filename just changed from a cryptic hash to a real Hebrew
@@ -554,6 +640,69 @@ def get_chunks(
         )
         for c in chunks
     ]
+
+
+class MetadataPatch(BaseModel):
+    doc_type: str | None = None
+    folder: str | None = None
+    effective_date: str | None = None  # ISO YYYY-MM-DD or ""/null to clear
+    document_date: str | None = None
+    meeting_number: str | None = None
+    decision_number: str | None = None
+    bylaw_section_range: str | None = None
+    parties: list[str] | None = None
+    summary: str | None = None
+
+
+@router.patch("/{document_id}/metadata")
+def update_document_metadata(
+    document_id: UUID,
+    patch: MetadataPatch,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """User-confirms/edits the AI-extracted metadata. Sets metadata_reviewed=True
+    so future re-classify runs won't overwrite the human's values.
+    """
+    doc = db.get(Document, document_id)
+    if doc is None or doc.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Document not found")
+
+    meta = dict(doc.doc_metadata or {})
+    fields = patch.model_dump(exclude_unset=True)
+
+    if "doc_type" in fields and fields["doc_type"] is not None:
+        doc.doc_type = fields["doc_type"] or None
+    if "folder" in fields:
+        doc.folder = fields["folder"] or None
+    if "effective_date" in fields:
+        raw = (fields["effective_date"] or "").strip()
+        if raw:
+            try:
+                doc.effective_date = date.fromisoformat(raw)
+            except ValueError:
+                raise HTTPException(400, "effective_date must be YYYY-MM-DD")
+        else:
+            doc.effective_date = None
+    for k in ("document_date", "meeting_number", "decision_number", "bylaw_section_range", "summary"):
+        if k in fields:
+            v = fields[k]
+            meta[k] = (v or None) if isinstance(v, str) else v
+    if "parties" in fields:
+        meta["parties"] = fields["parties"] or None
+
+    meta["metadata_reviewed"] = True
+    doc.doc_metadata = meta
+
+    if doc.effective_date is not None:
+        db.execute(
+            update(Chunk)
+            .where(Chunk.document_id == doc.id)
+            .values(effective_date=doc.effective_date)
+        )
+    db.commit()
+    log.info("documents.metadata_patched", document_id=str(document_id))
+    return {"status": "ok"}
 
 
 @router.delete("/{document_id}")
