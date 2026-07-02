@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Amendments from "./pages/Amendments";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
@@ -18,6 +18,57 @@ type Tab =
   | "lexicon"
   | "amendments"
   | "eval";
+
+const SIDEBAR_COLLAPSED_KEY = "elrom.sidebarCollapsed";
+
+// Small inline icons — keep them consistent (24x24 viewBox, stroke=1.75) so the
+// rail feels calm rather than a zoo of clashing symbols.
+const Icon = {
+  search: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="20" y1="20" x2="16" y2="16" />
+    </svg>
+  ),
+  upload: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+      <polyline points="8 8 12 4 16 8" />
+      <line x1="12" y1="4" x2="12" y2="16" />
+    </svg>
+  ),
+  review: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <polyline points="9 12 11 14 15 10" />
+    </svg>
+  ),
+  authoritative: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12v18l-6-4-6 4z" />
+    </svg>
+  ),
+  lexicon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z" />
+      <line x1="8" y1="9" x2="14" y2="9" />
+    </svg>
+  ),
+  amendments: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 1 0-5.66-5.66l-1.5 1.5" />
+      <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5" />
+    </svg>
+  ),
+  eval: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <rect x="6" y="12" width="3" height="8" />
+      <rect x="11" y="8" width="3" height="12" />
+      <rect x="16" y="14" width="3" height="6" />
+    </svg>
+  ),
+} satisfies Record<Tab, ReactNode>;
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "search", label: "חיפוש" },
@@ -64,37 +115,81 @@ function HamburgerIcon({ open }: { open: boolean }) {
   );
 }
 
+// Chevron pointing into the sidebar when expanded, out when collapsed. Sits on
+// the physical-left edge of the sidebar (which is its inner edge in RTL).
+function CollapseChevron({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {/* In RTL a right-pointing arrow means "away from sidebar" when the
+          sidebar is on the right. When collapsed we point RIGHT (into the
+          sidebar); when expanded we point LEFT (out, i.e. collapse it). */}
+      {collapsed ? (
+        <polyline points="9 6 15 12 9 18" />
+      ) : (
+        <polyline points="15 6 9 12 15 18" />
+      )}
+    </svg>
+  );
+}
+
 function SideNav({
   currentTab,
   onSelect,
+  collapsed,
 }: {
   currentTab: Tab;
   onSelect: (t: Tab) => void;
+  collapsed: boolean;
 }) {
   return (
-    <nav className="flex flex-col text-sm">
-      <div className="px-4 py-3 text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold border-b border-line">
-        ניווט
-      </div>
-      {tabs.map((t) => {
-        const active = currentTab === t.id;
-        return (
-          <button
-            key={t.id}
-            onClick={() => onSelect(t.id)}
-            className={`relative text-right px-4 py-3 border-b border-line transition-colors ${
-              active
-                ? "text-ink font-semibold bg-line/30"
-                : "text-ink-soft hover:text-ink hover:bg-line/20"
-            }`}
-          >
-            {active && (
-              <span className="absolute inset-y-0 right-0 w-[3px] bg-accent" />
-            )}
-            {t.label}
-          </button>
-        );
-      })}
+    <nav className="flex flex-col text-sm py-2" aria-label="ניווט ראשי">
+      {!collapsed && (
+        <div className="px-4 pt-2 pb-3 text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold">
+          ניווט
+        </div>
+      )}
+      <ul className="flex flex-col gap-1 px-2">
+        {tabs.map((t) => {
+          const active = currentTab === t.id;
+          return (
+            <li key={t.id}>
+              <button
+                onClick={() => onSelect(t.id)}
+                aria-current={active ? "page" : undefined}
+                title={collapsed ? t.label : undefined}
+                className={`group relative w-full flex items-center rounded-md transition-colors ${
+                  collapsed ? "justify-center h-11 w-11 mx-auto" : "gap-3 px-3 py-2.5"
+                } ${
+                  active
+                    ? "bg-ink text-surface"
+                    : "text-ink-soft hover:text-ink hover:bg-line/50"
+                }`}
+              >
+                <span
+                  className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-[18px] h-[18px]"}`}
+                  aria-hidden="true"
+                >
+                  {Icon[t.id]}
+                </span>
+                {!collapsed && (
+                  <span className="flex-1 text-right truncate">{t.label}</span>
+                )}
+                {active && !collapsed && (
+                  <span className="w-1 h-1 rounded-full bg-accent shrink-0" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </nav>
   );
 }
@@ -105,6 +200,10 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
   const [tenants, setTenants] = useState<TenantItem[]>([]);
 
   const isSuper =
@@ -129,6 +228,11 @@ export default function App() {
     };
   }, [isSuper]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
   if (state.kind === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -147,8 +251,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col text-ink font-sans">
-      <nav className="bg-surface border-b border-ink sticky top-0 z-30">
+    <div className="min-h-screen flex flex-col text-ink font-sans bg-line/10">
+      <header className="bg-surface border-b border-ink sticky top-0 z-30">
         <div className="w-full px-4 md:px-6 h-16 flex items-center justify-between gap-4">
           {/* Wordmark — driven by the current tenant's name. For super-admins,
               it becomes a dropdown that lists every tenant. */}
@@ -252,8 +356,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Hamburger — mobile only. Sits on the physical-left edge of the
-                top bar (last in RTL row) so it opens the left-side drawer. */}
+            {/* Hamburger — mobile only. Opens the right-side drawer. */}
             <button
               onClick={() => setSidebarOpen((o) => !o)}
               className="lg:hidden p-2 hover:bg-line/60 transition text-ink"
@@ -264,7 +367,7 @@ export default function App() {
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
       {isViewingOther && (
         <div className="bg-accent text-surface">
@@ -287,9 +390,36 @@ export default function App() {
         </div>
       )}
 
-      {/* Layout: main content on the right (RTL start), sidebar on the physical
-          left. On mobile the sidebar is hidden until the hamburger opens it. */}
+      {/* Layout: desktop sidebar on the physical RIGHT (RTL start), main
+          content flows to its left. Sidebar first in DOM so it's the
+          first child in the RTL flex row. */}
       <div className="flex-1 flex w-full min-h-0">
+        {/* Desktop sidebar — sticky, collapsible. Full-height panel with
+            its own subtle background so it reads as a component, not a
+            border-appendage. */}
+        <aside
+          className={`hidden lg:flex lg:flex-col shrink-0 bg-surface border-l border-ink sticky top-16 self-start max-h-[calc(100vh-4rem)] transition-[width] duration-200 ease-out ${
+            sidebarCollapsed ? "w-16" : "w-60"
+          }`}
+        >
+          <div className="flex-1 overflow-y-auto">
+            <SideNav
+              currentTab={tab}
+              onSelect={handleTabSelect}
+              collapsed={sidebarCollapsed}
+            />
+          </div>
+          <button
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            className="border-t border-line px-3 py-3 text-ink-soft hover:text-ink hover:bg-line/40 transition-colors flex items-center gap-2 text-xs"
+            aria-label={sidebarCollapsed ? "הרחב תפריט" : "כווץ תפריט"}
+            title={sidebarCollapsed ? "הרחב תפריט" : "כווץ תפריט"}
+          >
+            <CollapseChevron collapsed={sidebarCollapsed} />
+            {!sidebarCollapsed && <span>כווץ</span>}
+          </button>
+        </aside>
+
         <main className="flex-1 min-w-0 w-full max-w-5xl mx-auto px-4 md:px-6 py-12 animate-fade-up">
           {tab === "search" && <Search />}
           {tab === "upload" && <Upload />}
@@ -299,15 +429,9 @@ export default function App() {
           {tab === "amendments" && <Amendments />}
           {tab === "eval" && <Eval />}
         </main>
-
-        {/* Desktop sidebar — always visible on lg+. Sits after main in DOM so
-            in RTL flex-row it renders on the physical left. */}
-        <aside className="hidden lg:flex lg:flex-col shrink-0 w-56 border-r border-ink bg-surface sticky top-16 self-start max-h-[calc(100vh-4rem)] overflow-y-auto">
-          <SideNav currentTab={tab} onSelect={handleTabSelect} />
-        </aside>
       </div>
 
-      {/* Mobile drawer — slides in from the physical-left edge. */}
+      {/* Mobile drawer — slides in from the physical-right edge. */}
       {sidebarOpen && (
         <>
           <div
@@ -316,16 +440,20 @@ export default function App() {
             aria-hidden="true"
           />
           <aside
-            className="lg:hidden fixed top-16 bottom-0 left-0 w-64 bg-surface border-r border-ink z-40 overflow-y-auto animate-fade-up"
+            className="lg:hidden fixed top-16 bottom-0 right-0 w-64 bg-surface border-l border-ink z-40 overflow-y-auto animate-fade-up"
             role="dialog"
             aria-label="תפריט ניווט"
           >
-            <SideNav currentTab={tab} onSelect={handleTabSelect} />
+            <SideNav
+              currentTab={tab}
+              onSelect={handleTabSelect}
+              collapsed={false}
+            />
           </aside>
         </>
       )}
 
-      <footer className="mt-20 border-t border-ink">
+      <footer className="mt-20 border-t border-ink bg-surface">
         <div className="max-w-6xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-soft">
           <span>© כל הזכויות שמורות לאלרום סטודיוס בע״מ</span>
           <span className="flex items-center gap-3">
