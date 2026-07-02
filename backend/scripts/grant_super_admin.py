@@ -10,7 +10,7 @@ Usage:
     .venv/bin/python -m scripts.grant_super_admin --email tal.gurevich@gmail.com --revoke
 
 If the user doesn't exist yet, you must add them first:
-    .venv/bin/python -m scripts.add_user --tenant-name "אלרום" \\
+    .venv/bin/python -m scripts.add_user --tenant-name "אל-רום" \\
         --email tal.gurevich@gmail.com --role admin --name "Tal Gurevich"
 """
 import argparse

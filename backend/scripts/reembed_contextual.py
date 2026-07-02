@@ -16,7 +16,7 @@ column is rewritten.
 Run from the backend directory:
 
     .venv/bin/python -m scripts.reembed_contextual          # all tenants
-    .venv/bin/python -m scripts.reembed_contextual --tenant "אלרום"
+    .venv/bin/python -m scripts.reembed_contextual --tenant "אל-רום"
     .venv/bin/python -m scripts.reembed_contextual --dry-run
 
 Idempotent — running it twice in a row is fine.

@@ -29,7 +29,7 @@ This is the v0.3 flywheel: the chat UX both serves users and trains itself.
 
 Usage:
     python -m scripts.learn_lexicon
-    python -m scripts.learn_lexicon --tenant "אלרום"
+    python -m scripts.learn_lexicon --tenant "אל-רום"
     python -m scripts.learn_lexicon --since 2026-06-01 --max-pairs 50
 """
 import argparse

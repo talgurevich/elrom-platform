@@ -8,7 +8,7 @@ in ``amendments``.
 Run from the backend directory:
 
     .venv/bin/python -m scripts.backfill_amendments               # all tenants
-    .venv/bin/python -m scripts.backfill_amendments --tenant "אלרום"
+    .venv/bin/python -m scripts.backfill_amendments --tenant "אל-רום"
     .venv/bin/python -m scripts.backfill_amendments --dry-run     # counts only
     .venv/bin/python -m scripts.backfill_amendments --limit 5     # first N docs
 
