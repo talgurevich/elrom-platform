@@ -111,7 +111,7 @@ def _to_out(g: GoldenQuestion) -> GoldenOut:
 def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunResult:
     """Re-run a single golden through the live pipeline and score."""
     q_emb = embed_texts([g.question], input_type="search_query")[0]
-    retrieved, _debug = hybrid_retrieve(
+    retrieved, _debug, amendment_context = hybrid_retrieve(
         db, tenant_id=tenant_id, query=g.question, query_embedding=q_emb, top_k=5
     )
     retrieved_filenames = [c.document.filename for c in retrieved]
@@ -119,7 +119,10 @@ def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunRes
     if retrieved:
         lex = find_relevant_terms(db, tenant_id=tenant_id, question=g.question)
         llm = answer_with_citations(
-            question=g.question, chunks=retrieved, lexicon_block=format_lexicon_block(lex)
+            question=g.question,
+            chunks=retrieved,
+            lexicon_block=format_lexicon_block(lex),
+            amendment_notes=[ac.format_for_prompt() for ac in amendment_context] or None,
         )
         answer_text = llm.answer
         confidence = llm.confidence

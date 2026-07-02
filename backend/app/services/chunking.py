@@ -77,6 +77,25 @@ SECTION_RE = re.compile(
 )
 
 
+# Extract the canonical section number from a section_path. Section paths
+# look like "סעיף 44", "סעיף 45.ב", "45.ב", "פרק א", "החלטה 5".
+# The amendment graph uses **section numbers only** — chapter/decision headers
+# aren't amendable units. Returns e.g. "44", "45.ב", or None for non-section paths.
+_CANONICAL_SECTION_RE = re.compile(r"(?:סעיף\s+)?(\d+(?:\.(?:\d+|[א-ת]))*)")
+
+
+def canonical_section_ref(section_path: str | None) -> str | None:
+    if not section_path:
+        return None
+    sp = section_path.strip()
+    # Chapter / decision / procedure / protocol headers are not amendable
+    # targets — the amendment graph only tracks סעיף-level edits.
+    if sp.startswith(("פרק", "החלטה", "נוהל", "פרוטוקול")):
+        return None
+    m = _CANONICAL_SECTION_RE.match(sp)
+    return m.group(1) if m else None
+
+
 def chunk_document(text: str) -> list[StructuralChunk]:
     """Split a document into structural chunks.
 

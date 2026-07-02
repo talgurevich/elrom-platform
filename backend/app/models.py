@@ -46,6 +46,10 @@ class Document(Base):
     doc_type: Mapped[str | None] = mapped_column(String)  # bylaw | sub_bylaw | minutes | decision | other
     effective_date: Mapped[Date | None] = mapped_column(Date)
     superseded_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("documents.id"))
+    # The document this one amends (sub-bylaw → main bylaws, resolution → bylaws).
+    # Distinct from superseded_by_id: parent_doc_id says "I edit that doc";
+    # superseded_by_id says "this doc has been wholly replaced by another".
+    parent_doc_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("documents.id"))
     source_uri: Mapped[str | None] = mapped_column(String)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
@@ -76,9 +80,63 @@ class Chunk(Base):
     text_search: Mapped[str | None] = mapped_column(TSVECTOR)
     chunk_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
     effective_date: Mapped[Date | None] = mapped_column(Date)
+    # Canonical section number this chunk represents (e.g. "44", "12.3", "12.3.א").
+    # Populated by the section-parser at ingest and by the amendment extractor
+    # when it identifies the target of an edit. Retrieval joins on this to pull
+    # the amendment chain for any hit.
+    section_ref: Mapped[str | None] = mapped_column(String)
+    # Set by the amendment extractor: this chunk's operative text was replaced
+    # by the referenced amendment. Retrieval filters `IS NULL` by default.
+    superseded_by_amendment_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("amendments.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[Document] = relationship(back_populates="chunks")
+
+
+class Amendment(Base):
+    """One structured edit extracted from an amendment document.
+
+    An amendment doc (sub-bylaw, resolution, minutes) typically contains many
+    edits, each pointing at a specific section of a target doc. The retriever
+    replays these in ``effective_date`` order to produce the current-state
+    view of any section, and uses ``superseded_by_amendment_id`` on chunks to
+    filter stale material out of the top-k *before* the LLM sees it.
+
+    ``action`` values:
+      - ``replace``    — rewrites the section text
+      - ``add_after``  — inserts a new clause after the target
+      - ``add_before`` — inserts a new clause before the target
+      - ``delete``     — removes the target section
+      - ``clarify``    — interpretive gloss, does not change operative text
+    """
+
+    __tablename__ = "amendments"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    amendment_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    target_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    target_section: Mapped[str] = mapped_column(String, nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    old_text: Mapped[str | None] = mapped_column(Text)
+    new_text: Mapped[str | None] = mapped_column(Text)
+    effective_date: Mapped[Date | None] = mapped_column(Date)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    extractor_confidence: Mapped[float | None] = mapped_column(Float)
+    # True when confidence < threshold OR the effective_date had to be
+    # inferred — surfaced in a reviewer UI before the amendment goes "live"
+    # (i.e. before it can flip superseded_by_amendment_id on chunks).
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Verbatim span from the amendment doc that triggered the extraction —
+    # keeps the audit trail so a reviewer can eyeball the source language.
+    evidence_span: Mapped[str | None] = mapped_column(Text)
+    extractor_model: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Conversation(Base):

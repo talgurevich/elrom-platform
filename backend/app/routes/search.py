@@ -355,7 +355,7 @@ async def search_pipeline(
             return
 
         yield {"type": "stage", "stage": "searching"}
-        retrieved, debug = await asyncio.to_thread(
+        retrieved, debug, amendment_context = await asyncio.to_thread(
             hybrid_retrieve,
             db,
             tenant_id=tenant_id,
@@ -406,12 +406,14 @@ async def search_pipeline(
         await asyncio.sleep(0)  # let the event flush before the LLM call
 
         yield {"type": "stage", "stage": "generating"}
+        amendment_notes = [ac.format_for_prompt() for ac in amendment_context]
         llm_result = await asyncio.to_thread(
             answer_with_citations,
             question=question,
             chunks=retrieved,
             lexicon_block=lexicon_block,
             prior_turns=prior_turns,
+            amendment_notes=amendment_notes or None,
         )
 
         # Post-hoc safety net: if the answerer itself signals it didn't have

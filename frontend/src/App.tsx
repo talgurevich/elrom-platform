@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Amendments from "./pages/Amendments";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
 import Lexicon from "./pages/Lexicon";
@@ -9,7 +10,14 @@ import Upload from "./pages/Upload";
 import { useAuth } from "./lib/auth";
 import { api, type TenantItem } from "./lib/api";
 
-type Tab = "search" | "upload" | "review" | "authoritative" | "lexicon" | "eval";
+type Tab =
+  | "search"
+  | "upload"
+  | "review"
+  | "authoritative"
+  | "lexicon"
+  | "amendments"
+  | "eval";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "search", label: "חיפוש" },
@@ -17,6 +25,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "review", label: "תור בדיקה" },
   { id: "authoritative", label: "תשובות מאושרות" },
   { id: "lexicon", label: "מילון" },
+  { id: "amendments", label: "תיקונים" },
   { id: "eval", label: "הערכה" },
 ];
 
@@ -226,6 +235,7 @@ export default function App() {
         {tab === "review" && <Review />}
         {tab === "authoritative" && <Authoritative />}
         {tab === "lexicon" && <Lexicon />}
+        {tab === "amendments" && <Amendments />}
         {tab === "eval" && <Eval />}
       </main>
 

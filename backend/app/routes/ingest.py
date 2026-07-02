@@ -14,7 +14,7 @@ from app.db import get_db
 from app.models import Chunk, Document, Tenant, User
 from app.routes.auth import current_user
 from app.routes.documents import classify_document_by_id_bg
-from app.services.chunking import build_contextual_input, chunk_document
+from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
 from app.services.embedding import embed_texts
 from app.services.hebrew_text import normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
@@ -113,6 +113,7 @@ def ingest(
             tenant_id=tenant_id,
             position=sc.position,
             section_path=sc.section_path,
+            section_ref=canonical_section_ref(sc.section_path),
             text=sc.text,
             embedding=embedding,
         )
@@ -253,6 +254,7 @@ async def ingest_upload(
             tenant_id=resolved_tenant,
             position=sc.position,
             section_path=sc.section_path,
+            section_ref=canonical_section_ref(sc.section_path),
             text=sc.text,
             embedding=embedding,
         )

@@ -337,6 +337,7 @@ def answer_with_citations(
     chunks: list[Chunk],
     lexicon_block: str = "",
     prior_turns: list[PriorTurn] | None = None,
+    amendment_notes: list[str] | None = None,
 ) -> LLMResult:
     """Ask Claude to produce a cited answer using tool-use for structured output.
 
@@ -355,6 +356,18 @@ def answer_with_citations(
         for i, c in enumerate(chunks)
     )
 
+    amendment_block = ""
+    if amendment_notes:
+        # Rendered above the sources with a strong label — the answerer's
+        # system prompt (§2 "כלל תיקונים חוצי-מסמכים") already tells it how
+        # to treat these; the retriever guarantees only ACTIVE (needs_review=false)
+        # amendments arrive here.
+        joined = "\n\n".join(amendment_notes)
+        amendment_block = (
+            "תיקונים פעילים לסעיפים המוצגים למטה — צטט את הנוסח המעודכן ואל תסתמך על נוסח מקורי שבוטל:\n"
+            f"{joined}\n\n"
+        )
+
     lexicon_section = (
         f"מילון מונחים רלוונטי (להתבסס עליו כשמופיע מונח כזה):\n{lexicon_block}\n\n"
         if lexicon_block
@@ -367,6 +380,7 @@ def answer_with_citations(
         f"{history_section}"
         f"שאלה נוכחית: {question}\n\n"
         f"{lexicon_section}"
+        f"{amendment_block}"
         f"קטעי הקשר ממסמכי הקיבוץ:\n\n{sources_block}\n\n"
         f"קרא את כל הסעיפים והפעל את הכלי `answer` עם הניסוח הקצר והדטרמיניסטי הדרוש."
     )

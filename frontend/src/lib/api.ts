@@ -224,6 +224,24 @@ export type LexiconItem = {
   updated_at: string;
 };
 
+export type AmendmentItem = {
+  id: string;
+  amendment_doc_id: string;
+  amendment_doc_filename: string;
+  target_doc_id: string;
+  target_doc_filename: string;
+  target_section: string;
+  action: "replace" | "add_after" | "add_before" | "delete" | "clarify";
+  old_text: string | null;
+  new_text: string | null;
+  effective_date: string | null;
+  rationale: string | null;
+  evidence_span: string | null;
+  extractor_confidence: number | null;
+  needs_review: boolean;
+  created_at: string;
+};
+
 export type DocumentItem = {
   id: string;
   filename: string;
@@ -495,4 +513,33 @@ export const api = {
     }),
   deleteLexicon: (id: string) =>
     request<{ status: string }>(`/api/reviewer/lexicon/${id}`, { method: "DELETE" }),
+
+  // Amendments — cross-document supersession graph
+  listAmendments: (needsReview?: boolean) => {
+    const qs = needsReview === undefined ? "" : `?needs_review=${needsReview}`;
+    return request<AmendmentItem[]>(`/api/reviewer/amendments${qs}`);
+  },
+  updateAmendment: (
+    id: string,
+    body: Partial<{
+      target_section: string;
+      action: AmendmentItem["action"];
+      new_text: string;
+      effective_date: string;
+      rationale: string;
+    }>,
+  ) =>
+    request<{ status: string }>(`/api/reviewer/amendments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  approveAmendment: (id: string) =>
+    request<{ status: string; chunks_superseded: number }>(
+      `/api/reviewer/amendments/${id}/approve`,
+      { method: "POST" },
+    ),
+  rejectAmendment: (id: string) =>
+    request<{ status: string }>(`/api/reviewer/amendments/${id}/reject`, {
+      method: "POST",
+    }),
 };

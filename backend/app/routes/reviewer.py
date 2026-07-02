@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AuthoritativeAnswer, Lexicon, Query, Tenant, User
+from app.models import Amendment, AuthoritativeAnswer, Chunk, Document, Lexicon, Query, Tenant, User
 from app.routes.auth import current_user
 
 log = structlog.get_logger()
@@ -389,3 +389,149 @@ def lexicon_suggestions(
 
     items = suggest_lexicon_entries_from_failures(db, tenant_id=user.tenant_id, limit=10)
     return [LexiconSuggestion(**i) for i in items]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Amendments — cross-document supersession graph
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class AmendmentItem(BaseModel):
+    id: UUID
+    amendment_doc_id: UUID
+    amendment_doc_filename: str
+    target_doc_id: UUID
+    target_doc_filename: str
+    target_section: str
+    action: str
+    old_text: str | None
+    new_text: str | None
+    effective_date: str | None
+    rationale: str | None
+    evidence_span: str | None
+    extractor_confidence: float | None
+    needs_review: bool
+    created_at: str
+
+
+def _amendment_to_item(a: Amendment, docs: dict[UUID, Document]) -> AmendmentItem:
+    return AmendmentItem(
+        id=a.id,
+        amendment_doc_id=a.amendment_doc_id,
+        amendment_doc_filename=docs[a.amendment_doc_id].filename if a.amendment_doc_id in docs else "?",
+        target_doc_id=a.target_doc_id,
+        target_doc_filename=docs[a.target_doc_id].filename if a.target_doc_id in docs else "?",
+        target_section=a.target_section,
+        action=a.action,
+        old_text=a.old_text,
+        new_text=a.new_text,
+        effective_date=a.effective_date.isoformat() if a.effective_date else None,
+        rationale=a.rationale,
+        evidence_span=a.evidence_span,
+        extractor_confidence=a.extractor_confidence,
+        needs_review=a.needs_review,
+        created_at=a.created_at.isoformat(),
+    )
+
+
+@router.get("/amendments", response_model=list[AmendmentItem])
+def list_amendments(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+    needs_review: bool | None = QParam(None, description="Filter by needs_review flag"),
+    limit: int = QParam(100, le=500),
+) -> list[AmendmentItem]:
+    q = db.query(Amendment).filter(Amendment.tenant_id == user.tenant_id)
+    if needs_review is not None:
+        q = q.filter(Amendment.needs_review.is_(needs_review))
+    rows = q.order_by(Amendment.needs_review.desc(), Amendment.created_at.desc()).limit(limit).all()
+    doc_ids = {a.amendment_doc_id for a in rows} | {a.target_doc_id for a in rows}
+    docs = {d.id: d for d in db.query(Document).filter(Document.id.in_(doc_ids)).all()}
+    return [_amendment_to_item(a, docs) for a in rows]
+
+
+class UpdateAmendmentRequest(BaseModel):
+    target_section: str | None = None
+    action: str | None = None
+    new_text: str | None = None
+    effective_date: str | None = None  # YYYY-MM-DD
+    rationale: str | None = None
+
+
+@router.patch("/amendments/{amendment_id}")
+def update_amendment(
+    amendment_id: UUID,
+    req: UpdateAmendmentRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Reviewer edits to a pending amendment. Does NOT change ``needs_review``
+    — call /approve or /reject once the row is right."""
+    from datetime import date as _date
+
+    from app.services.amendment_extractor import looks_like_real_section_ref
+
+    a = db.get(Amendment, amendment_id)
+    if a is None or a.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Amendment not found")
+
+    if req.target_section is not None:
+        if not looks_like_real_section_ref(req.target_section):
+            raise HTTPException(400, "target_section must be a section number like '44' or '45.ב'")
+        a.target_section = req.target_section
+    if req.action is not None:
+        if req.action not in {"replace", "add_after", "add_before", "delete", "clarify"}:
+            raise HTTPException(400, "invalid action")
+        a.action = req.action
+    if req.new_text is not None:
+        a.new_text = req.new_text
+    if req.effective_date is not None:
+        try:
+            a.effective_date = _date.fromisoformat(req.effective_date)
+        except ValueError:
+            raise HTTPException(400, "effective_date must be YYYY-MM-DD")
+    if req.rationale is not None:
+        a.rationale = req.rationale
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/amendments/{amendment_id}/approve")
+def approve_amendment(
+    amendment_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Clear ``needs_review`` and run the supersession pass so any matching
+    chunk gets flipped. Safe to call on an already-active amendment (no-op)."""
+    from app.services.amendment_extractor import _apply_supersession
+
+    a = db.get(Amendment, amendment_id)
+    if a is None or a.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Amendment not found")
+    if a.effective_date is None:
+        raise HTTPException(400, "Set effective_date before approving")
+    a.needs_review = False
+    superseded = _apply_supersession(db, a)
+    db.commit()
+    log.info("reviewer.amendment_approved", amendment_id=str(amendment_id), superseded=superseded)
+    return {"status": "ok", "chunks_superseded": superseded}
+
+
+@router.post("/amendments/{amendment_id}/reject")
+def reject_amendment(
+    amendment_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Delete an incorrect amendment row and unlink any chunk it flipped."""
+    a = db.get(Amendment, amendment_id)
+    if a is None or a.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Amendment not found")
+    db.query(Chunk).filter(Chunk.superseded_by_amendment_id == a.id).update(
+        {Chunk.superseded_by_amendment_id: None}
+    )
+    db.delete(a)
+    db.commit()
+    log.info("reviewer.amendment_rejected", amendment_id=str(amendment_id))
+    return {"status": "ok"}
