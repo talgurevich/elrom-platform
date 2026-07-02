@@ -150,13 +150,31 @@ function SideNav({
   collapsed: boolean;
 }) {
   return (
-    <nav className="flex flex-col text-sm py-2" aria-label="ניווט ראשי">
-      {!collapsed && (
-        <div className="px-4 pt-2 pb-3 text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold">
-          ניווט
-        </div>
-      )}
-      <ul className="flex flex-col gap-1 px-2">
+    <nav className="flex flex-col text-sm" aria-label="ניווט ראשי">
+      <div
+        className={`border-b border-line ${
+          collapsed ? "px-2 py-3 flex justify-center" : "px-5 py-4"
+        }`}
+      >
+        {collapsed ? (
+          <div
+            aria-hidden="true"
+            className="w-8 h-8 flex items-center justify-center bg-ink text-surface font-display font-black text-xs tracking-tight"
+          >
+            אלר
+          </div>
+        ) : (
+          <>
+            <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold">
+              ניווט
+            </div>
+            <div className="mt-1 font-display font-black text-lg text-ink leading-tight">
+              זיכרון ארגוני
+            </div>
+          </>
+        )}
+      </div>
+      <ul className={`flex flex-col ${collapsed ? "gap-1 px-2 pt-3" : "gap-0.5 px-3 pt-4"}`}>
         {tabs.map((t) => {
           const active = currentTab === t.id;
           return (
@@ -165,14 +183,19 @@ function SideNav({
                 onClick={() => onSelect(t.id)}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? t.label : undefined}
-                className={`group relative w-full flex items-center rounded-md transition-colors ${
-                  collapsed ? "justify-center h-11 w-11 mx-auto" : "gap-3 px-3 py-2.5"
+                className={`group relative w-full flex items-center transition-colors ${
+                  collapsed
+                    ? "justify-center h-11 w-11 mx-auto rounded-md"
+                    : "gap-3 pr-3 pl-2 py-2.5 rounded-md"
                 } ${
                   active
                     ? "bg-ink text-surface"
                     : "text-ink-soft hover:text-ink hover:bg-line/50"
                 }`}
               >
+                {active && !collapsed && (
+                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-accent rounded-l" />
+                )}
                 <span
                   className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-[18px] h-[18px]"}`}
                   aria-hidden="true"
@@ -181,9 +204,6 @@ function SideNav({
                 </span>
                 {!collapsed && (
                   <span className="flex-1 text-right truncate">{t.label}</span>
-                )}
-                {active && !collapsed && (
-                  <span className="w-1 h-1 rounded-full bg-accent shrink-0" />
                 )}
               </button>
             </li>
@@ -390,37 +410,44 @@ export default function App() {
         </div>
       )}
 
-      {/* Layout: desktop sidebar on the physical RIGHT (RTL start), main
-          content flows to its left. Sidebar first in DOM so it's the
-          first child in the RTL flex row. */}
+      {/* Layout: desktop sidebar is FIXED to the viewport's right edge from
+          the bottom of the header to the bottom of the screen. Being fixed
+          (not sticky-inside-a-flex-child) means it always visually spans the
+          full page-height regardless of how long the main content is —
+          otherwise it ends at its content height and looks like a cut-off
+          rectangle in the middle of a long page. Main content gets a
+          matching right padding on lg+ so it doesn't slide under the aside. */}
+      <aside
+        className={`hidden lg:flex lg:flex-col fixed top-16 bottom-0 right-0 z-20 bg-surface border-l border-ink shadow-[inset_1px_0_0_rgba(0,0,0,0.02)] transition-[width] duration-200 ease-out ${
+          sidebarCollapsed ? "w-16" : "w-60"
+        }`}
+      >
+        <div className="flex-1 overflow-y-auto py-2">
+          <SideNav
+            currentTab={tab}
+            onSelect={handleTabSelect}
+            collapsed={sidebarCollapsed}
+          />
+        </div>
+        <button
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          className={`border-t border-line px-3 py-3 text-ink-soft hover:text-ink hover:bg-line/40 transition-colors flex items-center text-xs ${
+            sidebarCollapsed ? "justify-center" : "justify-between gap-2"
+          }`}
+          aria-label={sidebarCollapsed ? "הרחב תפריט" : "כווץ תפריט"}
+          title={sidebarCollapsed ? "הרחב תפריט" : "כווץ תפריט"}
+        >
+          {!sidebarCollapsed && <span>כווץ</span>}
+          <CollapseChevron collapsed={sidebarCollapsed} />
+        </button>
+      </aside>
+
       <div className="flex-1 flex w-full min-h-0">
-        {/* Desktop sidebar — sticky, collapsible. Full-height panel with
-            its own subtle background so it reads as a component, not a
-            border-appendage. */}
-        <aside
-          className={`hidden lg:flex lg:flex-col shrink-0 bg-surface border-l border-ink sticky top-16 self-start max-h-[calc(100vh-4rem)] transition-[width] duration-200 ease-out ${
-            sidebarCollapsed ? "w-16" : "w-60"
+        <main
+          className={`flex-1 min-w-0 w-full max-w-5xl mx-auto px-4 md:px-6 py-12 animate-fade-up transition-[padding] duration-200 ease-out ${
+            sidebarCollapsed ? "lg:pr-20" : "lg:pr-64"
           }`}
         >
-          <div className="flex-1 overflow-y-auto">
-            <SideNav
-              currentTab={tab}
-              onSelect={handleTabSelect}
-              collapsed={sidebarCollapsed}
-            />
-          </div>
-          <button
-            onClick={() => setSidebarCollapsed((c) => !c)}
-            className="border-t border-line px-3 py-3 text-ink-soft hover:text-ink hover:bg-line/40 transition-colors flex items-center gap-2 text-xs"
-            aria-label={sidebarCollapsed ? "הרחב תפריט" : "כווץ תפריט"}
-            title={sidebarCollapsed ? "הרחב תפריט" : "כווץ תפריט"}
-          >
-            <CollapseChevron collapsed={sidebarCollapsed} />
-            {!sidebarCollapsed && <span>כווץ</span>}
-          </button>
-        </aside>
-
-        <main className="flex-1 min-w-0 w-full max-w-5xl mx-auto px-4 md:px-6 py-12 animate-fade-up">
           {tab === "search" && <Search />}
           {tab === "upload" && <Upload />}
           {tab === "review" && <Review />}
@@ -453,7 +480,11 @@ export default function App() {
         </>
       )}
 
-      <footer className="mt-20 border-t border-ink bg-surface">
+      <footer
+        className={`mt-20 border-t border-ink bg-surface transition-[padding] duration-200 ease-out ${
+          sidebarCollapsed ? "lg:pr-16" : "lg:pr-60"
+        }`}
+      >
         <div className="max-w-6xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-soft">
           <span>© כל הזכויות שמורות לאלרום סטודיוס בע״מ</span>
           <span className="flex items-center gap-3">
