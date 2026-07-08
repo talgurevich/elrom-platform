@@ -13,12 +13,19 @@ services:
   - type: web
     name: elrom-backend
     runtime: python
-    plan: free
+    plan: starter
     region: frankfurt
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: bash start.sh
     healthCheckPath: /api/health
+    disk:
+      # Persistent storage for original uploaded files (PDFs, etc.).
+      # Files are written to $STORAGE_DIR at ingest and served back to the
+      # frontend via GET /api/documents/{id}/file.
+      name: elrom-storage
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.13
@@ -42,6 +49,8 @@ services:
         value: claude-haiku-4-5-20251001
       - key: MAGIC_LINK_FROM_EMAIL
         value: noreply@elrom.tv
+      - key: STORAGE_DIR
+        value: /var/data/documents
       # Secrets — set these in Render UI after first deploy:
       - key: ANTHROPIC_API_KEY
         sync: false

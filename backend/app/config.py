@@ -46,5 +46,11 @@ class Settings(BaseSettings):
     azure_di_endpoint: str = ""
     azure_di_key: str = ""
 
+    # Persistent file storage for original uploads (PDFs etc.). Served back
+    # to the frontend via GET /api/documents/{id}/file so citations can open
+    # the source document in-browser. On Render, this is a mounted disk
+    # (see render.yaml). Locally, defaults to ./storage under backend/.
+    storage_dir: str = "./storage"
+
 
 settings = Settings()

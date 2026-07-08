@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api,
+  documentFileUrl,
   type ChunkPreview,
   type DocumentItem,
   type DocumentMetadataPatch,
@@ -788,6 +789,18 @@ function DocumentRow({
                 {doc.effective_date}
               </span>
             )}
+            {doc.has_file && (
+              <a
+                href={documentFileUrl(doc.id)}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={(e) => e.stopPropagation()}
+                className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent border border-accent px-1.5 py-0.5 hover:bg-accent hover:text-surface transition"
+                title="פתח את קובץ המקור בכרטיסייה חדשה"
+              >
+                פתח מקור ↗
+              </a>
+            )}
           </div>
           {doc.summary && (
             <div className="text-sm text-ink-soft mt-1.5 leading-relaxed">
@@ -961,7 +974,19 @@ function DocumentDrawer({
               {doc.folder && ` · ${doc.folder}`}
             </div>
             <div className="font-display font-black text-lg text-ink leading-tight truncate">
-              {doc.filename}
+              {doc.has_file ? (
+                <a
+                  href={documentFileUrl(doc.id)}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hover:text-accent"
+                  title="פתח את קובץ המקור בכרטיסייה חדשה"
+                >
+                  {doc.filename} ↗
+                </a>
+              ) : (
+                doc.filename
+              )}
             </div>
           </div>
           <button

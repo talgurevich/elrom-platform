@@ -6,6 +6,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query as QParam
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.config import settings
 from app.db import get_db
 from app.models import Chunk, Document, Tenant, User
 from app.routes.auth import current_user
+from app.services.storage import guess_content_type, resolve_stored_file
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -57,6 +59,7 @@ class DocumentItem(BaseModel):
     bylaw_section_range: str | None = None
     parties: list[str] | None = None
     metadata_reviewed: bool = False  # user confirmed via the review dialog
+    has_file: bool = False  # true if the original upload is stored & viewable
 
 
 def _quality_verdict(
@@ -105,6 +108,7 @@ def list_documents(
             Document.extraction_note,
             Document.folder,
             Document.effective_date,
+            Document.source_uri,
             func.count(Chunk.id).label("chunks"),
             func.coalesce(func.sum(func.length(Chunk.text)), 0).label("chars"),
         )
@@ -148,6 +152,7 @@ def list_documents(
             bylaw_section_range=_md(r).get("bylaw_section_range"),
             parties=_md(r).get("parties"),
             metadata_reviewed=bool(_md(r).get("metadata_reviewed")),
+            has_file=bool(r.source_uri and str(r.source_uri).startswith("file://")),
         )
         for r in rows
     ]
@@ -612,6 +617,42 @@ class ChunkPreview(BaseModel):
     section_path: str | None
     chars: int
     text: str
+
+
+@router.get("/{document_id}/file")
+def get_document_file(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> FileResponse:
+    """Stream the original uploaded file back to the browser so users can
+    click a citation and open the source PDF. Tenant-scoped; super-admins in
+    switch-mode inherit the switched tenant's tenant_id via current_user.
+
+    Only documents ingested after storage was wired up have a source_uri —
+    older docs return 404 with a clear message and the frontend disables the
+    open button for them.
+    """
+    doc = db.get(Document, document_id)
+    if doc is None or doc.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Document not found")
+
+    path = resolve_stored_file(doc.source_uri)
+    if path is None:
+        raise HTTPException(
+            404,
+            "אין קובץ מקור שמור למסמך זה. יש להעלות מחדש כדי לצפות במקור.",
+        )
+
+    return FileResponse(
+        path=str(path),
+        media_type=guess_content_type(path),
+        filename=doc.filename,
+        # Content-Disposition: inline → browser renders the PDF in its
+        # built-in viewer instead of downloading it. Frontend opens in a
+        # new tab so the user can keep the answer in the original window.
+        headers={"Content-Disposition": f'inline; filename="{doc.filename}"'},
+    )
 
 
 @router.get("/{document_id}/chunks", response_model=list[ChunkPreview])

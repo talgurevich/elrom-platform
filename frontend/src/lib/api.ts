@@ -22,9 +22,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // ─── Types ─────────────────────────────────────────────────────────────
 export type Source = {
   chunk_id: string;
+  document_id?: string | null;
   document_filename: string;
   section_path: string | null;
   text: string;
+  has_file?: boolean;
 };
 
 export type RetrievalDebugRow = {
@@ -268,7 +270,15 @@ export type DocumentItem = {
   bylaw_section_range?: string | null;
   parties?: string[] | null;
   metadata_reviewed?: boolean;
+  // True when the original file is stored on disk and can be opened in-browser.
+  has_file?: boolean;
 };
+
+/** Absolute URL to stream the original uploaded file. Opens in the browser's
+ *  built-in PDF viewer via Content-Disposition: inline. */
+export function documentFileUrl(documentId: string): string {
+  return `${BASE}/api/documents/${documentId}/file`;
+}
 
 export type ChunkPreview = {
   position: number;

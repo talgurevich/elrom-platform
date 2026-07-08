@@ -18,6 +18,7 @@ from app.services.chunking import build_contextual_input, canonical_section_ref,
 from app.services.embedding import embed_texts
 from app.services.hebrew_text import normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
+from app.services.storage import save_original
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -233,6 +234,20 @@ async def ingest_upload(
     )
     db.add(doc)
     db.flush()
+
+    # Persist the original file for later in-browser viewing (click-a-citation
+    # → open the source). Runs after extraction sanity-checks so failed
+    # uploads don't fill the disk. Non-fatal — if the disk isn't reachable
+    # for some reason we still ingest the text.
+    try:
+        doc.source_uri = save_original(
+            tenant_id=resolved_tenant,
+            document_id=doc.id,
+            suffix=suffix,
+            contents=contents,
+        )
+    except OSError as e:
+        log.warning("ingest.save_original_failed", error=str(e), doc_id=str(doc.id))
 
     # Chunking + embedding are also synchronous and can be slow (Cohere call
     # latency + tokenizer). Push them off the event loop too.

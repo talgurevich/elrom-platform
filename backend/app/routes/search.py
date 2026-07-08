@@ -53,9 +53,13 @@ class SearchRequest(BaseModel):
 
 class SourceCitation(BaseModel):
     chunk_id: UUID
+    document_id: UUID | None = None
     document_filename: str
     section_path: str | None
     text: str
+    # True when the original uploaded file is stored on disk and can be
+    # opened in the browser via GET /api/documents/{document_id}/file.
+    has_file: bool = False
 
 
 class StructuredReference(BaseModel):
@@ -138,9 +142,14 @@ def _build_sources(db: Session, chunk_ids: list[UUID]) -> list[SourceCitation]:
     return [
         SourceCitation(
             chunk_id=c.id,
+            document_id=c.document.id,
             document_filename=c.document.filename,
             section_path=c.section_path,
             text=c.text,
+            has_file=bool(
+                c.document.source_uri
+                and str(c.document.source_uri).startswith("file://")
+            ),
         )
         for cid in chunk_ids
         if (c := by_id.get(cid)) is not None
@@ -483,9 +492,14 @@ async def search_pipeline(
         sources = [
             SourceCitation(
                 chunk_id=c.id,
+                document_id=c.document.id,
                 document_filename=c.document.filename,
                 section_path=c.section_path,
                 text=c.text,
+                has_file=bool(
+                    c.document.source_uri
+                    and str(c.document.source_uri).startswith("file://")
+                ),
             )
             for c in retrieved
         ]

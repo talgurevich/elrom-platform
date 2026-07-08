@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   api,
+  documentFileUrl,
   type ConversationSummary,
   type FailureMode,
   type RetrievalDebug,
@@ -526,31 +527,60 @@ function TurnView({
                 <span className="flex-1 h-px bg-line" />
               </div>
               <div className="grid gap-px bg-line border border-line">
-                {turn.references.map((r, i) => (
-                  <div
-                    key={`${r.title}-${r.section_number}-${i}`}
-                    className="p-3 bg-surface"
-                  >
-                    <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
-                      <span className="font-semibold text-ink">{r.title}</span>
-                      {r.section_number && (
-                        <span className="text-xs text-accent font-mono tracking-tight">
-                          {r.section_number}
-                        </span>
-                      )}
-                      {r.source_type && (
-                        <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft mr-auto">
-                          {r.source_type}
-                        </span>
+                {turn.references.map((r, i) => {
+                  // Try to match the reference title to a source's document so
+                  // we can offer "open source PDF" straight from the citation.
+                  const matched = turn.sources.find(
+                    (s) => s.document_filename === r.title && s.has_file && s.document_id
+                  );
+                  return (
+                    <div
+                      key={`${r.title}-${r.section_number}-${i}`}
+                      className="p-3 bg-surface"
+                    >
+                      <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
+                        {matched?.document_id ? (
+                          <a
+                            href={documentFileUrl(matched.document_id)}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="font-semibold text-ink hover:text-accent underline underline-offset-4 decoration-line-strong hover:decoration-accent"
+                            title="פתח את קובץ המקור"
+                          >
+                            {r.title}
+                          </a>
+                        ) : (
+                          <span className="font-semibold text-ink">{r.title}</span>
+                        )}
+                        {r.section_number && (
+                          <span className="text-xs text-accent font-mono tracking-tight">
+                            {r.section_number}
+                          </span>
+                        )}
+                        {r.source_type && (
+                          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft mr-auto">
+                            {r.source_type}
+                          </span>
+                        )}
+                        {matched?.document_id && (
+                          <a
+                            href={documentFileUrl(matched.document_id)}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-[10px] tracking-[0.2em] uppercase text-accent font-bold hover:underline"
+                          >
+                            פתח מקור ↗
+                          </a>
+                        )}
+                      </div>
+                      {r.excerpt && (
+                        <blockquote className="text-sm text-ink-soft leading-relaxed">
+                          {r.excerpt}
+                        </blockquote>
                       )}
                     </div>
-                    {r.excerpt && (
-                      <blockquote className="text-sm text-ink-soft leading-relaxed">
-                        {r.excerpt}
-                      </blockquote>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -570,6 +600,18 @@ function TurnView({
                         <span className="text-ink-soft font-mono text-xs">
                           {s.section_path}
                         </span>
+                      )}
+                      {s.has_file && s.document_id && (
+                        <a
+                          href={documentFileUrl(s.document_id)}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          onClick={(e) => e.stopPropagation()}
+                          className="mr-auto text-[10px] tracking-[0.2em] uppercase text-accent font-bold hover:underline"
+                          title="פתח את קובץ המקור"
+                        >
+                          פתח מקור ↗
+                        </a>
                       )}
                     </summary>
                     <div className="px-3 py-2 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft">
