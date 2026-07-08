@@ -130,14 +130,17 @@ def _normalize_forms(tok: str) -> list[str]:
 
 
 def normalize_hebrew(text: str) -> str:
-    """Tokenize + emit normalized lexemes for FTS use.
+    """Tokenize + emit normalized lexemes for FTS use (index side).
 
     Returns a whitespace-joined string of normalized forms, suitable as input
-    to ``to_tsvector('simple', …)`` and ``plainto_tsquery('simple', …)``.
+    to ``to_tsvector('simple', …)``. A single source token can produce up to
+    4 output forms (full, prefix-stripped, suffix-stripped, both-stripped).
+    The tsvector deduplicates these on the way in.
 
-    A single source token can produce up to 4 output forms (full, prefix-
-    stripped, suffix-stripped, both-stripped). This expands recall at the cost
-    of a slightly larger index — the rerank stage trims false-positive hits.
+    IMPORTANT: on the *query* side, do NOT feed this directly to
+    ``plainto_tsquery`` — that would AND every form and destroy recall. Use
+    :func:`normalize_hebrew_to_tsquery` instead, which ORs the forms of each
+    source word and ANDs across source words.
 
     Idempotent up to set-equality on the produced lexeme set.
     """
@@ -147,3 +150,85 @@ def normalize_hebrew(text: str) -> str:
     for raw in _TOKEN_RE.findall(text):
         out.extend(_normalize_forms(raw))
     return " ".join(out)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Query-side normalization: build a to_tsquery expression that respects
+# per-source-word alternation.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# High-frequency Hebrew function words. Present in almost every doc and
+# useless as retrieval constraints — dropping them from the AND stack keeps
+# BM25 from over-filtering. Kept short on purpose; false positives here are
+# harmless (they'd only reduce recall on a corner-case query where a stop
+# word carries meaning), but false negatives (leaving in a real content word)
+# would silently drop hits.
+_QUERY_STOPWORDS: set[str] = {
+    "מה", "מי", "האם", "איך", "כמה", "מתי", "איפה", "למה",
+    "אם", "או", "גם", "כי", "כן", "לא", "רק", "עוד", "יש",
+    "של", "את", "על", "אל", "עם", "לפי", "לגבי", "בגלל",
+    "זה", "זו", "אלה", "אלו", "הוא", "היא", "הם", "הן",
+    "אני", "אתה", "את", "אנחנו", "אתם", "אתן",
+    # Latin question words that show up when users switch language
+    "the", "and", "or", "is", "are", "what", "how",
+}
+
+
+# to_tsquery is picky about the alphabet. We already keep letters/digits via
+# _TOKEN_RE, but defensively strip anything else a form might smuggle in.
+_QUERY_SAFE_RE = re.compile(r"[^A-Za-z0-9֐-׿]")
+
+
+def _to_tsquery_lexeme(form: str) -> str:
+    return _QUERY_SAFE_RE.sub("", form)
+
+
+def normalize_hebrew_to_tsquery(text: str) -> str:
+    """Build a ``to_tsquery('simple', …)`` expression from a user question.
+
+    Each source word produces a group ``(form1 | form2 | form3)`` covering
+    its recognized normalized forms; groups are joined with ``&``. Stop words
+    (question words, conjunctions) are dropped so they don't over-constrain
+    the AND stack.
+
+    Example::
+
+        >>> normalize_hebrew_to_tsquery("מה קורה עם הפנסיה")
+        '(קור | קורה) & (הפנס | פנס | פנסיה | הפנסיה)'
+
+    An empty return value means "no queryable tokens" — the caller should
+    then skip the BM25 branch entirely rather than passing "" to to_tsquery.
+    """
+    if not text:
+        return ""
+    groups: list[str] = []
+    seen_groups: set[str] = set()  # dedup identical source words (e.g. "חבר חבר")
+    for raw in _TOKEN_RE.findall(text):
+        low = raw.lower()
+        if low in _QUERY_STOPWORDS:
+            continue
+        forms = _normalize_forms(raw)
+        if not forms:
+            continue
+        # Additional stop-word check on the base form — catches sofit
+        # variants like "אתם" → "אתמ" that the raw check would miss.
+        base = forms[0] if forms else ""
+        if base in _QUERY_STOPWORDS:
+            continue
+        # Sanitize + dedup within a source word.
+        safe_forms = []
+        seen_forms: set[str] = set()
+        for f in forms:
+            f2 = _to_tsquery_lexeme(f)
+            if f2 and f2 not in seen_forms:
+                seen_forms.add(f2)
+                safe_forms.append(f2)
+        if not safe_forms:
+            continue
+        group = safe_forms[0] if len(safe_forms) == 1 else "(" + " | ".join(safe_forms) + ")"
+        if group in seen_groups:
+            continue
+        seen_groups.add(group)
+        groups.append(group)
+    return " & ".join(groups)

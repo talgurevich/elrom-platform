@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Amendment, Chunk, Document
-from app.services.hebrew_text import normalize_hebrew
+from app.services.hebrew_text import normalize_hebrew, normalize_hebrew_to_tsquery
 from app.services.reranker import rerank
 
 
@@ -133,17 +133,19 @@ def hybrid_retrieve(
 
     vector_chunks = {c.id: (c, dist) for c, dist in vector_results}
 
-    # Normalize the query identically to the way text_search was built at
-    # ingest, so prefix/suffix-attached Hebrew tokens actually match. Without
-    # this, ``הירושה`` in the query and ``ירושה`` in the corpus never collide.
-    bm25_query = normalize_hebrew(query)
+    # Build a per-source-word OR / cross-source-word AND tsquery so the
+    # BM25 lane actually retrieves. The old code passed the normalized flat
+    # string to plainto_tsquery, which ANDs everything — including every
+    # alternative normalized form of the same source word. Recall collapsed
+    # to zero on real Hebrew queries (see project_bm25_hebrew_gap memo).
+    bm25_query = normalize_hebrew_to_tsquery(query)
     superseded_clause = "" if include_superseded else " AND superseded_by_amendment_id IS NULL"
     bm25_sql = text(
         f"""
-        SELECT id, ts_rank(text_search, plainto_tsquery('simple', :q)) AS rank
+        SELECT id, ts_rank(text_search, to_tsquery('simple', :q)) AS rank
         FROM chunks
         WHERE tenant_id = :tenant_id
-          AND text_search @@ plainto_tsquery('simple', :q)
+          AND text_search @@ to_tsquery('simple', :q)
           {superseded_clause}
         ORDER BY rank DESC
         LIMIT :limit

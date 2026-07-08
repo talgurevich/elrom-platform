@@ -837,11 +837,11 @@
     <div class="cl-column p0">
       <h3><span class="cl-badge">P0</span> Must ship for go-live</h3>
 
-      <div class="cl-item">
+      <div class="cl-item done">
         <div class="check"></div>
         <div class="cl-body">
-          <span class="cl-title">Fix BM25 Hebrew normalization</span> <a class="cl-ref" href="#t1">§1.1</a>
-          <div class="cl-desc">Real prefix + inflection handling in <code>normalize_hebrew</code>. Today the BM25 lane silently returns 0 hits for common Hebrew queries.</div>
+          <span class="cl-title">Fix BM25 Hebrew normalization — per-word OR tsquery</span> <a class="cl-ref" href="#t1">§1.1</a>
+          <div class="cl-desc">Root cause: <code>plainto_tsquery</code> AND'd every normalized form so a doc had to contain all of them at once. Fix: new <code>normalize_hebrew_to_tsquery</code> builds a proper <code>(form1 | form2) &amp; (form3 | form4)</code> expression per source word + drops Hebrew stop words. Retrieval swaps to <code>to_tsquery</code>. Real queries now return hits.</div>
         </div>
       </div>
 
