@@ -7,6 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.routes import (
+    admin,
     auth,
     conversations,
     documents,
@@ -104,6 +105,7 @@ app.include_router(conversations.router, prefix="/api/conversations", tags=["con
 app.include_router(reviewer.router, prefix="/api/reviewer", tags=["reviewer"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(eval_routes.router, prefix="/api/eval", tags=["eval"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.on_event("startup")

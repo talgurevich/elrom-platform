@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import Admin from "./pages/Admin";
 import Amendments from "./pages/Amendments";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
@@ -18,7 +19,8 @@ type Tab =
   | "authoritative"
   | "lexicon"
   | "amendments"
-  | "eval";
+  | "eval"
+  | "admin";
 
 const SIDEBAR_COLLAPSED_KEY = "elrom.sidebarCollapsed";
 
@@ -69,16 +71,25 @@ const Icon = {
       <rect x="16" y="14" width="3" height="6" />
     </svg>
   ),
+  admin: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+    </svg>
+  ),
 } satisfies Record<Tab, ReactNode>;
 
-const tabs: { id: Tab; label: string }[] = [
+type TabDef = { id: Tab; label: string; superOnly?: boolean };
+
+const ALL_TABS: TabDef[] = [
   { id: "search", label: "חיפוש" },
   { id: "upload", label: "מסמכים" },
-  { id: "review", label: "תור בדיקה" },
   { id: "authoritative", label: "תשובות מאושרות" },
   { id: "lexicon", label: "מילון" },
   { id: "amendments", label: "תיקונים" },
-  { id: "eval", label: "הערכה" },
+  { id: "review", label: "תור בדיקה", superOnly: true },
+  { id: "eval", label: "הערכה", superOnly: true },
+  { id: "admin", label: "פאנל ניהול", superOnly: true },
 ];
 
 function InitialAvatar({ name }: { name: string }) {
@@ -145,10 +156,12 @@ function SideNav({
   currentTab,
   onSelect,
   collapsed,
+  tabs,
 }: {
   currentTab: Tab;
   onSelect: (t: Tab) => void;
   collapsed: boolean;
+  tabs: TabDef[];
 }) {
   return (
     <nav className="flex flex-col text-sm" aria-label="ניווט ראשי">
@@ -232,6 +245,28 @@ export default function App() {
     state.kind === "signed_in" && state.user.is_super_admin === true;
   const isViewingOther =
     state.kind === "signed_in" && state.user.viewing_other_tenant === true;
+
+  // Visible tabs depend on super-admin status. Review + Eval + Admin are
+  // super-admin-only; regular tenant users don't see them.
+  const visibleTabs = useMemo(
+    () => ALL_TABS.filter((t) => !t.superOnly || isSuper),
+    [isSuper]
+  );
+
+  // If the current tab isn't visible (e.g. state changed after switch-out),
+  // fall back to the first visible one — usually "search".
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.id === tab) && visibleTabs.length) {
+      setTab(visibleTabs[0].id);
+    }
+  }, [visibleTabs, tab]);
+
+  // Admin panel makes no sense while viewing another tenant — force exit.
+  useEffect(() => {
+    if (tab === "admin" && isViewingOther) {
+      setTab("search");
+    }
+  }, [tab, isViewingOther]);
 
   // Lazy-load the tenant list for super-admins once on mount.
   useEffect(() => {
@@ -431,6 +466,7 @@ export default function App() {
             currentTab={tab}
             onSelect={handleTabSelect}
             collapsed={sidebarCollapsed}
+            tabs={visibleTabs}
           />
         </div>
         <button
@@ -459,6 +495,7 @@ export default function App() {
           {tab === "lexicon" && <Lexicon />}
           {tab === "amendments" && <Amendments />}
           {tab === "eval" && <Eval />}
+          {tab === "admin" && <Admin currentUserId={user.id} />}
         </main>
       </div>
 
@@ -479,6 +516,7 @@ export default function App() {
               currentTab={tab}
               onSelect={handleTabSelect}
               collapsed={false}
+              tabs={visibleTabs}
             />
           </aside>
         </>

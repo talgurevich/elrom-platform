@@ -325,6 +325,49 @@ export type TenantItem = {
   segment: string;
 };
 
+// Admin panel — super-admin only
+export type TenantSegment = "kibbutz_shitufi" | "kibbutz_mitchadesh" | "moshav";
+
+export type AdminTenant = {
+  id: string;
+  name: string;
+  segment: string;
+  user_count: number;
+  document_count: number;
+  created_at: string;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: "admin" | "reviewer" | "secretary";
+  is_super_admin: boolean;
+  tenant_id: string;
+  tenant_name: string | null;
+  created_at: string;
+};
+
+export type CreateTenantPayload = {
+  name: string;
+  segment: TenantSegment;
+};
+
+export type CreateUserPayload = {
+  tenant_id: string;
+  email: string;
+  role: AdminUser["role"];
+  display_name?: string | null;
+  is_super_admin?: boolean;
+};
+
+export type UpdateUserPayload = Partial<{
+  role: AdminUser["role"];
+  display_name: string | null;
+  is_super_admin: boolean;
+  tenant_id: string;
+}>;
+
 export type UploadResponse = {
   document_id: string;
   chunks_created: number;
@@ -575,5 +618,31 @@ export const api = {
   rejectAmendment: (id: string) =>
     request<{ status: string }>(`/api/reviewer/amendments/${id}/reject`, {
       method: "POST",
+    }),
+
+  // Super-admin management panel
+  adminListTenants: () => request<AdminTenant[]>("/api/admin/tenants"),
+  adminCreateTenant: (body: CreateTenantPayload) =>
+    request<AdminTenant>("/api/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  adminListUsers: (tenantId?: string) => {
+    const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    return request<AdminUser[]>(`/api/admin/users${qs}`);
+  },
+  adminCreateUser: (body: CreateUserPayload) =>
+    request<AdminUser>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  adminUpdateUser: (userId: string, body: UpdateUserPayload) =>
+    request<AdminUser>(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  adminDeleteUser: (userId: string) =>
+    request<{ status: string }>(`/api/admin/users/${userId}`, {
+      method: "DELETE",
     }),
 };

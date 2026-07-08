@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>El-Rom Platform Roadmap</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --surface: #ffffff;
+    --ink: #0f1729;
+    --ink-soft: #334155;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #0d9488;
+    --accent-soft: #ccfbf1;
+    --coral: #ea580c;
+    --coral-soft: #fed7aa;
+    --violet: #7c3aed;
+    --violet-soft: #ede9fe;
+    --amber: #ca8a04;
+    --amber-soft: #fef3c7;
+    --rose: #be185d;
+    --rose-soft: #fce7f3;
+    --slate: #475569;
+    --slate-soft: #e2e8f0;
+    --ns-bg: #0f1729;
+    --ns-ink: #f8fafc;
+    --ns-accent: #5eead4;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.65;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    max-width: 1240px;
+    margin: 0 auto;
+    gap: 48px;
+    padding: 40px 32px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 24px; padding: 24px 16px; }
+    aside { position: static !important; }
+  }
+
+  /* SIDEBAR */
+  aside {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    height: fit-content;
+    font-size: 13px;
+  }
+  aside .brand {
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  aside .brand-sub {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+  }
+  aside nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-radius: 6px;
+    margin: 2px 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  aside nav a:hover { background: rgba(0,0,0,0.04); color: var(--ink); }
+  aside nav a .num {
+    font-family: 'Georgia', serif;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 14px;
+    width: 20px;
+  }
+  aside nav .divider { height: 1px; background: var(--line); margin: 16px 0; }
+
+  /* HERO */
+  .hero { margin-bottom: 48px; }
+  .hero h1 {
+    font-family: 'Georgia', serif;
+    font-size: 42px;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+  }
+  .hero .lede {
+    color: var(--muted);
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+  .hero .meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero .meta span strong { color: var(--ink); font-weight: 600; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+
+  /* OBJECTIVES */
+  .objectives {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 32px 0 56px;
+  }
+  .obj {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+  }
+  .obj .obj-num {
+    font-family: 'Georgia', serif;
+    font-size: 24px;
+    color: var(--accent);
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .obj .obj-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .obj .obj-desc { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+  /* TRACK CARDS */
+  .track {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .track::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--track-color, var(--accent));
+  }
+  .track[data-color="teal"] { --track-color: var(--accent); --track-tint: var(--accent-soft); }
+  .track[data-color="coral"] { --track-color: var(--coral); --track-tint: var(--coral-soft); }
+  .track[data-color="violet"] { --track-color: var(--violet); --track-tint: var(--violet-soft); }
+  .track[data-color="amber"] { --track-color: var(--amber); --track-tint: var(--amber-soft); }
+  .track[data-color="rose"] { --track-color: var(--rose); --track-tint: var(--rose-soft); }
+  .track[data-color="slate"] { --track-color: var(--slate); --track-tint: var(--slate-soft); }
+
+  .track-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .track-num {
+    font-family: 'Georgia', serif;
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--track-color);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    flex-shrink: 0;
+  }
+  .track-titles h2 {
+    font-family: 'Georgia', serif;
+    font-size: 26px;
+    margin: 4px 0 6px;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  .track-titles .track-tag {
+    display: inline-block;
+    background: var(--track-tint);
+    color: var(--track-color);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .focus {
+    background: var(--track-tint);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 16px 0 24px;
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .focus strong { color: var(--track-color); }
+
+  .subtrack {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .subtrack:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  .subtrack h3 {
+    font-size: 16px;
+    margin: 0 0 12px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .subtrack h3 .sub-num {
+    font-family: 'Georgia', serif;
+    font-weight: 700;
+    color: var(--track-color);
+    font-size: 15px;
+  }
+  .subtrack h4 {
+    font-size: 14px;
+    margin: 16px 0 8px;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .subtrack ol, .subtrack ul {
+    margin: 8px 0 12px;
+    padding-left: 22px;
+  }
+  .subtrack li { margin: 4px 0; color: var(--ink-soft); }
+  .subtrack ul ul, .subtrack ol ul { margin-top: 4px; }
+  .subtrack code {
+    background: rgba(0,0,0,0.04);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  .benefit {
+    background: rgba(0,0,0,0.02);
+    border-left: 3px solid var(--track-color);
+    padding: 10px 14px;
+    margin: 12px 0 4px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-radius: 0 6px 6px 0;
+  }
+  .benefit strong { color: var(--track-color); }
+
+  /* SEQUENCING TIMELINE */
+  .sequence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 16px 0 8px;
+    padding: 16px;
+    background: rgba(0,0,0,0.02);
+    border-radius: 10px;
+  }
+  .sequence .step {
+    background: var(--track-color);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    font-family: 'Georgia', serif;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+    min-width: 80px;
+  }
+  .sequence .step small {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 10px;
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 3px;
+  }
+  .sequence .arrow {
+    color: var(--track-color);
+    opacity: 0.4;
+    font-size: 18px;
+  }
+  .sequence-caption {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* PHASE STRIP for meeting capture */
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 16px 0 20px;
+  }
+  .phase {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    background: rgba(255,255,255,0.5);
+  }
+  .phase .phase-tag {
+    display: inline-block;
+    background: var(--track-color);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .phase .phase-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .phase .phase-desc { font-size: 12px; color: var(--muted); }
+
+  /* NORTH STAR SECTION */
+  .north-star {
+    background: var(--ns-bg);
+    color: var(--ns-ink);
+    border-radius: 14px;
+    padding: 40px 32px;
+    margin-top: 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .north-star::before {
+    content: "";
+    position: absolute;
+    top: -100px; right: -100px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(94,234,212,0.15), transparent 70%);
+    border-radius: 50%;
+  }
+  .north-star .ns-tag {
+    display: inline-block;
+    background: rgba(94,234,212,0.15);
+    color: var(--ns-accent);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .north-star h2 {
+    font-family: 'Georgia', serif;
+    font-size: 32px;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .north-star .ns-lede {
+    color: #cbd5e1;
+    font-size: 15px;
+    max-width: 640px;
+    margin-bottom: 32px;
+  }
+  .bets {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    position: relative;
+  }
+  .bet {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 20px;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .bet:hover { transform: translateY(-2px); border-color: rgba(94,234,212,0.3); }
+  .bet .bet-num {
+    font-family: 'Georgia', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ns-accent);
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+  .bet h3 {
+    font-size: 15px;
+    margin: 0 0 8px;
+    color: var(--ns-ink);
+  }
+  .bet p {
+    font-size: 13px;
+    color: #94a3b8;
+    margin: 0;
+    line-height: 1.55;
+  }
+  .bet.near-term { border-color: rgba(94,234,212,0.4); }
+  .bet.near-term::after {
+    content: "Near-term expansion";
+    display: block;
+    margin-top: 12px;
+    font-size: 10px;
+    color: var(--ns-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .bet.moat { border-color: rgba(94,234,212,0.4); }
+  .bet.moat::after {
+    content: "Long-term moat";
+    display: block;
+    margin-top: 12px;
+    font-size: 10px;
+    color: var(--ns-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .framing {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 13px;
+    color: #cbd5e1;
+    font-style: italic;
+  }
+  .framing strong { color: var(--ns-accent); font-style: normal; }
+
+  .deprio { color: var(--muted); font-size: 13px; }
+  .deprio strong { color: var(--ink-soft); }
+
+  /* MAPPING GRID */
+  .mapping-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 32px 0 20px;
+  }
+  .mapping-header h2 {
+    font-family: 'Georgia', serif;
+    font-size: 22px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .mapping-header .mapping-sub {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .mapping {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 56px;
+  }
+  .mapping-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .map-grid {
+    display: grid;
+    grid-template-columns: 1fr 200px 1fr;
+    gap: 0;
+    position: relative;
+    align-items: stretch;
+  }
+  .map-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .map-col.right { gap: 12px; }
+  .map-node {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--node-color, var(--muted));
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.3;
+    position: relative;
+    z-index: 2;
+  }
+  .map-node .node-num {
+    font-family: 'Georgia', serif;
+    font-weight: 700;
+    color: var(--node-color, var(--muted));
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+  }
+  .map-node .node-title { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .map-node .node-desc { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  .map-node[data-c="teal"] { --node-color: var(--accent); }
+  .map-node[data-c="coral"] { --node-color: var(--coral); }
+  .map-node[data-c="violet"] { --node-color: var(--violet); }
+  .map-node[data-c="amber"] { --node-color: var(--amber); }
+  .map-node[data-c="rose"] { --node-color: var(--rose); }
+  .map-node[data-c="slate"] { --node-color: var(--slate); }
+
+  .map-links {
+    position: relative;
+    height: 100%;
+  }
+  .map-links svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .map-links path {
+    fill: none;
+    stroke-width: 1.75;
+    opacity: 0.55;
+    transition: opacity 0.2s, stroke-width 0.2s;
+  }
+  .map-links path:hover { opacity: 1; stroke-width: 3; }
+
+  @media (max-width: 720px) {
+    .map-grid { grid-template-columns: 1fr; }
+    .map-links { display: none; }
+    .map-col.right { margin-top: 16px; }
+  }
+
+  /* GO-LIVE CHECKLIST */
+  .golive {
+    background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .golive::before {
+    content: "";
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(234,88,12,0.12), transparent 70%);
+    border-radius: 50%;
+  }
+  .golive-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+  .golive-tag {
+    display: inline-block;
+    background: var(--coral);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .golive-timeline { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .golive h2 {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    margin: 12px 0 8px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .golive-lede { color: var(--ink-soft); font-size: 14px; max-width: 640px; margin-bottom: 24px; }
+
+  .checklist {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    position: relative;
+  }
+  @media (max-width: 720px) { .checklist { grid-template-columns: 1fr; } }
+  .cl-column h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cl-column.p0 h3 { color: #b91c1c; }
+  .cl-column.p1 h3 { color: #92400e; }
+  .cl-badge {
+    display: inline-block;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+  .cl-column.p0 .cl-badge { background: #fecaca; color: #b91c1c; }
+  .cl-column.p1 .cl-badge { background: #fed7aa; color: #92400e; }
+
+  .cl-item {
+    background: rgba(255,255,255,0.6);
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .cl-item .check {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--muted);
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    background: white;
+  }
+  .cl-item .cl-body { flex: 1; color: var(--ink); }
+  .cl-item .cl-title { font-weight: 600; }
+  .cl-item .cl-ref {
+    color: var(--muted);
+    font-size: 11px;
+    text-decoration: none;
+    font-family: 'SF Mono', Monaco, monospace;
+    margin-left: 6px;
+  }
+  .cl-item .cl-ref:hover { color: var(--coral); }
+  .cl-item .cl-desc { color: var(--ink-soft); font-size: 12px; margin-top: 3px; }
+  /* Done state — struck through, checkbox filled. */
+  .cl-item.done { background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.25); }
+  .cl-item.done .check {
+    background: #10b981;
+    border-color: #10b981;
+    position: relative;
+  }
+  .cl-item.done .check::after {
+    content: "";
+    position: absolute;
+    left: 3px; top: 0px;
+    width: 5px; height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .cl-item.done .cl-title,
+  .cl-item.done .cl-desc { text-decoration: line-through; color: var(--muted); }
+  .cl-item.done::after {
+    content: "SHIPPED";
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #10b981;
+    align-self: center;
+    margin-left: auto;
+    padding: 2px 6px;
+    border: 1px solid #10b981;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<aside>
+  <div class="brand">El-Rom</div>
+  <div class="brand-sub">Platform Roadmap</div>
+  <nav>
+    <a href="#objectives"><span class="num">◇</span> Objectives</a>
+    <div class="divider"></div>
+    <a href="#t1"><span class="num">1</span> Core engine</a>
+    <a href="#t2"><span class="num">2</span> User experience</a>
+    <a href="#t3"><span class="num">3</span> Documents &amp; archive</a>
+    <a href="#t4"><span class="num">4</span> Meeting capture</a>
+    <a href="#t5"><span class="num">5</span> Observability</a>
+    <a href="#t6"><span class="num">6</span> Mailer service</a>
+    <div class="divider"></div>
+    <a href="#north-star"><span class="num">★</span> North star</a>
+  </nav>
+</aside>
+
+<main>
+
+<section class="hero">
+  <h1>El-Rom Platform Roadmap</h1>
+  <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
+  <div class="meta">
+    <span>Owner<strong>Tal Gurevich</strong></span>
+    <span>Updated<strong>2026-07-07</strong></span>
+    <span>Status<strong>Draft for discussion</strong></span>
+  </div>
+</section>
+
+<section id="objectives">
+  <div class="mapping-header">
+    <h2>Objectives &rarr; Tracks</h2>
+    <span class="mapping-sub">How the 5 objectives map to the 6 delivery tracks</span>
+  </div>
+  <div class="mapping">
+    <div class="mapping-legend">
+      <span>Objectives</span>
+      <span>Delivery tracks</span>
+    </div>
+    <div class="map-grid">
+      <div class="map-col left">
+        <div class="map-node" data-c="teal">
+          <div class="node-num">Obj 01</div>
+          <div class="node-title">Performance</div>
+          <div class="node-desc">Recall, precision, hallucination control.</div>
+        </div>
+        <div class="map-node" data-c="coral">
+          <div class="node-num">Obj 02</div>
+          <div class="node-title">UX for main users</div>
+          <div class="node-desc">Good enough for go-live.</div>
+        </div>
+        <div class="map-node" data-c="amber">
+          <div class="node-num">Obj 03</div>
+          <div class="node-title">Observability</div>
+          <div class="node-desc">Useful monitoring in place.</div>
+        </div>
+        <div class="map-node" data-c="violet">
+          <div class="node-num">Obj 04</div>
+          <div class="node-title">Enterprise readiness</div>
+          <div class="node-desc">Key peripherals for basic go-live.</div>
+        </div>
+        <div class="map-node" data-c="slate">
+          <div class="node-num">Obj 05</div>
+          <div class="node-title">Communication</div>
+          <div class="node-desc">Mode &amp; tooling for management.</div>
+        </div>
+      </div>
+
+      <div class="map-links">
+        <svg viewBox="0 0 200 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Obj 1 Performance → T1 Core engine (teal) -->
+          <path d="M 0 10 C 80 10, 120 7, 200 7" stroke="#0d9488"/>
+
+          <!-- Obj 2 UX → T2 UX (primary, coral) -->
+          <path d="M 0 30 C 80 30, 120 25, 200 25" stroke="#ea580c"/>
+          <!-- Obj 2 UX → T3 Documents (secondary, coral, dashed) -->
+          <path d="M 0 30 C 80 30, 120 42, 200 42" stroke="#ea580c" stroke-dasharray="4 3" opacity="0.35"/>
+
+          <!-- Obj 3 Observability → T5 Observability (amber) -->
+          <path d="M 0 50 C 80 50, 120 75, 200 75" stroke="#ca8a04"/>
+
+          <!-- Obj 4 Enterprise → T3 Documents (primary, violet) -->
+          <path d="M 0 70 C 80 70, 120 42, 200 42" stroke="#7c3aed"/>
+          <!-- Obj 4 Enterprise → T4 Meeting capture (secondary, violet) -->
+          <path d="M 0 70 C 80 70, 120 58, 200 58" stroke="#7c3aed" stroke-dasharray="4 3" opacity="0.35"/>
+
+          <!-- Obj 5 Communication → T6 Mailer (primary, slate) -->
+          <path d="M 0 90 C 80 90, 120 93, 200 93" stroke="#475569"/>
+          <!-- Obj 5 Communication → T4 Meeting capture (secondary, slate) -->
+          <path d="M 0 90 C 80 90, 120 58, 200 58" stroke="#475569" stroke-dasharray="4 3" opacity="0.35"/>
+        </svg>
+      </div>
+
+      <div class="map-col right">
+        <a class="map-node" data-c="teal" href="#t1" style="text-decoration:none;">
+          <div class="node-num">Track 1</div>
+          <div class="node-title">Core engine</div>
+          <div class="node-desc">Hierarchy, context, tooling.</div>
+        </a>
+        <a class="map-node" data-c="coral" href="#t2" style="text-decoration:none;">
+          <div class="node-num">Track 2</div>
+          <div class="node-title">User experience</div>
+          <div class="node-desc">Go-live polish.</div>
+        </a>
+        <a class="map-node" data-c="violet" href="#t3" style="text-decoration:none;">
+          <div class="node-num">Track 3</div>
+          <div class="node-title">Documents &amp; archive</div>
+          <div class="node-desc">Browse, search, integration.</div>
+        </a>
+        <a class="map-node" data-c="rose" href="#t4" style="text-decoration:none;">
+          <div class="node-num">Track 4</div>
+          <div class="node-title">Meeting capture</div>
+          <div class="node-desc">Minutes &amp; governance workflow.</div>
+        </a>
+        <a class="map-node" data-c="amber" href="#t5" style="text-decoration:none;">
+          <div class="node-num">Track 5</div>
+          <div class="node-title">Observability</div>
+          <div class="node-desc">Metrics, cost, analytics.</div>
+        </a>
+        <a class="map-node" data-c="slate" href="#t6" style="text-decoration:none;">
+          <div class="node-num">Track 6</div>
+          <div class="node-title">Mailer service</div>
+          <div class="node-desc">Digests, notifications.</div>
+        </a>
+      </div>
+    </div>
+    <div class="mapping-legend" style="margin-top: 20px; margin-bottom: 0; padding-bottom: 0; border: none; font-style: italic; text-transform: none; letter-spacing: 0;">
+      <span>Solid line = primary track for objective</span>
+      <span>Dashed line = secondary contribution</span>
+    </div>
+  </div>
+</section>
+
+<section class="golive" id="golive">
+  <div class="golive-header">
+    <span class="golive-tag">Now — go-live</span>
+    <span class="golive-timeline">Between today &amp; design-partner launch</span>
+  </div>
+  <h2>Immediate action items until go-live</h2>
+  <p class="golive-lede">Not the full roadmap — just what must land before <strong>אל-רום</strong> can run in production without El-Rom holding their hand. Each item links back to its home track for detail.</p>
+
+  <div class="checklist">
+    <div class="cl-column p0">
+      <h3><span class="cl-badge">P0</span> Must ship for go-live</h3>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Fix BM25 Hebrew normalization</span> <a class="cl-ref" href="#t1">§1.1</a>
+          <div class="cl-desc">Real prefix + inflection handling in <code>normalize_hebrew</code>. Today the BM25 lane silently returns 0 hits for common Hebrew queries.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Tenant context injection for אל-רום</span> <a class="cl-ref" href="#t1">§1.5</a>
+          <div class="cl-desc">Per-tenant system-prompt block with governance structure, folder layout, glossary. Highest ROI-per-effort quality lever.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Cite-or-refuse mode + hallucination guardrails</span> <a class="cl-ref" href="#t1">§1</a>
+          <div class="cl-desc">Trust floor. If the retrieved chunks don't support an answer, refuse rather than guess.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Original document viewer (PDF v1)</span> <a class="cl-ref" href="#t3">§3.5</a>
+          <div class="cl-desc">Click a citation → open the original PDF at the right page with the cited passage highlighted. Verifiability requirement.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Email + password auth &amp; password reset</span> <a class="cl-ref" href="#t3">§3.6 Auth</a>
+          <div class="cl-desc">Not every staff member has a Google account. Blocks user provisioning today.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Production domain setup — <code>klaser.co.il</code></span> <a class="cl-ref" href="#t3">§3.6 Enterprise</a>
+          <div class="cl-desc">Custom domain live on Render (frontend), SSL auto-provisioned via Let's Encrypt. Mailer sender domain (SPF/DKIM/DMARC) tracked separately with the mailer infra item.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Mailer infrastructure setup</span> <a class="cl-ref" href="#t6">§6</a>
+          <div class="cl-desc">Transactional provider (SES / Postmark / Resend), sender domain + verification, templates for password reset, invite, welcome, and error retries. Blocks auth flows.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Separate admin surface from client-facing UI</span> <a class="cl-ref" href="#t3">§3.6 Enterprise</a>
+          <div class="cl-desc">Split the app into two clear surfaces — end-user Q&amp;A/browse vs admin/superadmin. Distinct navigation, distinct routes, distinct permissions boundary. Precondition for the new admin dash.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">New admin dashboard — tenants, users, super-admins</span> <a class="cl-ref" href="#t3">§3.6 Enterprise</a>
+          <div class="cl-desc">Super-admin lands in פאנל ניהול: create tenants, add/remove users per tenant, grant/revoke super-admin. Corpus health / recent uploads / review-queue widgets are follow-up.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Query &amp; retrieval logging visible to superadmin</span> <a class="cl-ref" href="#t5">§5</a>
+          <div class="cl-desc">When a customer says "the answer was wrong," we need to see the trace without dropping into their DB.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Golden-set baseline for אל-רום corpus</span> <a class="cl-ref" href="#t1">§1 cross-cutting</a>
+          <div class="cl-desc">Real questions with binary pass/fail. Precondition for measuring any of the above.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cl-column p1">
+      <h3><span class="cl-badge">P1</span> Should ship or fast-follow</h3>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Faceted browse v1</span> <a class="cl-ref" href="#t3">§3.1</a>
+          <div class="cl-desc">Corpus browser with filter sidebar (doc type, date, status). Direct answer to client "sift and search" ask.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Welcome email + first-run tour</span> <a class="cl-ref" href="#t3">§3.6 Onboarding</a>
+          <div class="cl-desc">So a new secretary can sign in and know what to do without a phone call.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">In-app support widget (minimum)</span> <a class="cl-ref" href="#t3">§3.6 Support</a>
+          <div class="cl-desc">Chat channel with session context attached. Cuts email/WhatsApp support noise.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Bulk import from Google Drive</span> <a class="cl-ref" href="#t3">§3.4</a>
+          <div class="cl-desc">One-shot ingest of the tenant's existing archive tree — no manual reupload per file.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">"No confident answer" state in the UI</span> <a class="cl-ref" href="#t2">§2</a>
+          <div class="cl-desc">Clearer visual distinction between a real answer and a low-confidence one. Pairs with cite-or-refuse.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Basic latency &amp; error monitoring</span> <a class="cl-ref" href="#t5">§5.2</a>
+          <div class="cl-desc">P50 / P95 answer latency, ingest failures. Doesn't need dashboards yet — just alerts on spikes.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Admin support console (minimum)</span> <a class="cl-ref" href="#t3">§3.6 Support</a>
+          <div class="cl-desc">Superadmin view of a tenant's last activity, failed queries, ingestion errors. Enough to diagnose without switching in.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Additional login methods</span> <a class="cl-ref" href="#t3">§3.6 Auth</a>
+          <div class="cl-desc">Magic link (passwordless email) as a lower-friction option alongside Google + email/password. Optional Microsoft OAuth if tenants ask.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">First mailer templates live</span> <a class="cl-ref" href="#t6">§6</a>
+          <div class="cl-desc">Beyond transactional (P0): welcome digest, weekly "what's new in your archive," admin health summary. Ships with the mailer infra but non-blocking for launch day.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<article class="track" data-color="teal" id="t1">
+  <div class="track-header">
+    <div class="track-num">1</div>
+    <div class="track-titles">
+      <span class="track-tag">Foundation</span>
+      <h2>Core engine — hierarchy, context, tooling</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Give the system the same organizational scaffolding and reasoning surface a smart human researcher would need. Move away from embedding-first RAG as the sole retrieval path; treat retrieval as a tool surface the LLM can call iteratively.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.1</span> Fix the retrieval primitive</h3>
+    <ul>
+      <li>Real Hebrew morphology in <code>normalize_hebrew</code> — prefix (ה / ו / ב / כ / ל / מ / ש) and inflection handling.</li>
+      <li>Section-path and folder filters exposed to the retrieval layer.</li>
+      <li>Folder / collection metadata pushed into the chunk index for scoped search.</li>
+      <li>Chunking strategy revisit — semantic vs fixed, overlap, section-aware for bylaws.</li>
+      <li>Reranker layer confirmed end-to-end against the golden set.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Actual BM25 recall on inflected Hebrew queries (today's silent 0-hit path starts working). Scoped search becomes possible. Everything downstream inherits the improvement.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.2</span> Hierarchy construction &amp; document structure</h3>
+    <p>Building a rich, machine-navigable hierarchy over the corpus is what turns retrieval from keyword-lookup into structured reasoning. Same principle a smart researcher would apply — "where would this live?" before "what does it say?"</p>
+    <ol>
+      <li>Explicit hierarchy model: <strong>tenant → collection → doc_type → document → section → subsection</strong>. Persisted as first-class entities with parent/child relationships, not implicit in filenames.</li>
+      <li>Automatic hierarchy inference — LLM-assisted classification of newly ingested documents into the right collection + doc_type, with confidence scores and review queue for low-confidence placements.</li>
+      <li>Section-tree extraction — parse structural markers (סעיף, פרק, החלטה, סעיף משנה, נספח) into a proper tree, not a flat section-path string. Enables ancestor/descendant queries.</li>
+      <li>Cross-document relationships — a decision "cites" a bylaw section; a protocol "contains" decisions; an amendment "modifies" a section. First-class graph edges, queryable and displayable.</li>
+      <li>Per-tenant hierarchy customization — tenants have different governance structures (committees, sub-organizations); the hierarchy adapts rather than forcing a one-size-fits-all tree.</li>
+      <li>Hierarchy-aware chunking — chunks carry their full ancestor path (collection → doc → section → subsection) as metadata, retrievable and filterable.</li>
+      <li>Hierarchy browse tool for the agent — <code>get_hierarchy(path?, depth?)</code> so the agent can zoom in and out ("what's in the pension collection?", "what sections does bylaw X have?") before drilling into content.</li>
+      <li>Human-editable hierarchy — admins can restructure, rename, merge, or split collections without breaking retrieval or amendment links.</li>
+      <li>Hierarchy visualization — a browseable tree view of the corpus for humans (feeds into §3.1 faceted browse) and a compact serialized form for the LLM context.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> The single biggest lever for agentic retrieval quality. An LLM that can reason "this question is about a decision, so search the decisions collection first, in the pension committee, from the last 3 years" is dramatically more accurate than one blindly searching all chunks. Also unlocks per-type UX in §3.3 and per-collection ACLs in §3.2.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.3</span> Wrap retrieval, amendments &amp; HITL as tools</h3>
+    <ul>
+      <li><code>search_documents(query, folder?, doc_type?, top_k)</code></li>
+      <li><code>get_document_toc(doc_id)</code></li>
+      <li><code>read_section(doc_id, section_path)</code> — current effective version.</li>
+      <li><code>list_amendments(doc_id, section?)</code></li>
+      <li><code>check_authoritative_answers(question)</code> — HITL cache probe.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Stable retrieval API reused by RAG, agent, mailer, integrations. Preserves the amendment graph and HITL cache. Retrieval quality becomes independently testable against the golden set.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.4</span> Agentic loop on top of the tools</h3>
+    <ul>
+      <li>Replace one-shot "retrieve → answer" with a Sonnet loop that iterates tool calls.</li>
+      <li>Agent decides when to search, drill in, check amendments, consult HITL.</li>
+      <li>Every tool call logged for traceable debugging.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Multi-hop questions become tractable — bylaw → section → amendment → answer. Self-correction on empty retrievals. Cache-first via <code>check_authoritative_answers</code>.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.5</span> Tenant context injection</h3>
+    <ul>
+      <li>Per-tenant system-prompt block: who they are, governance structure, main folders, glossary, common query patterns.</li>
+      <li>Query rewriting / HyDE retained where useful — no longer carrying the retrieval burden alone.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Cheapest single quality lever. Correct terminology per organization. Feeds tool-call reasoning ("search this folder first"). First step toward multi-tenant differentiation.</div>
+  </div>
+
+  <div class="subtrack">
+    <h4>Trust &amp; safety (folded in)</h4>
+    <ul>
+      <li>Hallucination guardrails.</li>
+      <li>"Cite or refuse" mode.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h4>Cross-cutting: golden-set evaluation</h4>
+    <ul>
+      <li>Expand golden-set coverage: single-hop lookup, multi-hop amendment trace, ambiguous / off-topic (guardrail tests).</li>
+      <li>Binary pass/fail per question; re-run after every change.</li>
+    </ul>
+    <p class="deprio"><strong>Deprioritized:</strong> A/B testing (too much overhead for team size); recall as headline metric (vanity).</p>
+  </div>
+
+  <div class="subtrack">
+    <h4>Sequencing bet</h4>
+    <div class="sequence">
+      <div class="step">1.1<small>Retrieval</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.2<small>Hierarchy</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.5<small>Context</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.3<small>Tools</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.4<small>Agent</small></div>
+    </div>
+    <div class="sequence-caption">1.1 and 1.2 are the two foundations — retrieval primitive plus hierarchy — that everything else runs on. 1.5 is the highest ROI-per-effort layer. 1.3 is a refactor without behavior change. 1.4 is the biggest architectural lift and rides on a solid foundation.</div>
+  </div>
+</article>
+
+<article class="track" data-color="coral" id="t2">
+  <div class="track-header">
+    <div class="track-num">2</div>
+    <div class="track-titles">
+      <span class="track-tag">Go-live</span>
+      <h2>User experience</h2>
+    </div>
+  </div>
+  <div class="focus"><strong>Focus.</strong> Is it good enough for secretaries and managers on day one?</div>
+  <div class="subtrack">
+    <ol>
+      <li>First-run tour and empty-state guidance.</li>
+      <li>Better answer citations — jump-to-source in the document viewer.</li>
+      <li>Query suggestions and recent searches.</li>
+      <li>Clearer distinction between "no confident answer" and "here's a guess" states.</li>
+      <li>Mobile polish.</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="violet" id="t3">
+  <div class="track-header">
+    <div class="track-num">3</div>
+    <div class="track-titles">
+      <span class="track-tag">Client-signaled</span>
+      <h2>Document management &amp; archival integration</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> The platform is the tenant's system of record for governance documents — not just a Q&amp;A surface over uploads. Secretaries want to sift, browse, and search their corpus, and to integrate with the archives they already run.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.1</span> Faceted browse &amp; structured search</h3>
+    <ol>
+      <li>Corpus browser as a first-class surface (not just Q&amp;A). List / grid view of all documents.</li>
+      <li>Filter sidebar over <code>doc_metadata</code>: doc type, folder, effective date range, status (active / amended / repealed), authority, tags, uploader.</li>
+      <li>Sort by date, title, last modified, relevance.</li>
+      <li>Structured search: title contains, decision number = X, meeting number range, effective between dates — combinable with full-text search inside the current filter.</li>
+      <li>Saved views ("all active pension bylaws", "unclassified uploads this month").</li>
+      <li>Bookmarks / pinned documents per user.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Matches how secretaries actually work — they usually know roughly what they're looking for and want to narrow down. Turns the platform from Q&amp;A box into daily working environment.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.2</span> Repository structure</h3>
+    <ol>
+      <li>Folder / collection hierarchy (bylaws vs decisions vs protocols vs contracts).</li>
+      <li>Rich metadata surfaced as filter dimensions in 3.1.</li>
+      <li>Amendment / supersession graph (extend existing work).</li>
+      <li>Version history and diff view.</li>
+      <li>Bulk operations: upload, retag, move, reclassify, delete.</li>
+      <li>Access control per collection.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.3</span> Doc-type expansion (first-class governance artifact types)</h3>
+    <ol>
+      <li>Per-type schemas — each artifact type gets structured metadata beyond generic tags:
+        <ul>
+          <li><strong>Bylaws</strong> — sections, effective ranges, superseded-by chain.</li>
+          <li><strong>Decisions</strong> — committee, decision number, date, outcome, cites bylaw sections.</li>
+          <li><strong>Protocols (minutes)</strong> — meeting date, committee, attendees, agenda items, contained decisions, action items.</li>
+          <li><strong>Contracts</strong> — parties, effective / expiry dates, obligations, renewal terms.</li>
+          <li><strong>Correspondence, financial reports, permits</strong> — added as needed.</li>
+        </ul>
+      </li>
+      <li>Per-type browse UX — decision registry view, protocol calendar view, contract expiry dashboard.</li>
+      <li>Per-type semantics in the amendment graph — a decision doesn't amend a bylaw the way an amendment does.</li>
+      <li>Per-type extraction prompts extending the classifier.</li>
+      <li>Per-type retrieval filters exposed to the agent (§1.2 tools).</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Unlocks queries the current pipeline can't answer well — "list all pension-committee decisions from 2024 that reference section 4 of the housing bylaw." Turns generic RAG into a governance-specific system.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.4</span> Archival system integration</h3>
+    <ol>
+      <li>Google Drive / SharePoint import — preserve source folder structure, filenames, and existing metadata.</li>
+      <li>Bulk archive import: point at a Drive tree or an uploaded zip and ingest wholesale.</li>
+      <li>One-way sync (external → El-Rom) as v1; round-trip sync explicitly held as a v2 decision.</li>
+      <li>Deduplication: same bylaw arriving from multiple sources — detect and merge.</li>
+      <li>Provenance &amp; attribution: source path, uploader, ingestion timestamp, channel — visible in the doc detail view.</li>
+      <li>Local filesystem / Windows share import for tenants without cloud archives.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Lowers switching cost — tenants extend existing archives rather than abandoning them. Direct answer to the "integrate with our archival system" ask.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.5</span> Original document viewer</h3>
+    <p>Today the platform displays a rendered/extracted view of the document. Users need to open the <em>original</em> file (PDF, DOCX, scanned image) in a proper web viewer embedded in the platform — not download-and-open in an external app, and not our re-rendering.</p>
+    <ol>
+      <li>In-app web viewer for PDF and DOCX — page navigation, zoom, search within the document.</li>
+      <li>Click-through from any citation, chunk, or search result opens the original at the correct page / section.</li>
+      <li>Deep-link support — a URL points to a specific document page or section for sharing and bookmarking.</li>
+      <li>Text-layer overlay on scanned PDFs — OCR text stays selectable and searchable in the viewer so citations remain jump-to-source even on image-based scans.</li>
+      <li>Highlight the cited passage on open — the section the LLM referenced is visually marked in the original.</li>
+      <li>Side-by-side mode — original document on one side, extracted/answered text or metadata on the other.</li>
+      <li>Print / download the original file, with tenant-level ACL enforcement.</li>
+      <li>Viewer works on mobile — pinch-zoom, page swipe, readable on small screens.</li>
+      <li>Format coverage roadmap — PDF and DOCX in v1; images (JPG/PNG), spreadsheets, and legacy DOC as fastfollows.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Trust and verifiability. Secretaries and reviewers need to see the actual signed / scanned document, not our interpretation of it — especially for bylaws and decisions where the exact wording is legally meaningful. Also closes a common regression path where extraction loses formatting, tables, or signatures that matter.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.6</span> Key peripherals</h3>
+    <h4>Enterprise / superadmin tools</h4>
+    <ol>
+      <li>Tenant setup wizard (currently manual).</li>
+      <li>User management: invite, roles, deactivate, SSO.</li>
+      <li>Per-tenant usage and billing view.</li>
+      <li>Audit log — who read / uploaded / deleted what.</li>
+      <li>Feature flags per tenant.</li>
+      <li>Cross-tenant health dashboard.</li>
+    </ol>
+
+    <h4>Authentication expansion</h4>
+    <p>Today auth is Google-OAuth-only. Broadens the addressable user base (non-Google organizations, personal-email users, tenants with mixed provider mix).</p>
+    <ol>
+      <li>Email + password authentication alongside Google OAuth.</li>
+      <li>Password reset flow (email link, expiry, single-use token).</li>
+      <li>Self-registration surface — admin-controlled per tenant. Tenant admins toggle "allow self-registration" and set the allowed email domain(s); registrants land in a pending state until approved, or auto-approved if the domain matches.</li>
+      <li>Invite-based registration path — admin sends invite link, invitee sets password on first click.</li>
+      <li>Email verification on first sign-up.</li>
+      <li>Session &amp; token management: refresh tokens, revoke sessions, "sign out everywhere."</li>
+      <li>Optional MFA (TOTP) for admin roles.</li>
+      <li>Account linking — same email across Google and email/password resolves to one user.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Removes the Google-account precondition, unblocks tenants whose staff use personal or non-Google email, and gives admins a real registration workflow instead of manual CLI provisioning.</div>
+
+    <h4>User onboarding &amp; activation</h4>
+    <p>Formalize the path from first sign-in to daily use. Reduces admin hand-holding per new user and gets each user to first value faster.</p>
+    <ol>
+      <li>Welcome email on account creation — tenant-branded, explains what the platform is for and links to first action.</li>
+      <li>First-run in-app tour — role-aware (secretary vs manager vs reviewer see different steps).</li>
+      <li>Onboarding checklist — visible until dismissed: e.g. "upload your first document," "try a query," "set your notification preferences," "invite a colleague."</li>
+      <li>Progressive disclosure — advanced features (bulk operations, amendment review, HITL cache) unlocked as usage builds, not dumped on the user on day one.</li>
+      <li>Sample corpus / sandbox tenant for evaluators and demos — pre-populated so new tenants aren't staring at empty state.</li>
+      <li>Empty-state design across the app — every empty view says what to do next, not just "no data."</li>
+      <li>Tenant-admin onboarding runbook — separate flow for the person setting up the tenant vs the end users using it.</li>
+      <li>Activation metrics tracked in §5 (time-to-first-query, time-to-first-upload, D7 return rate).</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Cuts the "someone from El-Rom has to sit with each new user" cost. Turns onboarding from bespoke consulting into a repeatable, measurable process — precondition for scaling beyond design-partner customers.</div>
+
+    <h4>Support tools integration</h4>
+    <p>Give users a real support surface inside the app, and give the El-Rom team the tools to answer them efficiently.</p>
+    <ol>
+      <li>In-app help center — searchable knowledge base of how-to articles, embedded in the product (not a separate site).</li>
+      <li>In-app support widget — chat / message channel (Intercom, Crisp, or equivalent) for direct user-to-support communication. Attaches session context (tenant, role, current page) automatically.</li>
+      <li>Bug report &amp; feedback capture — one-click surface that grabs the current URL, recent actions, and (optional) screenshot; routes to the internal tracker.</li>
+      <li>Contextual help — inline "?" tooltips next to non-obvious features (amendment review, HITL cache, folder filters).</li>
+      <li>Admin support console — superadmin view to see a tenant's recent errors, failed queries, ingestion problems, and last activity without switching into their tenant read-only.</li>
+      <li>Ticket / issue lifecycle — from user report to resolution, visible to the reporting user ("your issue is being worked on").</li>
+      <li>Status page for platform-wide incidents.</li>
+      <li>Self-serve diagnostics — "why did I get no answer?" surface that shows the retrieval trace to the user in a friendly form.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Users get answers without going through Tal directly. Support team gets the context needed to resolve issues without a debugging conversation. Together with onboarding, this is what makes the platform operable at more than a handful of design-partner tenants.</div>
+    <h4>Sensitivity / PII handling</h4>
+    <p>For HR documents and other sensitive corpora.</p>
+    <h4>Other integrations</h4>
+    <ol>
+      <li>WhatsApp / Teams query interface.</li>
+      <li>Calendar hooks for meeting protocols?</li>
+    </ol>
+    <h4>Workflow actions</h4>
+    <ol>
+      <li>"Draft a response citing bylaw X."</li>
+      <li>"Flag decisions conflicting with new amendment."</li>
+    </ol>
+    <h4>Open FAQ</h4>
+    <p>For frequent public Q&amp;A.</p>
+  </div>
+</article>
+
+<article class="track" data-color="rose" id="t4">
+  <div class="track-header">
+    <div class="track-num">4</div>
+    <div class="track-titles">
+      <span class="track-tag">Strategic pivot</span>
+      <h2>Meeting capture &amp; minute-taking</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Stop being a search layer over already-written protocols — start capturing meetings as they happen. First step toward the Governance OS long-term bet: the platform becomes the tool the meeting runs on, not just the archive it lands in.
+  </div>
+
+  <div class="phases">
+    <div class="phase">
+      <span class="phase-tag">v1</span>
+      <div class="phase-title">After-the-fact capture</div>
+      <div class="phase-desc">Lower risk. Upload audio → transcript → structured draft protocol. Ships without real-time infra.</div>
+    </div>
+    <div class="phase">
+      <span class="phase-tag">v2</span>
+      <div class="phase-title">Real-time capture</div>
+      <div class="phase-desc">In-meeting agenda, live notes, inline decisions, streaming transcription. Protocol ready at meeting close.</div>
+    </div>
+    <div class="phase">
+      <span class="phase-tag">cross</span>
+      <div class="phase-title">Governance workflow</div>
+      <div class="phase-desc">Draft → attendee approval → decisions promote → amendment overlay → action-item tracking.</div>
+    </div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">4.1</span> After-the-fact capture (v1)</h3>
+    <ol>
+      <li>Upload meeting audio (or video) — Hebrew-tuned transcription (Whisper large-v3 or equivalent, RTL-aware).</li>
+      <li>Speaker diarization; map speakers to known attendees where possible.</li>
+      <li>Structured extraction from the transcript: attendees, agenda items, decisions taken, action items with owners, dissenting positions.</li>
+      <li>Auto-generated draft protocol (per tenant template) queued for secretary review.</li>
+      <li>Decision entries auto-created and linked to the source protocol; classified into the doc-type registry from §3.3.</li>
+      <li>Review UI — secretary approves / edits before the protocol becomes canonical.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Compresses the "meeting → typed protocol" workflow from days to minutes. Solves the highest-friction task in the secretary's week.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">4.2</span> Real-time capture (v2)</h3>
+    <ol>
+      <li>In-meeting agenda surface — displayed to attendees / secretary during the meeting.</li>
+      <li>Live note-taking with per-agenda-item threading.</li>
+      <li>Decisions logged inline as they are taken (motion → vote → outcome captured on the spot).</li>
+      <li>Streaming transcription in parallel — reconciled against manual notes at meeting end.</li>
+      <li>Auto-generated protocol available immediately at meeting close; secretary polishes rather than drafts from scratch.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">4.3</span> Governance workflow (cross-cutting)</h3>
+    <ol>
+      <li>Send draft protocol to attendees for approval (integrates with §6 Mailer).</li>
+      <li>Attendee comments / correction requests tracked against the draft.</li>
+      <li>Approved protocol locks; decisions promote to canonical registry.</li>
+      <li>Amendment overlay: a decision that changes a bylaw section auto-proposes an amendment entry.</li>
+      <li>Action-item tracker — items surface in the mailer digest until closed.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Closes the loop end-to-end: meeting happens → protocol generated → decisions logged → bylaws updated → participants notified → action items tracked. This is what "system of record for governance" actually means.</div>
+  </div>
+</article>
+
+<article class="track" data-color="amber" id="t5">
+  <div class="track-header">
+    <div class="track-num">5</div>
+    <div class="track-titles">
+      <span class="track-tag">Operations</span>
+      <h2>Observability</h2>
+    </div>
+  </div>
+  <div class="focus"><strong>Focus.</strong> Useful monitoring — not vanity dashboards.</div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">5.1</span> Analytics &amp; session recording</h3>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">5.2</span> Internal metrics</h3>
+    <ol>
+      <li>Latency SLOs.</li>
+      <li>Cost per query.</li>
+      <li>Model routing — Haiku for cheap queries, Opus for hard ones.</li>
+      <li>Query volume, top queries, zero-result queries.</li>
+      <li>Retrieval quality signals — thumbs, click-through to source.</li>
+      <li>Document coverage heatmap — which docs are never retrieved.</li>
+      <li>User engagement / activation funnel.</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="slate" id="t6">
+  <div class="track-header">
+    <div class="track-num">6</div>
+    <div class="track-titles">
+      <span class="track-tag">Communication</span>
+      <h2>Mailer service</h2>
+    </div>
+  </div>
+  <div class="focus"><strong>Focus.</strong> Establish a mode of communication and tooling for better management.</div>
+
+  <div class="subtrack">
+    <ol>
+      <li>Lexicon review digest.</li>
+      <li>New-document notifications and subscriptions.</li>
+      <li>Weekly "unanswered questions" report to admins.</li>
+      <li>Scheduled report exports.</li>
+      <li>Transactional infrastructure: templates, unsubscribe, deliverability.</li>
+    </ol>
+  </div>
+</article>
+
+<section class="north-star" id="north-star">
+  <div class="ns-tag">Beyond the single product</div>
+  <h2>North star bets</h2>
+  <p class="ns-lede">Vertical: digital frontier of kibbutz &amp; moshav management. The near-term product is a search-and-archive tool. The strategic surface is much larger.</p>
+
+  <div class="bets">
+    <div class="bet near-term">
+      <div class="bet-num">01</div>
+      <h3>Governance operating system</h3>
+      <p>Extend upstream from bylaws and decisions to the full lifecycle: meeting agenda → discussion → vote → decision → automatically becomes searchable, versioned bylaw. Become the system of record for governance, not just a search layer on top.</p>
+    </div>
+    <div class="bet">
+      <div class="bet-num">02</div>
+      <h3>Member-facing side (B2B2C)</h3>
+      <p>Open a resident-facing surface — "what are my rights re: parking?", "what did the assembly decide about the pool?" Turns the platform from admin tool into community infrastructure.</p>
+    </div>
+    <div class="bet moat">
+      <div class="bet-num">03</div>
+      <h3>Cross-community precedent network</h3>
+      <p>Anonymized decision/bylaw corpus across kibbutzim &amp; moshavim, so a secretary can ask "how did others handle a member leaving with equity?" Every new customer improves the product for all — data network effect as the moat.</p>
+    </div>
+    <div class="bet">
+      <div class="bet-num">04</div>
+      <h3>Regulatory / legal layer</h3>
+      <p>Proactive advisor against רשם האגודות השיתופיות rules and national regulation. "Your bylaw conflicts with new regulation X"; "decision from 2019 needs review."</p>
+    </div>
+  </div>
+
+  <div class="framing">
+    <strong>Working framing.</strong> Bet #1 is the near-term expansion (same customer, wider problem). Bet #3 is the long-term defensibility play (network effect). #2 and #4 held as options.
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>
