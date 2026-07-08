@@ -487,6 +487,17 @@ export const api = {
       body: JSON.stringify({ failure_mode: failureMode }),
     }),
 
+  markGood: (queryId: string) =>
+    request<{ status: string; authoritative_answer_id: string | null }>(
+      `/api/search/${queryId}/mark-good`,
+      { method: "POST" }
+    ),
+  markBroken: (queryId: string) =>
+    request<{ status: string; cached_answer_retired?: boolean }>(
+      `/api/search/${queryId}/mark-broken`,
+      { method: "POST" }
+    ),
+
   // Eval / goldens
   listGoldens: () => request<Golden[]>("/api/eval/goldens"),
   createGolden: (body: GoldenInput) =>
@@ -645,4 +656,35 @@ export const api = {
     request<{ status: string }>(`/api/admin/users/${userId}`, {
       method: "DELETE",
     }),
+
+  adminDebugQueue: (tenantId?: string) => {
+    const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    return request<DebugQueueItem[]>(`/api/admin/debug-queue${qs}`);
+  },
+  adminDismissDebug: (queryId: string) =>
+    request<{ status: string }>(
+      `/api/admin/debug-queue/${queryId}/dismiss`,
+      { method: "POST" }
+    ),
+};
+
+export type DebugChunk = {
+  chunk_id: string;
+  document_id: string;
+  document_filename: string;
+  section_path: string | null;
+  text: string;
+};
+
+export type DebugQueueItem = {
+  query_id: string;
+  tenant_id: string;
+  tenant_name: string | null;
+  question: string;
+  answer: string | null;
+  confidence: string | null;
+  llm_used: boolean;
+  created_at: string;
+  retrieval_debug: RetrievalDebug | null;
+  source_chunks: DebugChunk[];
 };

@@ -690,3 +690,107 @@ def tag_failure_mode(
         query.feedback = "negative"
     db.commit()
     return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Simplified end-user feedback: two buttons, no follow-up dialog.
+#   mark-good   → promote to authoritative answer immediately (auto-approve)
+#   mark-broken → flag for the super-admin's debug queue (retrieval_miss)
+# Replaces the old positive/negative → follow-up failure-mode picker.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class MarkGoodResponse(BaseModel):
+    status: str
+    authoritative_answer_id: UUID | None = None
+
+
+@router.post("/{query_id}/mark-good", response_model=MarkGoodResponse)
+def mark_good(
+    query_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> MarkGoodResponse:
+    """User marked the answer as good — auto-promote to authoritative library.
+
+    Idempotent: if the query already has an authoritative answer attached,
+    just re-confirms feedback and returns that id.
+    """
+    query = db.get(Query, query_id)
+    if query is None or query.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Query not found")
+
+    query.feedback = "positive"
+
+    # Already promoted (either by prior click or by the reviewer queue) —
+    # nothing more to do.
+    if query.authoritative_answer_id:
+        db.commit()
+        return MarkGoodResponse(
+            status="ok",
+            authoritative_answer_id=query.authoritative_answer_id,
+        )
+
+    final_answer = (query.answer or "").strip()
+    if not final_answer or query.confidence == "refused":
+        # Nothing to promote — still record the positive signal.
+        db.commit()
+        return MarkGoodResponse(status="ok", authoritative_answer_id=None)
+
+    auth = AuthoritativeAnswer(
+        tenant_id=query.tenant_id,
+        canonical_question=query.question,
+        canonical_question_embedding=query.question_embedding,
+        answer=final_answer,
+        source_chunk_ids=query.source_chunk_ids,
+        status="active",
+    )
+    db.add(auth)
+    db.flush()
+    query.authoritative_answer_id = auth.id
+    query.reviewer_action = "approved"
+    db.commit()
+
+    log.info(
+        "search.mark_good",
+        query_id=str(query_id),
+        auth_id=str(auth.id),
+        tenant_id=str(query.tenant_id),
+    )
+    return MarkGoodResponse(status="ok", authoritative_answer_id=auth.id)
+
+
+@router.post("/{query_id}/mark-broken")
+def mark_broken(
+    query_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """User marked the answer as wrong ("the corpus knows the right answer,
+    the system just didn't find it") — surfaces in the super-admin debug queue.
+
+    If the query is currently attached to a cached authoritative answer,
+    retire that cache entry so future asks fall through to fresh retrieval.
+    """
+    query = db.get(Query, query_id)
+    if query is None or query.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Query not found")
+
+    query.feedback = "negative"
+    query.failure_mode = "retrieval_miss"
+
+    cached_answer_retired = False
+    if query.authoritative_answer_id:
+        cached = db.get(AuthoritativeAnswer, query.authoritative_answer_id)
+        if cached is not None and cached.status == "active":
+            cached.status = "retired"
+            cached_answer_retired = True
+
+    db.commit()
+    log.info(
+        "search.mark_broken",
+        query_id=str(query_id),
+        tenant_id=str(query.tenant_id),
+        retired_cache=cached_answer_retired,
+    )
+    return {"status": "ok", "cached_answer_retired": cached_answer_retired}

@@ -5,6 +5,7 @@ import {
   type AdminTenant,
   type AdminUser,
   type CreateUserPayload,
+  type DebugQueueItem,
   type TenantSegment,
 } from "../lib/api";
 
@@ -131,6 +132,12 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
           await reload();
         }}
         onError={(msg) => flash("err", msg)}
+      />
+
+      <DebugQueueSection
+        tenants={tenants}
+        onError={(msg) => flash("err", msg)}
+        onDismissed={(msg) => flash("ok", msg)}
       />
 
       <SuperAdminsSection superAdmins={superAdmins} />
@@ -570,6 +577,303 @@ function UsersSection({
       </div>
     </section>
   );
+}
+
+/* ─── Debug queue ─────────────────────────────────────────────────── */
+
+function DebugQueueSection({
+  tenants,
+  onError,
+  onDismissed,
+}: {
+  tenants: AdminTenant[];
+  onError: (msg: string) => void;
+  onDismissed: (msg: string) => void;
+}) {
+  const [items, setItems] = useState<DebugQueueItem[]>([]);
+  const [tenantFilter, setTenantFilter] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await api.adminDebugQueue(tenantFilter || undefined);
+      setItems(rows);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantFilter, onError]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const toggle = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const copyMarkdown = async (item: DebugQueueItem) => {
+    const md = buildDebugMarkdown(item);
+    try {
+      await navigator.clipboard.writeText(md);
+      setCopiedFor(item.query_id);
+      window.setTimeout(
+        () => setCopiedFor((prev) => (prev === item.query_id ? null : prev)),
+        2000
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const dismiss = async (item: DebugQueueItem) => {
+    if (!confirm("להסיר מהתור?")) return;
+    try {
+      await api.adminDismissDebug(item.query_id);
+      onDismissed("הוסר מהתור");
+      await reload();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    }
+  };
+
+  return (
+    <section>
+      <SectionHeader
+        title="תור באגים"
+        subtitle="שאלות שהמשתמש סימן כתשובה שגויה — הקורפוס יודע, השליפה פספסה. פתחו כדי לראות את מקורות השליפה והעתיקו את הדיווח לניפוי."
+        action={
+          <div className="flex items-center gap-2">
+            <select
+              value={tenantFilter}
+              onChange={(e) => setTenantFilter(e.target.value)}
+              className="border border-line-strong px-3 py-2 bg-surface text-sm"
+            >
+              <option value="">כל הארגונים</option>
+              {tenants.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => void reload()}
+              className="border border-line-strong px-3 py-2 text-sm hover:border-ink transition"
+              title="רענן"
+            >
+              רענן
+            </button>
+          </div>
+        }
+      />
+
+      <div className="mt-6 border border-ink bg-surface overflow-hidden">
+        {loading && items.length === 0 ? (
+          <div className="p-8 text-center text-ink-soft text-sm animate-pulse">
+            טוען…
+          </div>
+        ) : items.length === 0 ? (
+          <div className="p-8 text-center text-ink-soft text-sm">
+            אין באגים ממתינים.
+          </div>
+        ) : (
+          items.map((item) => {
+            const open = expanded.has(item.query_id);
+            return (
+              <div
+                key={item.query_id}
+                className="border-b border-line last:border-b-0"
+              >
+                <button
+                  onClick={() => toggle(item.query_id)}
+                  className="w-full text-right px-4 py-3 grid grid-cols-12 gap-3 items-baseline hover:bg-line/40 transition"
+                >
+                  <div className="col-span-6">
+                    <div className="text-sm font-semibold text-ink truncate">
+                      {item.question}
+                    </div>
+                    {item.answer && (
+                      <div className="text-xs text-ink-soft mt-1 line-clamp-1">
+                        {item.answer.slice(0, 160)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="col-span-3 text-xs text-ink-soft truncate">
+                    {item.tenant_name || item.tenant_id}
+                  </div>
+                  <div className="col-span-2 text-xs text-ink-soft">
+                    {formatDate(item.created_at)}
+                  </div>
+                  <div className="col-span-1 text-left text-xs text-accent font-bold">
+                    {open ? "−" : "+"}
+                  </div>
+                </button>
+
+                {open && (
+                  <div className="border-t border-line bg-line/20 px-5 py-5 space-y-5">
+                    <div>
+                      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-1">
+                        שאלה
+                      </div>
+                      <p className="text-sm text-ink whitespace-pre-wrap">
+                        {item.question}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-1">
+                        תשובה שהוחזרה
+                        {item.confidence && (
+                          <span className="mr-2 text-accent">
+                            · {item.confidence}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-ink whitespace-pre-wrap bg-surface border-r-4 border-accent px-3 py-2">
+                        {item.answer || "(אין תשובה)"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-2">
+                        קטעי טקסט שנשלפו ({item.source_chunks.length})
+                      </div>
+                      {item.source_chunks.length === 0 ? (
+                        <p className="text-xs text-ink-soft">
+                          לא הוחזרו קטעים.
+                        </p>
+                      ) : (
+                        <div className="grid gap-px bg-line border border-line">
+                          {item.source_chunks.map((c, i) => (
+                            <details
+                              key={c.chunk_id}
+                              className="bg-surface"
+                              open={i < 2}
+                            >
+                              <summary className="cursor-pointer px-3 py-2 text-sm flex items-baseline gap-3 hover:bg-line/40">
+                                <span className="font-mono text-accent">
+                                  [{i + 1}]
+                                </span>
+                                <span className="text-ink truncate">
+                                  {c.document_filename}
+                                </span>
+                                {c.section_path && (
+                                  <span className="text-ink-soft font-mono text-xs">
+                                    {c.section_path}
+                                  </span>
+                                )}
+                              </summary>
+                              <pre className="px-3 py-2 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft font-sans">
+                                {c.text}
+                              </pre>
+                            </details>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {item.retrieval_debug && (
+                      <details>
+                        <summary className="cursor-pointer text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold hover:text-ink">
+                          Retrieval trace (JSON)
+                        </summary>
+                        <pre className="mt-2 text-[11px] leading-relaxed bg-surface border border-line p-3 overflow-auto max-h-64 whitespace-pre-wrap text-ink-soft font-mono">
+                          {JSON.stringify(item.retrieval_debug, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
+                      <button
+                        onClick={() => void copyMarkdown(item)}
+                        className="bg-ink text-surface px-4 py-2 text-sm font-bold hover:bg-accent transition"
+                      >
+                        {copiedFor === item.query_id
+                          ? "✓ הועתק"
+                          : "העתק דיווח Markdown"}
+                      </button>
+                      <button
+                        onClick={() => void dismiss(item)}
+                        className="border border-line-strong px-4 py-2 text-sm text-ink-soft hover:border-ink hover:text-ink transition"
+                      >
+                        הסר מהתור
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
+function buildDebugMarkdown(item: DebugQueueItem): string {
+  const lines: string[] = [];
+  lines.push(`# Debug report — query ${item.query_id}`);
+  lines.push("");
+  lines.push(`- **Tenant**: ${item.tenant_name || item.tenant_id}`);
+  lines.push(`- **When**: ${item.created_at}`);
+  lines.push(`- **Confidence**: ${item.confidence || "—"}`);
+  lines.push(`- **LLM used**: ${item.llm_used ? "yes" : "no"}`);
+  lines.push("");
+  lines.push("## Question");
+  lines.push("");
+  lines.push("```");
+  lines.push(item.question);
+  lines.push("```");
+  lines.push("");
+  lines.push("## Answer returned to user");
+  lines.push("");
+  lines.push("```");
+  lines.push(item.answer || "(no answer)");
+  lines.push("```");
+  lines.push("");
+  lines.push(`## Retrieved chunks (${item.source_chunks.length})`);
+  lines.push("");
+  item.source_chunks.forEach((c, i) => {
+    lines.push(
+      `### [${i + 1}] ${c.document_filename}${
+        c.section_path ? ` · ${c.section_path}` : ""
+      }`
+    );
+    lines.push("");
+    lines.push("```");
+    lines.push(c.text);
+    lines.push("```");
+    lines.push("");
+  });
+  if (item.retrieval_debug) {
+    lines.push("## Retrieval trace");
+    lines.push("");
+    lines.push("```json");
+    lines.push(JSON.stringify(item.retrieval_debug, null, 2));
+    lines.push("```");
+  }
+  return lines.join("\n");
+}
+
+function formatDate(iso: string): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("he-IL", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 /* ─── Super admins ─────────────────────────────────────────────────── */

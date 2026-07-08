@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Document, Tenant, User
+from app.models import Chunk, Document, Query, Tenant, User
 from app.routes.auth import current_user
 
 log = structlog.get_logger()
@@ -258,6 +258,131 @@ def update_user(
     tenant = db.get(Tenant, target.tenant_id)
     log.info("admin.user_updated", user_id=str(target.id))
     return _user_to_item(target, tenant.name if tenant else None)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Debug queue — queries flagged as broken by end-users
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class DebugChunk(BaseModel):
+    chunk_id: str
+    document_id: str
+    document_filename: str
+    section_path: str | None
+    text: str
+
+
+class DebugQueueItem(BaseModel):
+    query_id: str
+    tenant_id: str
+    tenant_name: str | None
+    question: str
+    answer: str | None
+    confidence: str | None
+    llm_used: bool
+    created_at: str
+    retrieval_debug: dict | None
+    source_chunks: list[DebugChunk]
+
+
+@router.get("/debug-queue", response_model=list[DebugQueueItem])
+def debug_queue(
+    tenant_id: str | None = None,
+    limit: int = 50,
+    _: User = Depends(_require_super_admin),
+    db: Session = Depends(get_db),
+) -> list[DebugQueueItem]:
+    """Queries the end-user flagged as broken ("the corpus knows this, the
+    system didn't find it"). Cross-tenant by default; filter with tenant_id."""
+    if limit < 1 or limit > 200:
+        raise HTTPException(400, "limit must be between 1 and 200")
+
+    q = db.query(Query).filter(
+        Query.feedback == "negative",
+        Query.failure_mode == "retrieval_miss",
+    )
+    if tenant_id:
+        try:
+            tid = UUID(tenant_id)
+        except (ValueError, TypeError) as e:
+            raise HTTPException(400, "Invalid tenant_id") from e
+        q = q.filter(Query.tenant_id == tid)
+    rows = q.order_by(Query.created_at.desc()).limit(limit).all()
+
+    tenants = {t.id: t.name for t in db.query(Tenant).all()}
+
+    # Batch-load source chunks + docs to avoid N+1.
+    all_chunk_ids: set[UUID] = set()
+    for r in rows:
+        for cid in r.source_chunk_ids or []:
+            all_chunk_ids.add(cid)
+
+    chunk_rows = (
+        db.query(Chunk, Document)
+        .join(Document, Document.id == Chunk.document_id)
+        .filter(Chunk.id.in_(all_chunk_ids))
+        .all()
+        if all_chunk_ids
+        else []
+    )
+    chunk_lookup: dict[UUID, tuple[Chunk, Document]] = {
+        c.id: (c, d) for c, d in chunk_rows
+    }
+
+    result: list[DebugQueueItem] = []
+    for r in rows:
+        chunks: list[DebugChunk] = []
+        for cid in r.source_chunk_ids or []:
+            pair = chunk_lookup.get(cid)
+            if pair is None:
+                continue
+            c, d = pair
+            chunks.append(
+                DebugChunk(
+                    chunk_id=str(c.id),
+                    document_id=str(d.id),
+                    document_filename=d.filename,
+                    section_path=c.section_path,
+                    text=c.text,
+                )
+            )
+        result.append(
+            DebugQueueItem(
+                query_id=str(r.id),
+                tenant_id=str(r.tenant_id),
+                tenant_name=tenants.get(r.tenant_id),
+                question=r.question,
+                answer=r.answer,
+                confidence=r.confidence,
+                llm_used=bool(r.llm_used),
+                created_at=r.created_at.isoformat() if r.created_at else "",
+                retrieval_debug=r.retrieval_debug,
+                source_chunks=chunks,
+            )
+        )
+    return result
+
+
+@router.post("/debug-queue/{query_id}/dismiss")
+def dismiss_debug_item(
+    query_id: str,
+    _: User = Depends(_require_super_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Remove a query from the debug queue after the super-admin diagnosed it.
+    Clears failure_mode + sets reviewer_action=rejected."""
+    try:
+        qid = UUID(query_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid query_id") from e
+    q = db.get(Query, qid)
+    if q is None:
+        raise HTTPException(404, "Query not found")
+    q.failure_mode = None
+    q.reviewer_action = "rejected"
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.delete("/users/{user_id}")

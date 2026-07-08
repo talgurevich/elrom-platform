@@ -43,12 +43,6 @@ const confidenceLabel: Record<string, string> = {
   clarifying: "מבקש הבהרה",
 };
 
-const failureLabels: Record<FailureMode, string> = {
-  retrieval_miss: "השליפה החטיאה",
-  wrong_generation: "הניסוח שגוי",
-  other: "אחר",
-};
-
 function responseToTurn(r: SearchResponse): ChatTurn {
   return {
     query_id: r.query_id,
@@ -190,14 +184,18 @@ export default function Search() {
   const submitFeedback = async (turn: ChatTurn, kind: "positive" | "negative") => {
     updateTurn(turn.query_id, { feedback: kind });
     try {
-      const resp = await api.feedback(turn.query_id, kind);
-      // If 👎 on a cached answer retired it, re-run the same question on the
-      // same conversation so the user sees a fresh attempt.
-      if (kind === "negative" && resp.cached_answer_retired) {
+      if (kind === "positive") {
+        await api.markGood(turn.query_id);
+        return;
+      }
+      // kind === "negative" — the corpus knows, the retrieval missed.
+      const resp = await api.markBroken(turn.query_id);
+      // If we retired a cached answer, re-run the question so the user sees
+      // a fresh attempt instead of the same wrong cached response.
+      if (resp.cached_answer_retired) {
         updateTurn(turn.query_id, { retrying: true });
         try {
           const fresh = await api.search(turn.question, turn.conversation_id);
-          // Replace this turn in place with the retried response.
           setTurns((prev) =>
             prev.map((t) =>
               t.query_id === turn.query_id
@@ -211,27 +209,6 @@ export default function Search() {
       }
     } catch (err) {
       updateTurn(turn.query_id, { feedback: null });
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const tagFailure = async (turn: ChatTurn, mode: FailureMode) => {
-    updateTurn(turn.query_id, { failure_mode: mode, feedback: "negative" });
-    try {
-      await api.tagFailureMode(turn.query_id, mode);
-    } catch (err) {
-      updateTurn(turn.query_id, { failure_mode: null });
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const promoteToGolden = async (turn: ChatTurn) => {
-    updateTurn(turn.query_id, { promoting: true });
-    try {
-      await api.promoteQueryToGolden(turn.query_id);
-      updateTurn(turn.query_id, { promoted: true, promoting: false });
-    } catch (err) {
-      updateTurn(turn.query_id, { promoting: false });
       setError(err instanceof Error ? err.message : String(err));
     }
   };
@@ -293,8 +270,6 @@ export default function Search() {
             key={turn.query_id}
             turn={turn}
             onFeedback={(kind) => void submitFeedback(turn, kind)}
-            onTagFailure={(mode) => void tagFailure(turn, mode)}
-            onPromote={() => void promoteToGolden(turn)}
             onPickCandidate={(doc) => pickClarificationOption(turn, doc)}
           />
         ))}
@@ -411,14 +386,10 @@ async function hydrateAndLoad(
 function TurnView({
   turn,
   onFeedback,
-  onTagFailure,
-  onPromote,
   onPickCandidate,
 }: {
   turn: ChatTurn;
   onFeedback: (kind: "positive" | "negative") => void;
-  onTagFailure: (mode: FailureMode) => void;
-  onPromote: () => void;
   onPickCandidate: (doc: string) => void;
 }) {
   return (
@@ -505,48 +476,41 @@ function TurnView({
             </div>
           )}
 
-          {/* Answer-mode interactions: feedback / share / references / sources. */}
+          {/* Answer-mode interactions: two feedback buttons + share. */}
           {turn.mode === "answer" && turn.confidence !== "refused" && (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-ink-soft ml-2">
-                  {turn.retrying ? "מחפש שוב…" : "האם התשובה מדויקת?"}
-                </span>
-                <button
-                  onClick={() => onFeedback("positive")}
-                  disabled={turn.feedback !== null || turn.retrying}
-                  className={`px-3 py-1.5 text-sm border transition ${
-                    turn.feedback === "positive"
-                      ? "bg-ink text-surface border-ink"
-                      : "bg-surface border-line-strong hover:border-ink"
-                  }`}
-                >
-                  כן
-                </button>
-                <button
-                  onClick={() => onFeedback("negative")}
-                  disabled={turn.feedback !== null || turn.retrying}
-                  className={`px-3 py-1.5 text-sm border transition ${
-                    turn.feedback === "negative"
-                      ? "bg-accent text-surface border-accent"
-                      : "bg-surface border-line-strong hover:border-accent hover:text-accent"
-                  }`}
-                >
-                  לא
-                </button>
-                <button
-                  onClick={onPromote}
-                  disabled={turn.promoting || turn.promoted}
-                  className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface disabled:opacity-50 text-ink-soft transition mr-auto"
-                  title="הפוך לשאלת זהב להרצה חוזרת"
-                >
-                  {turn.promoted
-                    ? "✓ נשמר כשאלת זהב"
-                    : turn.promoting
-                    ? "..."
-                    : "סמן כשאלת זהב"}
-                </button>
-              </div>
+              {turn.feedback === null && !turn.retrying && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => onFeedback("positive")}
+                    className="px-4 py-2 text-sm font-semibold border-2 border-ink bg-surface hover:bg-ink hover:text-surface transition"
+                  >
+                    ✓ תשובה טובה
+                  </button>
+                  <button
+                    onClick={() => onFeedback("negative")}
+                    className="px-4 py-2 text-sm font-semibold border-2 border-accent text-accent bg-surface hover:bg-accent hover:text-surface transition"
+                    title="הקורפוס יודע את התשובה — המערכת פשוט לא מצאה. יופיע בתור הבאגים של המנהל."
+                  >
+                    ✗ התשובה שגויה — הקורפוס יודע
+                  </button>
+                </div>
+              )}
+              {turn.feedback === "positive" && (
+                <div className="px-3 py-2 bg-surface border-r-4 border-ink text-sm text-ink">
+                  ✓ סומן כתשובה טובה ונשמר לספריית התשובות המאושרות.
+                </div>
+              )}
+              {turn.feedback === "negative" && (
+                <div className="px-3 py-2 bg-surface border-r-4 border-accent text-sm text-ink">
+                  ✗ סומן לבדיקה. המנהל יקבל התראה ויבחן את מקורות השליפה.
+                </div>
+              )}
+              {turn.retrying && (
+                <div className="px-3 py-2 bg-surface border-r-4 border-line-strong text-sm text-ink-soft animate-pulse">
+                  מחפש שוב…
+                </div>
+              )}
               <ShareActions
                 question={turn.question}
                 answer={turn.answer}
@@ -588,31 +552,6 @@ function TurnView({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {turn.feedback === "negative" && !turn.failure_mode && turn.mode === "answer" && (
-            <div className="border-2 border-ink p-3 bg-surface">
-              <div className="text-[11px] tracking-[0.25em] uppercase font-bold text-ink mb-2">
-                מה השתבש?
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(failureLabels) as FailureMode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => onTagFailure(m)}
-                    className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-line/40 transition"
-                  >
-                    {failureLabels[m]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {turn.failure_mode && (
-            <div className="px-3 py-2 bg-surface border-r-4 border-accent text-sm text-ink">
-              נרשם: {failureLabels[turn.failure_mode]}
             </div>
           )}
 
