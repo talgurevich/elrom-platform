@@ -19,7 +19,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query as QParam
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query as QParam
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal, get_db
 from app.models import AuthoritativeAnswer, Chunk, Conversation, Document, Query, Tenant, User
 from app.routes.auth import current_user
+from app.services.mail import send_broken_answer_alert
 from app.services.chat_triage import triage_turn
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
@@ -777,6 +778,7 @@ def mark_good(
 @router.post("/{query_id}/mark-broken")
 def mark_broken(
     query_id: UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> dict:
@@ -807,4 +809,22 @@ def mark_broken(
         tenant_id=str(query.tenant_id),
         retired_cache=cached_answer_retired,
     )
+
+    # Notify every super-admin. Snapshot the values we need before entering
+    # the background task — we can't rely on the SQLAlchemy session there.
+    super_admin_emails = [
+        e for (e,) in db.query(User.email).filter(User.is_super_admin.is_(True)).all()
+    ]
+    tenant = db.get(Tenant, query.tenant_id)
+    if super_admin_emails:
+        background_tasks.add_task(
+            send_broken_answer_alert,
+            to_emails=super_admin_emails,
+            tenant_name=tenant.name if tenant else str(query.tenant_id),
+            question=query.question,
+            answer=query.answer,
+            query_id=str(query.id),
+            marked_by_email=user.email,
+        )
+
     return {"status": "ok", "cached_answer_retired": cached_answer_retired}

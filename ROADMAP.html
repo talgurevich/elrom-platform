@@ -885,11 +885,11 @@
         </div>
       </div>
 
-      <div class="cl-item">
+      <div class="cl-item done">
         <div class="check"></div>
         <div class="cl-body">
-          <span class="cl-title">Mailer infrastructure setup</span> <a class="cl-ref" href="#t6">§6</a>
-          <div class="cl-desc">Transactional provider (SES / Postmark / Resend), sender domain + verification, templates for password reset, invite, welcome, and error retries. Blocks auth flows.</div>
+          <span class="cl-title">Mailer infrastructure setup — Resend + first templates</span> <a class="cl-ref" href="#t6">§6</a>
+          <div class="cl-desc">Resend wired up with a Hebrew RTL template base. Two flows live: user invite (on admin create-user) and broken-answer alert to every super-admin (on mark-broken). Sender domain flip from <code>onboarding@resend.dev</code> → <code>noreply@klaser.co.il</code> pending DNS propagation.</div>
         </div>
       </div>
 

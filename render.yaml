@@ -51,6 +51,17 @@ services:
         value: noreply@elrom.tv
       - key: STORAGE_DIR
         value: /var/data/documents
+      # Mail (Resend). Until klaser.co.il verifies in the Resend dashboard,
+      # MAIL_FROM_EMAIL stays as onboarding@resend.dev. Flip to
+      # noreply@klaser.co.il once DNS records propagate.
+      - key: MAIL_FROM_EMAIL
+        value: onboarding@resend.dev
+      - key: MAIL_FROM_NAME
+        value: Klaser
+      - key: KLASER_APP_URL
+        value: https://klaser.co.il
+      - key: RESEND_API_KEY
+        sync: false
       # Secrets — set these in Render UI after first deploy:
       - key: ANTHROPIC_API_KEY
         sync: false

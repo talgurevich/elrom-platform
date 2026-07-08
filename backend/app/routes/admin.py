@@ -13,7 +13,7 @@ admin panel while viewing_other_tenant is true.
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Chunk, Document, Query, Tenant, User
 from app.routes.auth import current_user
+from app.services.mail import send_invite
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -178,7 +179,8 @@ def list_users(
 @router.post("/users", response_model=UserItem, status_code=201)
 def add_user(
     req: AddUserRequest,
-    _: User = Depends(_require_super_admin),
+    background_tasks: BackgroundTasks,
+    me: User = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> UserItem:
     if req.role not in VALID_ROLES:
@@ -213,6 +215,18 @@ def add_user(
         role=u.role,
         super_admin=u.is_super_admin,
     )
+
+    # Fire welcome/invite email in the background so a slow SMTP hop doesn't
+    # delay the admin's create-user request. send_invite is no-raising.
+    background_tasks.add_task(
+        send_invite,
+        to_email=email,
+        display_name=req.display_name,
+        tenant_name=tenant.name,
+        role=u.role,
+        invited_by=me.display_name or me.email,
+    )
+
     return _user_to_item(u, tenant.name)
 
 

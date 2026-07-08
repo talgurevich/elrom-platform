@@ -34,8 +34,17 @@ class Settings(BaseSettings):
     # Auth
     session_secret: str = "dev-secret-change-me"
     google_client_id: str = ""
+
+    # Mail — Resend. Until the sender domain (klaser.co.il) verifies in the
+    # Resend dashboard, use the shared onboarding sandbox address. Once
+    # verified, flip MAIL_FROM_EMAIL to noreply@klaser.co.il.
     resend_api_key: str = ""
-    magic_link_from_email: str = "noreply@elrom.tv"
+    mail_from_email: str = "onboarding@resend.dev"
+    mail_from_name: str = "Klaser"
+    magic_link_from_email: str = "noreply@elrom.tv"  # legacy — kept for compat
+    # Public URL of the app — used to build clickable links in transactional
+    # emails ("כניסה למערכת", "פתח בתור הבאגים"). Overridden in Render.
+    klaser_app_url: str = "https://klaser.co.il"
 
     # App
     app_env: str = "development"
