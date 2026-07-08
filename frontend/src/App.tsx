@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Amendments from "./pages/Amendments";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
+import Landing from "./pages/Landing";
 import Lexicon from "./pages/Lexicon";
 import Login from "./pages/Login";
 import Review from "./pages/Review";
@@ -225,6 +226,7 @@ export default function App() {
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
   });
   const [tenants, setTenants] = useState<TenantItem[]>([]);
+  const [showLogin, setShowLogin] = useState(false);
 
   const isSuper =
     state.kind === "signed_in" && state.user.is_super_admin === true;
@@ -261,7 +263,9 @@ export default function App() {
     );
   }
 
-  if (state.kind === "anonymous") return <Login />;
+  if (state.kind === "anonymous") {
+    return showLogin ? <Login /> : <Landing onLogin={() => setShowLogin(true)} />;
+  }
 
   const { user } = state;
 
