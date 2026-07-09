@@ -51,11 +51,11 @@ services:
         value: noreply@elrom.tv
       - key: STORAGE_DIR
         value: /var/data/documents
-      # Mail (Resend). Until klaser.co.il verifies in the Resend dashboard,
-      # MAIL_FROM_EMAIL stays as onboarding@resend.dev. Flip to
-      # noreply@klaser.co.il once DNS records propagate.
+      # Mail (Resend). klaser.co.il verified in the Resend dashboard —
+      # sender is our own domain, so we can send to any address (not just
+      # the sandbox testing address).
       - key: MAIL_FROM_EMAIL
-        value: onboarding@resend.dev
+        value: noreply@klaser.co.il
       - key: MAIL_FROM_NAME
         value: Klaser
       - key: KLASER_APP_URL
@@ -126,6 +126,45 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: COHERE_API_KEY
+        sync: false
+
+  ## Weekly lexicon digest — one email per super-admin, Sunday 07:00 IL
+  ## (04:00 UTC). Runs before the work week starts so the super-admin
+  ## can triage pending learned entries first thing Monday-morning.
+  ##
+  ## Skips super-admins whose tenants had zero lexicon activity in the
+  ## window — no "nothing this week" emails. Uses the same Resend key as
+  ## the backend; set RESEND_API_KEY on this service in Render UI after
+  ## first apply (sync:false vars don't auto-share across services).
+  - type: cron
+    name: elrom-weekly-digest
+    runtime: python
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    schedule: "0 4 * * 0"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m scripts.send_weekly_digests
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.13
+      - key: DATABASE_URL
+        fromDatabase:
+          name: elrom-postgres
+          property: connectionString
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SESSION_SECRET
+        value: cron-job-no-session-needed
+      - key: MAIL_FROM_EMAIL
+        value: noreply@klaser.co.il
+      - key: MAIL_FROM_NAME
+        value: Klaser
+      - key: KLASER_APP_URL
+        value: https://klaser.co.il
+      - key: RESEND_API_KEY
         sync: false
 
   - type: web

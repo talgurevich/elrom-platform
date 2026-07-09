@@ -1,12 +1,13 @@
 """Transactional email via Resend.
 
-Two callers today:
+Callers today:
   - Admin panel → create user → welcome / invite email
   - Search → mark-broken → alert to all super-admins
+  - Weekly cron → lexicon digest to every super-admin
 
-The public entry points are ``send_invite`` and ``send_broken_answer_alert``.
-Both are safe to call from a FastAPI BackgroundTask — they never raise, so
-a mail outage never breaks the user's request.
+Public entry points: ``send_invite``, ``send_broken_answer_alert``,
+``send_lexicon_digest``. All are safe to call from a FastAPI BackgroundTask
+(or a cron) — they never raise, so a mail outage never breaks the caller.
 
 If ``RESEND_API_KEY`` is empty (local dev without keys), we log the payload
 and return without hitting the network.
@@ -232,3 +233,162 @@ def send_broken_answer_alert(
                 text_body=text_body,
             )
         )
+
+
+# ─── Weekly lexicon digest ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class LexiconEntrySnapshot:
+    """Just enough of a Lexicon row to render into the digest — kept as a
+    plain dataclass so the digest sender doesn't hold SQLAlchemy sessions."""
+
+    term: str
+    expansion: str
+    confidence: float | None
+    status: str  # active | pending | rejected
+    source: str  # manual | learned
+    updated_at_iso: str
+
+
+def _fmt_confidence(c: float | None) -> str:
+    if c is None:
+        return ""
+    return f'<span class="muted" style="margin-right:6px;">ביטחון: {c:.2f}</span>'
+
+
+def _lexicon_bucket_html(title: str, tag_color: str, entries: list[LexiconEntrySnapshot]) -> str:
+    if not entries:
+        return ""
+    rows = ""
+    for e in entries:
+        rows += (
+            '<li style="margin-bottom:8px;">'
+            f'<strong>{html.escape(e.term)}</strong> '
+            f'<span class="muted">←</span> {html.escape(e.expansion)}'
+            f'{_fmt_confidence(e.confidence)}'
+            "</li>"
+        )
+    return (
+        f'<h3 style="margin:20px 0 6px; font-size:15px; color:{tag_color};">'
+        f'{title} <span class="muted" style="font-size:12px;">({len(entries)})</span>'
+        "</h3>"
+        f'<ul style="margin:0; padding-right:20px; list-style-position:outside;">'
+        f"{rows}</ul>"
+    )
+
+
+def _tenant_section_html(
+    tenant_name: str,
+    pending: list[LexiconEntrySnapshot],
+    active: list[LexiconEntrySnapshot],
+    rejected: list[LexiconEntrySnapshot],
+) -> str:
+    body = ""
+    body += _lexicon_bucket_html("🟡 ממתינים לבדיקה", "#b8412b", pending)
+    body += _lexicon_bucket_html("✅ חדשים ומאושרים", "#171717", active)
+    body += _lexicon_bucket_html("❌ נדחו", "#525252", rejected)
+    return (
+        f'<div style="margin-top:28px; padding-top:20px; border-top:1px solid #e7e5e4;">'
+        f'<h2 style="margin-bottom:4px;">{html.escape(tenant_name)}</h2>'
+        f"{body}</div>"
+    )
+
+
+def _tenant_section_text(
+    tenant_name: str,
+    pending: list[LexiconEntrySnapshot],
+    active: list[LexiconEntrySnapshot],
+    rejected: list[LexiconEntrySnapshot],
+) -> str:
+    lines: list[str] = [f"\n== {tenant_name} =="]
+    for title, entries in [
+        ("ממתינים לבדיקה", pending),
+        ("חדשים ומאושרים", active),
+        ("נדחו", rejected),
+    ]:
+        if not entries:
+            continue
+        lines.append(f"\n{title} ({len(entries)}):")
+        for e in entries:
+            conf = f" [ביטחון: {e.confidence:.2f}]" if e.confidence is not None else ""
+            lines.append(f"  • {e.term} ← {e.expansion}{conf}")
+    return "\n".join(lines)
+
+
+def send_lexicon_digest(
+    *,
+    to_email: str,
+    admin_display_name: str | None,
+    tenant_sections: list[
+        tuple[
+            str,  # tenant name
+            list[LexiconEntrySnapshot],  # pending
+            list[LexiconEntrySnapshot],  # active
+            list[LexiconEntrySnapshot],  # rejected
+        ]
+    ],
+) -> None:
+    """Weekly-digest email — one per super-admin. ``tenant_sections`` only
+    contains tenants with activity in the window; the caller is responsible
+    for skipping quiet weeks (no email if the list is empty)."""
+    if not tenant_sections:
+        log.info("mail.digest_skip_empty", to=to_email)
+        return
+
+    total_pending = sum(len(p) for _, p, _, _ in tenant_sections)
+    total_active = sum(len(a) for _, _, a, _ in tenant_sections)
+    total_rejected = sum(len(r) for _, _, _, r in tenant_sections)
+    total = total_pending + total_active + total_rejected
+
+    lexicon_url = f"{settings.klaser_app_url.rstrip('/')}/#lexicon"
+    greeting_name = (admin_display_name or "").strip() or to_email.split("@")[0]
+
+    tenants_html = "".join(
+        _tenant_section_html(name, p, a, r) for name, p, a, r in tenant_sections
+    )
+    tenants_text = "\n".join(
+        _tenant_section_text(name, p, a, r) for name, p, a, r in tenant_sections
+    )
+
+    pending_line = (
+        f'<p class="muted"><strong>{total_pending}</strong> ממתינים לבדיקה שלך.</p>'
+        if total_pending
+        else ""
+    )
+
+    html_body = _wrap_html(
+        f"""
+        <div class="tag">Klaser · סיכום שבועי</div>
+        <h1>מילון המונחים השבוע</h1>
+        <p>שלום {html.escape(greeting_name)},</p>
+        <p>בשבוע האחרון היו <strong>{total}</strong> עדכונים במילון על פני
+        <strong>{len(tenant_sections)}</strong> ארגונים.</p>
+        {pending_line}
+
+        {tenants_html}
+
+        <p style="margin: 32px 0;">
+          <a href="{html.escape(lexicon_url)}" class="btn">פתח את המילון ←</a>
+        </p>
+        """
+    )
+
+    text_body = (
+        f"סיכום שבועי — מילון מונחים\n"
+        f"שלום {greeting_name},\n\n"
+        f"בשבוע האחרון היו {total} עדכונים במילון "
+        f"על פני {len(tenant_sections)} ארגונים.\n"
+        + (f"{total_pending} ממתינים לבדיקה שלך.\n" if total_pending else "")
+        + tenants_text
+        + f"\n\nפתח את המילון: {lexicon_url}\n"
+    )
+
+    _send(
+        Message(
+            to=to_email,
+            subject=f"[Klaser] סיכום שבועי · מילון ({total} עדכונים)",
+            html_body=html_body,
+            text_body=text_body,
+        )
+    )
