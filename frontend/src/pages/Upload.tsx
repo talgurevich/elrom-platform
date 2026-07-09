@@ -220,14 +220,66 @@ export default function Upload() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [groupKey, setGroupKey] = useState<GroupKey>("none");
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [folderFilter, setFolderFilter] = useState<string | null>(null);
+  // Multi-select filters — empty set = no restriction on that axis.
+  // Kept as Set for O(1) toggle; wrapped in state via functional setter.
+  const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const [folderFilters, setFolderFilters] = useState<Set<string>>(new Set());
+  // Date range: "all" | "1y" | "2y" — anchored to *today*, filters on
+  // effective_date. Chosen conservatively: docs without an effective_date
+  // are included in every range so we don't hide unreviewed material.
+  const [dateRange, setDateRange] = useState<"all" | "1y" | "2y">("all");
+  const [onlyWithFile, setOnlyWithFile] = useState(false);
+  const [onlyReviewed, setOnlyReviewed] = useState(false);
+
+  const activeFilterCount =
+    typeFilters.size +
+    folderFilters.size +
+    (dateRange !== "all" ? 1 : 0) +
+    (onlyWithFile ? 1 : 0) +
+    (onlyReviewed ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setTypeFilters(new Set());
+    setFolderFilters(new Set());
+    setDateRange("all");
+    setOnlyWithFile(false);
+    setOnlyReviewed(false);
+  };
+
+  const toggleInSet = (
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    value: string
+  ) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  };
 
   const filteredSortedDocs = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const now = Date.now();
+    const yearMs = 365 * 24 * 60 * 60 * 1000;
+    const cutoff =
+      dateRange === "1y"
+        ? now - yearMs
+        : dateRange === "2y"
+        ? now - 2 * yearMs
+        : null;
+
     let out = docs.filter((d) => {
-      if (typeFilter && (d.doc_type || "unclassified") !== typeFilter) return false;
-      if (folderFilter && (d.folder || "__none__") !== folderFilter) return false;
+      if (typeFilters.size && !typeFilters.has(d.doc_type || "unclassified"))
+        return false;
+      if (folderFilters.size && !folderFilters.has(d.folder || "__none__"))
+        return false;
+      if (onlyWithFile && !d.has_file) return false;
+      if (onlyReviewed && !d.metadata_reviewed) return false;
+      if (cutoff !== null && d.effective_date) {
+        const t = new Date(d.effective_date).getTime();
+        if (!Number.isNaN(t) && t < cutoff) return false;
+      }
       if (!q) return true;
       const hay = `${d.filename} ${d.summary || ""} ${d.folder || ""}`.toLowerCase();
       return hay.includes(q);
@@ -239,7 +291,7 @@ export default function Upload() {
       return new Date(b.ingested_at).getTime() - new Date(a.ingested_at).getTime();
     });
     return out;
-  }, [docs, search, sortKey, typeFilter, folderFilter]);
+  }, [docs, search, sortKey, typeFilters, folderFilters, dateRange, onlyWithFile, onlyReviewed]);
 
   // Counts per type, computed over the *unfiltered* set so the chips show the
   // total even when one is selected.
@@ -547,7 +599,8 @@ export default function Upload() {
           </div>
         )}
 
-        {/* Library toolbar — search + sort + group + type filter */}
+        {/* Library toolbar — search + sort + group. Filters live in the
+            faceted sidebar below. */}
         {docs.length > 0 && (
           <div className="mb-5 border border-line bg-surface">
             <div className="flex items-stretch flex-wrap">
@@ -582,142 +635,94 @@ export default function Upload() {
                   <option value="folder">לפי תיקייה</option>
                 </select>
               </label>
-            </div>
-
-            {/* Type filter chips — show only types that have at least one doc */}
-            <div className="flex flex-wrap gap-px bg-line border-t border-line">
-              <span className="px-3 py-1.5 text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold bg-surface flex items-center">
-                סוג
-              </span>
-              <button
-                onClick={() => setTypeFilter(null)}
-                className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
-                  typeFilter === null
-                    ? "bg-ink text-surface"
-                    : "bg-surface hover:bg-line text-ink"
-                }`}
-              >
-                <span>הכל</span>
-                <span className="font-mono text-[10px] opacity-70">{docs.length}</span>
-              </button>
-              {DOC_TYPE_ORDER.filter((k) => typeCounts[k]).map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setTypeFilter(typeFilter === k ? null : k)}
-                  className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
-                    typeFilter === k
-                      ? "bg-ink text-surface"
-                      : "bg-surface hover:bg-line text-ink"
-                  }`}
-                >
-                  <span>{DOC_TYPE_LABELS[k]}</span>
-                  <span className="font-mono text-[10px] opacity-70">
-                    {typeCounts[k]}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Folder filter chips — appear only once AI has assigned at least one folder */}
-            {folderList.length > 0 && (
-              <div className="flex flex-wrap gap-px bg-line border-t border-line">
-                <span className="px-3 py-1.5 text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold bg-surface flex items-center">
-                  תיקייה
+              <div className="flex items-center px-3 border-r border-line text-xs text-ink-soft">
+                <span className="font-mono">
+                  {filteredSortedDocs.length}/{docs.length}
                 </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Two-column layout: sidebar with facets + main doc grid. Collapses
+            to a stacked single column on mobile so the sidebar becomes a
+            top-of-page filter block instead of a side-rail. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6">
+          {docs.length > 0 && (
+            <FilterSidebar
+              typeCounts={typeCounts}
+              folderList={folderList}
+              folderCounts={folderCounts}
+              typeFilters={typeFilters}
+              folderFilters={folderFilters}
+              dateRange={dateRange}
+              onlyWithFile={onlyWithFile}
+              onlyReviewed={onlyReviewed}
+              activeCount={activeFilterCount}
+              onToggleType={(k) => toggleInSet(setTypeFilters, k)}
+              onToggleFolder={(k) => toggleInSet(setFolderFilters, k)}
+              onDateRange={setDateRange}
+              onToggleWithFile={() => setOnlyWithFile((v) => !v)}
+              onToggleReviewed={() => setOnlyReviewed((v) => !v)}
+              onClear={clearAllFilters}
+            />
+          )}
+
+          <div className="min-w-0">
+            {loadingDocs ? (
+              <div className="text-ink-soft text-sm">טוען...</div>
+            ) : docs.length === 0 ? (
+              <div className="border border-line p-12 text-center text-sm text-ink-soft">
+                אין מסמכים. העלה את הראשון.
+              </div>
+            ) : filteredSortedDocs.length === 0 ? (
+              <div className="border border-line p-12 text-center text-sm text-ink-soft">
+                לא נמצאו מסמכים תואמים.{" "}
                 <button
-                  onClick={() => setFolderFilter(null)}
-                  className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
-                    folderFilter === null
-                      ? "bg-ink text-surface"
-                      : "bg-surface hover:bg-line text-ink"
-                  }`}
+                  onClick={clearAllFilters}
+                  className="underline underline-offset-4 hover:text-accent"
                 >
-                  <span>הכל</span>
+                  נקה את כל הסינון
                 </button>
-                {folderList.map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFolderFilter(folderFilter === f ? null : f)}
-                    className={`px-3 py-1.5 text-xs flex items-baseline gap-2 ${
-                      folderFilter === f
-                        ? "bg-ink text-surface"
-                        : "bg-surface hover:bg-line text-ink"
-                    }`}
-                  >
-                    <span>{f}</span>
-                    <span className="font-mono text-[10px] opacity-70">
-                      {folderCounts[f]}
-                    </span>
-                  </button>
+              </div>
+            ) : groupedDocs ? (
+              <div className="space-y-8">
+                {groupedDocs.map((g) => (
+                  <div key={g.key}>
+                    <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3 flex items-baseline gap-3">
+                      <span>{g.label}</span>
+                      <span className="font-mono text-ink-soft text-[10px] normal-case tracking-normal">
+                        {g.items.length}
+                      </span>
+                      <span className="flex-1 h-px bg-line" />
+                    </div>
+                    <div className="space-y-2">
+                      {g.items.map((d) => (
+                        <DocumentRow
+                          key={d.id}
+                          doc={d}
+                          onDelete={() => deleteDoc(d)}
+                          onOpen={() => setOpenDoc(d)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
-                {folderCounts.__none__ && (
-                  <button
-                    onClick={() =>
-                      setFolderFilter(folderFilter === "__none__" ? null : "__none__")
-                    }
-                    className={`px-3 py-1.5 text-xs flex items-baseline gap-2 italic ${
-                      folderFilter === "__none__"
-                        ? "bg-ink text-surface"
-                        : "bg-surface hover:bg-line text-ink-soft"
-                    }`}
-                  >
-                    <span>ללא תיקייה</span>
-                    <span className="font-mono text-[10px] opacity-70">
-                      {folderCounts.__none__}
-                    </span>
-                  </button>
-                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredSortedDocs.map((d) => (
+                  <DocumentRow
+                    key={d.id}
+                    doc={d}
+                    onDelete={() => deleteDoc(d)}
+                    onOpen={() => setOpenDoc(d)}
+                  />
+                ))}
               </div>
             )}
           </div>
-        )}
-
-        {loadingDocs ? (
-          <div className="text-ink-soft text-sm">טוען...</div>
-        ) : docs.length === 0 ? (
-          <div className="border border-line p-12 text-center text-sm text-ink-soft">
-            אין מסמכים. העלה את הראשון.
-          </div>
-        ) : filteredSortedDocs.length === 0 ? (
-          <div className="border border-line p-12 text-center text-sm text-ink-soft">
-            לא נמצאו מסמכים תואמים. נסה לאפס את הפילטר.
-          </div>
-        ) : groupedDocs ? (
-          <div className="space-y-8">
-            {groupedDocs.map((g) => (
-              <div key={g.key}>
-                <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3 flex items-baseline gap-3">
-                  <span>{g.label}</span>
-                  <span className="font-mono text-ink-soft text-[10px] normal-case tracking-normal">
-                    {g.items.length}
-                  </span>
-                  <span className="flex-1 h-px bg-line" />
-                </div>
-                <div className="space-y-2">
-                  {g.items.map((d) => (
-                    <DocumentRow
-                      key={d.id}
-                      doc={d}
-                      onDelete={() => deleteDoc(d)}
-                      onOpen={() => setOpenDoc(d)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filteredSortedDocs.map((d) => (
-              <DocumentRow
-                key={d.id}
-                doc={d}
-                onDelete={() => deleteDoc(d)}
-                onOpen={() => setOpenDoc(d)}
-              />
-            ))}
-          </div>
-        )}
+        </div>
       </section>
 
       {openDoc && (
@@ -728,6 +733,207 @@ export default function Upload() {
         />
       )}
     </>
+  );
+}
+
+/* ─── Faceted filter sidebar ─────────────────────────────────────── */
+
+function FilterSidebar({
+  typeCounts,
+  folderList,
+  folderCounts,
+  typeFilters,
+  folderFilters,
+  dateRange,
+  onlyWithFile,
+  onlyReviewed,
+  activeCount,
+  onToggleType,
+  onToggleFolder,
+  onDateRange,
+  onToggleWithFile,
+  onToggleReviewed,
+  onClear,
+}: {
+  typeCounts: Record<string, number>;
+  folderList: string[];
+  folderCounts: Record<string, number>;
+  typeFilters: Set<string>;
+  folderFilters: Set<string>;
+  dateRange: "all" | "1y" | "2y";
+  onlyWithFile: boolean;
+  onlyReviewed: boolean;
+  activeCount: number;
+  onToggleType: (k: string) => void;
+  onToggleFolder: (k: string) => void;
+  onDateRange: (v: "all" | "1y" | "2y") => void;
+  onToggleWithFile: () => void;
+  onToggleReviewed: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <aside className="lg:sticky lg:top-24 self-start border border-line bg-surface p-4 text-sm">
+      <div className="flex items-center justify-between border-b border-line pb-2 mb-3">
+        <span className="text-[10px] tracking-[0.25em] uppercase font-bold text-ink-soft">
+          סינון
+        </span>
+        {activeCount > 0 && (
+          <button
+            onClick={onClear}
+            className="text-[11px] text-accent hover:underline underline-offset-4"
+            title="נקה את כל הפילטרים"
+          >
+            נקה ({activeCount})
+          </button>
+        )}
+      </div>
+
+      <FacetGroup title="סוג מסמך">
+        {DOC_TYPE_ORDER.filter((k) => typeCounts[k]).map((k) => (
+          <FacetCheckbox
+            key={k}
+            checked={typeFilters.has(k)}
+            onChange={() => onToggleType(k)}
+            label={DOC_TYPE_LABELS[k] || k}
+            count={typeCounts[k]}
+          />
+        ))}
+      </FacetGroup>
+
+      {folderList.length > 0 && (
+        <FacetGroup title="תיקייה">
+          {folderList.map((f) => (
+            <FacetCheckbox
+              key={f}
+              checked={folderFilters.has(f)}
+              onChange={() => onToggleFolder(f)}
+              label={f}
+              count={folderCounts[f] || 0}
+            />
+          ))}
+          {folderCounts.__none__ && (
+            <FacetCheckbox
+              checked={folderFilters.has("__none__")}
+              onChange={() => onToggleFolder("__none__")}
+              label="ללא תיקייה"
+              count={folderCounts.__none__}
+              italic
+            />
+          )}
+        </FacetGroup>
+      )}
+
+      <FacetGroup title="תוקף">
+        <FacetRadio
+          checked={dateRange === "all"}
+          onChange={() => onDateRange("all")}
+          label="כל התאריכים"
+        />
+        <FacetRadio
+          checked={dateRange === "1y"}
+          onChange={() => onDateRange("1y")}
+          label="השנה האחרונה"
+        />
+        <FacetRadio
+          checked={dateRange === "2y"}
+          onChange={() => onDateRange("2y")}
+          label="השנתיים האחרונות"
+        />
+      </FacetGroup>
+
+      <FacetGroup title="מצב">
+        <FacetCheckbox
+          checked={onlyWithFile}
+          onChange={onToggleWithFile}
+          label="יש קובץ מקור"
+        />
+        <FacetCheckbox
+          checked={onlyReviewed}
+          onChange={onToggleReviewed}
+          label="מטא־דאטה נבדק"
+        />
+      </FacetGroup>
+    </aside>
+  );
+}
+
+function FacetGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-2">
+        {title}
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function FacetCheckbox({
+  checked,
+  onChange,
+  label,
+  count,
+  italic,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  count?: number;
+  italic?: boolean;
+}) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer group">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="w-3.5 h-3.5 accent-accent shrink-0"
+      />
+      <span
+        className={`flex-1 text-[13px] leading-tight ${
+          checked ? "text-ink font-semibold" : "text-ink group-hover:text-accent"
+        } ${italic ? "italic text-ink-soft" : ""}`}
+      >
+        {label}
+      </span>
+      {count !== undefined && (
+        <span className="font-mono text-[10px] text-ink-soft">{count}</span>
+      )}
+    </label>
+  );
+}
+
+function FacetRadio({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer group">
+      <input
+        type="radio"
+        checked={checked}
+        onChange={onChange}
+        className="w-3.5 h-3.5 accent-accent shrink-0"
+      />
+      <span
+        className={`flex-1 text-[13px] leading-tight ${
+          checked ? "text-ink font-semibold" : "text-ink group-hover:text-accent"
+        }`}
+      >
+        {label}
+      </span>
+    </label>
   );
 }
 
