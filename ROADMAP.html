@@ -853,11 +853,11 @@
         </div>
       </div>
 
-      <div class="cl-item">
+      <div class="cl-item done">
         <div class="check"></div>
         <div class="cl-body">
           <span class="cl-title">Cite-or-refuse mode + hallucination guardrails</span> <a class="cl-ref" href="#t1">§1</a>
-          <div class="cl-desc">Trust floor. If the retrieved chunks don't support an answer, refuse rather than guess.</div>
+          <div class="cl-desc">Three-layer trust floor: (1) prompt <code>§3.5</code> — LLM must audit every claim against the sources before returning <code>confident</code>; (2) server guardrail — a confident answer with no references, or with references that don't match any retrieved filename, is downgraded to <code>refused</code> before it reaches the user; (3) refused UI reframed as integrity, with a one-click "the corpus should know this" path into the super-admin debug queue.</div>
         </div>
       </div>
 

@@ -786,6 +786,11 @@
   </div>
 
   <div class="gap-item fixed">
+    <h4>No enforced cite-or-refuse guardrail</h4>
+    <p>Landed 2026-07-09. Post-generation validator in <code>llm._enforce_cite_or_refuse</code> downgrades any <code>confident</code> answer to <code>refused</code> when references are empty or when no reference title matches a retrieved chunk's document filename. Prompt §3.5 also names the check explicitly so the LLM self-refuses more often. Refused UI reframed to signal integrity rather than failure, with a "the corpus should know this" flag straight into the super-admin debug queue.</p>
+  </div>
+
+  <div class="gap-item fixed">
     <h4>No tenant context injection</h4>
     <p>Landed 2026-07-09. System prompt now composed as <code>PREFIX + tenant.system_context + SUFFIX</code>. Super-admin edits the middle block per tenant in the admin panel. אל-רום's original hierarchy + precision rules seeded into the DB on deploy. Empty tenants fall through to a generic template (just identity + recency/specificity hierarchy + no-fabrication rules) — no invented structure.</p>
   </div>

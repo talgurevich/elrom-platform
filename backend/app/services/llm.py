@@ -220,6 +220,12 @@ _PROMPT_SUFFIX = """
 - **שמות גופים**: השתמש בדיוק כמו במקור (למשל "ועד הנהלה" ≠ "מזכירות", "אסיפה כללית" ≠ "האסיפה").
 - **מספרים, אחוזים ותקופות**: ציטוט מילולי ולא פרפרזה.
 
+**🚨 בדיקת ביסוס — לפני שאתה מחזיר `confident`:**
+1. עבור על כל טענה בתשובה שלך. שאל: "האם יש סעיף במקורות המצורפים שאני יכול להצביע עליו בדיוק כמקור לטענה זו?"
+2. אם התשובה חלקית — יש בסיס לחלק מהטענות אבל לא לכולן — החזר `uncertain` וכתוב במפורש מה חסר: "לפי סעיף X, [מה שנמצא]. לגבי [מה שנשאל אבל לא נמצא] — לא נמצא מקור מפורש במסמכים שלי."
+3. אם התשובה נשענת על היקש כללי ("סביר להניח…", "בדרך כלל…") שאינו מגובה בציטוט מובהק — החזר `refused`.
+4. `references=[]` עם `confidence=confident` הוא **סתירה פנימית** — אסור. תשובה בלי מקור אמיתי אינה תשובה מבוססת.
+
 ---
 
 ## 4. מתי לא לענות
@@ -492,8 +498,95 @@ def answer_with_citations(
         for r in refs_raw
         if isinstance(r, dict)
     ]
-    return LLMResult(
-        answer=str(tool_input.get("answer", "")).strip(),
-        confidence=str(tool_input.get("confidence", "uncertain")).strip(),
-        references=references,
+    return _enforce_cite_or_refuse(
+        LLMResult(
+            answer=str(tool_input.get("answer", "")).strip(),
+            confidence=str(tool_input.get("confidence", "uncertain")).strip(),
+            references=references,
+        ),
+        retrieved_filenames={c.document.filename for c in chunks},
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Post-generation guardrail — cite-or-refuse enforcement.
+# The prompt already tells the LLM to refuse without grounding, but the
+# safe assumption is that under load it'll sometimes ship a "confident"
+# answer with no references or with fabricated document titles. Server-side
+# check catches those before they reach the user.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# The refuse message shown when the guardrail fires. Kept identical in wording
+# to §4 of the system prompt so the UI can't tell whether the refuse came from
+# the model or from the guardrail — from the user's perspective it's the same
+# behavior.
+_GUARDRAIL_REFUSE_ANSWER = (
+    "לא נמצאו מקורות מובהקים במסמכים שיתמכו בתשובה מבוססת. "
+    "עדיף לפנות לגורם הרלוונטי בארגון מאשר לענות בניחוש."
+)
+
+
+def _enforce_cite_or_refuse(
+    result: LLMResult, *, retrieved_filenames: set[str]
+) -> LLMResult:
+    """Post-process an LLMResult. When the answer claims high confidence
+    without grounding, downgrade to refused. Never *upgrades* — a genuine
+    refuse or uncertain stays as-is."""
+    if result.confidence != "confident":
+        return result
+
+    # (1) confident + no references → contradiction. §3 of the prompt calls
+    # this out explicitly; here we enforce it.
+    if not result.references:
+        log.warning(
+            "llm.guardrail.confident_no_references",
+            answer_snippet=result.answer[:160],
+        )
+        return LLMResult(
+            answer=_GUARDRAIL_REFUSE_ANSWER,
+            confidence="refused",
+            references=[],
+        )
+
+    # (2) confident but every reference title is unknown to the retriever →
+    # LLM fabricated the source. If at least one reference *does* match a
+    # retrieved filename we let it through — models legitimately shorten
+    # titles or fold amendment docs into their target, and we don't want
+    # false positives that erode trust. We're only catching the "made up
+    # a whole citation" case.
+    ref_titles = [r.title.strip() for r in result.references if r.title.strip()]
+    if ref_titles and not any(
+        _title_matches_any_filename(t, retrieved_filenames) for t in ref_titles
+    ):
+        log.warning(
+            "llm.guardrail.no_reference_matches_retrieved",
+            ref_titles=ref_titles,
+            retrieved=list(retrieved_filenames),
+        )
+        return LLMResult(
+            answer=_GUARDRAIL_REFUSE_ANSWER,
+            confidence="refused",
+            references=[],
+        )
+
+    return result
+
+
+def _title_matches_any_filename(title: str, filenames: set[str]) -> bool:
+    """Loose match — a reference "title" can be the doc filename, the doc
+    name without extension, or a shortened form. We accept substring matches
+    in either direction so filename "תקנון פנסיה 2019.pdf" and title
+    "תקנון פנסיה" both count."""
+    if not title:
+        return False
+    title_low = title.lower().strip()
+    for fn in filenames:
+        fn_low = fn.lower().strip()
+        # Strip the extension for cleaner substring comparisons.
+        fn_stem = fn_low.rsplit(".", 1)[0]
+        if title_low == fn_low or title_low == fn_stem:
+            return True
+        if title_low in fn_stem or fn_stem in title_low:
+            return True
+    return False

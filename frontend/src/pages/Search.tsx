@@ -440,19 +440,53 @@ function TurnView({
           </div>
 
           {/* The answer text — same prominent treatment for both answer and
-              clarify turns. The clarify mode just has no sources/share below. */}
-          <article className="relative bg-surface">
-            <div className="absolute -right-1 top-0 bottom-0 w-1 bg-accent" />
-            <div className="pr-5 py-1">
-              <p className={`whitespace-pre-wrap text-ink leading-relaxed ${
-                turn.mode === "clarify"
-                  ? "font-display text-lg md:text-xl"
-                  : "font-display text-xl md:text-2xl"
-              }`}>
+              clarify turns. The clarify mode just has no sources/share below.
+              Refused answers get a different treatment further below. */}
+          {turn.confidence !== "refused" && (
+            <article className="relative bg-surface">
+              <div className="absolute -right-1 top-0 bottom-0 w-1 bg-accent" />
+              <div className="pr-5 py-1">
+                <p className={`whitespace-pre-wrap text-ink leading-relaxed ${
+                  turn.mode === "clarify"
+                    ? "font-display text-lg md:text-xl"
+                    : "font-display text-xl md:text-2xl"
+                }`}>
+                  {turn.answer}
+                </p>
+              </div>
+            </article>
+          )}
+
+          {/* Refused turn — reframed as integrity. The system chose not to
+              answer rather than guess. Give the user a next step and the
+              option to flag the case to super-admin (corpus may know). */}
+          {turn.confidence === "refused" && (
+            <article className="border-2 border-ink bg-surface p-6 md:p-8">
+              <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
+                המערכת בחרה לא לענות
+              </div>
+              <p className="font-display text-xl md:text-2xl text-ink leading-relaxed">
                 {turn.answer}
               </p>
-            </div>
-          </article>
+              <p className="mt-5 text-sm text-ink-soft leading-relaxed">
+                המערכת מעדיפה להודות שאין לה תשובה מבוססת על פני לענות בניחוש.
+                אם הנושא באמת אמור להיות במסמכי הארגון —{" "}
+                <button
+                  onClick={() => onFeedback("negative")}
+                  disabled={turn.feedback !== null}
+                  className="underline underline-offset-4 hover:text-accent disabled:opacity-60 disabled:pointer-events-none"
+                >
+                  דווחו למנהל
+                </button>{" "}
+                כדי שיבדוק את השליפה.
+              </p>
+              {turn.feedback === "negative" && (
+                <div className="mt-4 px-3 py-2 bg-line/40 border-r-4 border-accent text-sm text-ink">
+                  ✗ דווח למנהל. המערכת תיבחן ותעודכן.
+                </div>
+              )}
+            </article>
+          )}
 
           {/* Clarify mode: render candidate docs as one-click follow-ups. */}
           {turn.mode === "clarify" && turn.candidate_docs.length > 0 && (
