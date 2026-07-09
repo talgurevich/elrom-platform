@@ -227,6 +227,12 @@ async def search_pipeline(
     try:
         yield {"type": "stage", "stage": "analyzing"}
 
+        # Load the tenant so we can inject its identity + system_context block
+        # into the answerer's prompt. Cached on the pipeline for the LLM call.
+        tenant = db.get(Tenant, tenant_id)
+        tenant_name = tenant.name if tenant else "הארגון"
+        tenant_context = tenant.system_context if tenant else None
+
         # Resolve / create the conversation thread up front so prior turns
         # (if any) inform the rewrite, and so the final Query row can be
         # written with the right conversation_id + turn_index.
@@ -421,6 +427,8 @@ async def search_pipeline(
             answer_with_citations,
             question=question,
             chunks=retrieved,
+            tenant_name=tenant_name,
+            tenant_context=tenant_context,
             lexicon_block=lexicon_block,
             prior_turns=prior_turns,
             amendment_notes=amendment_notes or None,

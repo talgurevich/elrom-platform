@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>El-Rom Platform — Ingestion &amp; Q&amp;A Flow</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --surface: #ffffff;
+    --ink: #0f1729;
+    --ink-soft: #334155;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --teal: #0d9488;
+    --teal-soft: #ccfbf1;
+    --violet: #7c3aed;
+    --violet-soft: #ede9fe;
+    --coral: #ea580c;
+    --coral-soft: #fed7aa;
+    --amber: #ca8a04;
+    --amber-soft: #fef3c7;
+    --rose: #be185d;
+    --rose-soft: #fce7f3;
+    --slate: #475569;
+    --dark: #0f1729;
+    --code-bg: #f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.65;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    max-width: 1240px;
+    margin: 0 auto;
+    gap: 48px;
+    padding: 40px 32px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 24px; padding: 24px 16px; }
+    aside { position: static !important; }
+  }
+
+  aside {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    height: fit-content;
+    font-size: 13px;
+  }
+  aside .brand {
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  aside .brand-sub {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+  }
+  aside nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-radius: 6px;
+    margin: 2px 0;
+    transition: background 0.15s;
+    font-size: 13px;
+  }
+  aside nav a:hover { background: rgba(0,0,0,0.04); }
+  aside nav .divider { height: 1px; background: var(--line); margin: 14px 0; }
+  aside nav .group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 8px 10px 4px; }
+
+  /* HERO */
+  .hero { margin-bottom: 40px; }
+  .hero .kicker {
+    display: inline-block;
+    background: var(--teal-soft);
+    color: var(--teal);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: 'Georgia', serif;
+    font-size: 42px;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+  }
+  .hero .lede { color: var(--muted); font-size: 15px; max-width: 640px; margin-bottom: 24px; }
+  .hero .meta {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding-bottom: 24px; border-bottom: 1px solid var(--line);
+  }
+  .hero .meta strong { color: var(--ink); font-weight: 600; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+
+  /* FLOW SECTION */
+  .flow-section {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .flow-section::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--section-color, var(--teal));
+  }
+  .flow-section[data-color="teal"] { --section-color: var(--teal); --section-tint: var(--teal-soft); }
+  .flow-section[data-color="violet"] { --section-color: var(--violet); --section-tint: var(--violet-soft); }
+
+  .flow-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+  .flow-num {
+    font-family: 'Georgia', serif;
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--section-color);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    flex-shrink: 0;
+  }
+  .flow-titles h2 {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    margin: 4px 0 6px;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+  .flow-titles .flow-tag {
+    display: inline-block;
+    background: var(--section-tint);
+    color: var(--section-color);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .flow-summary {
+    background: var(--section-tint);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 8px 0 28px;
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .flow-summary strong { color: var(--section-color); }
+
+  /* PIPELINE STRIP */
+  .pipeline {
+    display: flex;
+    gap: 4px;
+    margin: 8px 0 32px;
+    overflow-x: auto;
+    padding: 8px 4px 12px;
+  }
+  .pipeline .stage {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 8px 8px;
+    min-width: 92px;
+    flex: 1 0 auto;
+    text-align: center;
+    position: relative;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .pipeline .stage::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0; height: 0;
+    border-left: 6px solid var(--section-color);
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    opacity: 0.5;
+  }
+  .pipeline .stage:last-child::after { display: none; }
+  .pipeline .stage:hover { border-color: var(--section-color); transform: translateY(-1px); }
+  .pipeline .stage .stg-num {
+    font-family: 'Georgia', serif;
+    font-size: 13px;
+    color: var(--section-color);
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .pipeline .stage .stg-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+  .pipeline .stage.branch {
+    border-style: dashed;
+    background: var(--section-tint);
+  }
+
+  /* STEP CARDS */
+  .step {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 20px;
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+  .step:first-of-type { border-top: none; }
+  .step-num {
+    font-family: 'Georgia', serif;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--section-color);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .step-body h3 {
+    font-size: 17px;
+    margin: 4px 0 8px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .step-body p { margin: 4px 0 10px; color: var(--ink-soft); }
+  .step-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    background: var(--code-bg);
+    color: var(--ink-soft);
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  .badge.model { background: var(--section-tint); color: var(--section-color); font-family: 'Inter', sans-serif; font-weight: 600; }
+  .badge.file { background: var(--code-bg); color: var(--ink-soft); }
+  .badge.output { background: rgba(15,23,41,0.06); color: var(--ink); font-family: 'Inter', sans-serif; }
+  code {
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', Monaco, monospace;
+    color: var(--ink);
+  }
+
+  .gap-note {
+    background: #fef3c7;
+    border-left: 3px solid var(--amber);
+    padding: 10px 14px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-radius: 0 6px 6px 0;
+  }
+  .gap-note strong { color: var(--amber); }
+
+  /* MODELS SUMMARY */
+  .models-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .model-card .model-role {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .model-card .model-name {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .model-card .model-use { font-size: 12px; color: var(--ink-soft); }
+  .model-card.emb { border-left: 3px solid var(--teal); }
+  .model-card.gen { border-left: 3px solid var(--violet); }
+  .model-card.rerank { border-left: 3px solid var(--coral); }
+  .model-card.class { border-left: 3px solid var(--rose); }
+
+  /* GAPS SECTION */
+  .gaps-section {
+    background: var(--dark);
+    color: #f8fafc;
+    border-radius: 14px;
+    padding: 32px;
+    margin-top: 40px;
+  }
+  .gaps-section h2 {
+    font-family: 'Georgia', serif;
+    font-size: 26px;
+    margin: 0 0 8px;
+    color: #f8fafc;
+  }
+  .gaps-section .gaps-sub {
+    color: #94a3b8;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .gap-item {
+    background: rgba(255,255,255,0.04);
+    border-left: 3px solid #f59e0b;
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 12px;
+  }
+  .gap-item h4 {
+    font-size: 14px;
+    color: #f8fafc;
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  .gap-item p { font-size: 13px; color: #cbd5e1; margin: 0; }
+  .gap-item code { background: rgba(255,255,255,0.08); color: #f1f5f9; }
+  .gap-item.fixed {
+    border-color: rgba(16,185,129,0.35);
+    background: rgba(16,185,129,0.06);
+  }
+  .gap-item.fixed h4 { color: #6ee7b7; }
+  .gap-item.fixed h4::after {
+    content: "FIXED";
+    display: inline-block;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #10b981;
+    border: 1px solid #10b981;
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .gap-item.fixed p { color: #a7f3d0; text-decoration: line-through; text-decoration-color: rgba(110,231,183,0.3); }
+  .gap-item.fixed p code { text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<aside>
+  <div class="brand">El-Rom</div>
+  <div class="brand-sub">Ingestion &amp; Q&amp;A Flow</div>
+  <nav>
+    <div class="group">Flow 1 — Ingestion</div>
+    <a href="#i-overview">Overview</a>
+    <a href="#i-steps">Step-by-step</a>
+    <div class="divider"></div>
+    <div class="group">Flow 2 — Q&amp;A</div>
+    <a href="#q-overview">Overview</a>
+    <a href="#q-steps">Step-by-step</a>
+    <div class="divider"></div>
+    <a href="#models">Models used</a>
+    <a href="#gaps">Known gaps</a>
+  </nav>
+</aside>
+
+<main>
+
+<section class="hero">
+  <span class="kicker">Technical flow</span>
+  <h1>From upload to answer</h1>
+  <p class="lede">Every step a document takes through El-Rom, and every step a question takes to get answered — with file references, model identities, and known trouble spots.</p>
+  <div class="meta">
+    <span>Owner<strong>Tal Gurevich</strong></span>
+    <span>Updated<strong>2026-07-07</strong></span>
+    <span>Scope<strong>Backend pipeline</strong></span>
+  </div>
+</section>
+
+<!-- ============================ FLOW 1: INGESTION ============================ -->
+
+<article class="flow-section" data-color="teal" id="i-overview">
+  <div class="flow-header">
+    <div class="flow-num">1</div>
+    <div class="flow-titles">
+      <span class="flow-tag">Flow 1</span>
+      <h2>Document ingestion</h2>
+    </div>
+  </div>
+  <div class="flow-summary">
+    <strong>From file upload to searchable chunk.</strong> A document is extracted, chunked, embedded, indexed for BM25, then classified and amendment-analyzed in the background.
+  </div>
+
+  <div class="pipeline">
+    <div class="stage"><div class="stg-num">1</div><div class="stg-label">Upload</div></div>
+    <div class="stage"><div class="stg-num">2</div><div class="stg-label">Extract text</div></div>
+    <div class="stage"><div class="stg-num">3</div><div class="stg-label">Quality gate</div></div>
+    <div class="stage"><div class="stg-num">4</div><div class="stg-label">Document row</div></div>
+    <div class="stage"><div class="stg-num">5</div><div class="stg-label">Chunk</div></div>
+    <div class="stage"><div class="stg-num">6</div><div class="stg-label">Contextualize</div></div>
+    <div class="stage"><div class="stg-num">7</div><div class="stg-label">Embed</div></div>
+    <div class="stage"><div class="stg-num">8</div><div class="stg-label">Index (BM25)</div></div>
+    <div class="stage branch"><div class="stg-num">9</div><div class="stg-label">Classify (bg)</div></div>
+    <div class="stage branch"><div class="stg-num">10</div><div class="stg-label">Amendments (bg)</div></div>
+  </div>
+
+  <div id="i-steps">
+
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-body">
+        <h3>Upload &amp; persist</h3>
+        <p>Multipart file (<code>txt</code> / <code>md</code> / <code>docx</code> / <code>pdf</code>) accepted; temp file written to disk and passed to the extraction service.</p>
+        <div class="step-meta">
+          <span class="badge file">routes/ingest.py <code>ingest_upload()</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-body">
+        <h3>Text extraction</h3>
+        <p>PDFs default to <strong>Azure OCR</strong> (better for scanned Hebrew RTL) with pdfplumber as fallback for native PDFs. DOCX via python-docx. Reversed RTL detection triggers re-escalation to OCR if the initial extraction looks flipped.</p>
+        <div class="step-meta">
+          <span class="badge file">services/extraction.py <code>extract_text()</code></span>
+          <span class="badge model">Azure OCR</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-body">
+        <h3>Extraction quality gate</h3>
+        <p>Density sanity check: <code>MIN_CHARS_PER_PAGE = 200</code>. Low-yield PDFs are rejected as likely OCR failures rather than silently poisoning the corpus.</p>
+        <div class="step-meta">
+          <span class="badge file">routes/ingest.py (lines 65–81)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">04</div>
+      <div class="step-body">
+        <h3>Document row created</h3>
+        <p>A <code>Document</code> row is inserted with metadata: filename, extractor used, <code>used_ocr</code> flag, page count, extraction quality. Flushed to DB to reserve the ID for chunks to reference.</p>
+        <div class="step-meta">
+          <span class="badge file">models.Document</span>
+          <span class="badge output">→ document_id</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">05</div>
+      <div class="step-body">
+        <h3>Structural chunking</h3>
+        <p>Splits on Hebrew section markers — <code>סעיף</code>, <code>פרק</code>, <code>החלטה</code>, subsections, appendices. Paragraph-based fallback for unstructured text. Sections larger than 3500 characters get re-split. Emits <code>StructuralChunk{text, section_path, position}</code>.</p>
+        <div class="step-meta">
+          <span class="badge file">services/chunking.py <code>chunk_document()</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">06</div>
+      <div class="step-body">
+        <h3>Contextual embedding input</h3>
+        <p>Before embedding, each chunk gets its document title and section path prepended. E.g. <code>תקנון פנסיה — סעיף 4</code>, then the chunk text. This anchors the embedding to the chunk's context — a section-4 chunk from a pension bylaw doesn't collide semantically with a section-4 chunk from a different bylaw.</p>
+        <div class="step-meta">
+          <span class="badge file">services/chunking.py <code>build_contextual_input()</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">07</div>
+      <div class="step-body">
+        <h3>Embed</h3>
+        <p>Batched embedding call with <code>input_type="search_document"</code>. Cohere batches at 96/call, OpenAI at 256/call. Returns float vectors persisted onto each <code>Chunk</code> row.</p>
+        <div class="step-meta">
+          <span class="badge file">services/embedding.py <code>embed_texts()</code></span>
+          <span class="badge model">Cohere embed-multilingual-v3.0</span>
+          <span class="badge model">OpenAI text-embedding-3-large</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">08</div>
+      <div class="step-body">
+        <h3>Chunk rows + BM25 index</h3>
+        <p>Each chunk is inserted with its vector. Then a Postgres full-text index is built: <code>UPDATE chunks SET text_search = to_tsvector('simple', normalize_hebrew(text))</code>. The normalization does light morphological stripping (prefixes, suffixes, sofit).</p>
+        <div class="step-meta">
+          <span class="badge file">routes/ingest.py (lines 251–266)</span>
+          <span class="badge file">services/hebrew_text.py <code>normalize_hebrew()</code></span>
+        </div>
+        <div class="gap-note"><strong>Note.</strong> The Hebrew BM25 zero-recall bug was fixed on the <em>query</em> side (see "Known gaps" — <code>normalize_hebrew_to_tsquery()</code>); indexing is unchanged.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">09</div>
+      <div class="step-body">
+        <h3>Metadata classification <span style="font-weight:400; color:var(--muted); font-size:14px;">(background)</span></h3>
+        <p>Spawned as background task <code>classify_document_by_id_bg()</code>. Feeds the first ~4k characters (first 8 chunks) to Claude Haiku, which extracts structured metadata: AI-generated title, doc type, folder, summary, key dates, meeting/decision numbers. Result stored in <code>doc_metadata</code> JSON column.</p>
+        <div class="step-meta">
+          <span class="badge file">routes/documents.py <code>classify_one_document()</code></span>
+          <span class="badge model">Claude Haiku 4.5</span>
+          <span class="badge output">→ doc_metadata</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <h3>Amendment extraction <span style="font-weight:400; color:var(--muted); font-size:14px;">(background, chained after classification)</span></h3>
+        <p>If classification succeeds, the amendment extractor runs. Claude reads the document plus a list of prior documents in the same tenant, and outputs structured amendment edits: target section, action, new text, effective date, confidence. High-confidence edits auto-apply by setting <code>chunks.superseded_by_amendment_id</code>. Lower-confidence edits are written with <code>needs_review=true</code> for human review.</p>
+        <div class="step-meta">
+          <span class="badge file">services/amendment_extractor.py <code>extract_amendments()</code></span>
+          <span class="badge model">Claude Haiku 4.5</span>
+          <span class="badge output">→ amendment graph</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</article>
+
+<!-- ============================ FLOW 2: Q&A ============================ -->
+
+<article class="flow-section" data-color="violet" id="q-overview">
+  <div class="flow-header">
+    <div class="flow-num">2</div>
+    <div class="flow-titles">
+      <span class="flow-tag">Flow 2</span>
+      <h2>Question → answer (RAG)</h2>
+    </div>
+  </div>
+  <div class="flow-summary">
+    <strong>From user query to displayed answer.</strong> The query is triaged, rewritten, checked against a cache of authoritative answers, then hybrid-retrieved, reranked, overlaid with amendments, and sent to Sonnet with a structured answer schema.
+  </div>
+
+  <div class="pipeline">
+    <div class="stage"><div class="stg-num">1</div><div class="stg-label">Conversation</div></div>
+    <div class="stage"><div class="stg-num">2</div><div class="stg-label">Chat context</div></div>
+    <div class="stage"><div class="stg-num">3</div><div class="stg-label">Triage</div></div>
+    <div class="stage"><div class="stg-num">4</div><div class="stg-label">Rewrite</div></div>
+    <div class="stage branch"><div class="stg-num">5</div><div class="stg-label">HITL cache</div></div>
+    <div class="stage"><div class="stg-num">6</div><div class="stg-label">Hybrid retrieve</div></div>
+    <div class="stage"><div class="stg-num">7</div><div class="stg-label">Rerank</div></div>
+    <div class="stage"><div class="stg-num">8</div><div class="stg-label">Amendments</div></div>
+    <div class="stage"><div class="stg-num">9</div><div class="stg-label">Generate</div></div>
+    <div class="stage"><div class="stg-num">10</div><div class="stg-label">Log &amp; return</div></div>
+  </div>
+
+  <div id="q-steps">
+
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-body">
+        <h3>Conversation resolution</h3>
+        <p>If a <code>conversation_id</code> is supplied, the existing <code>Conversation</code> is fetched; otherwise a fresh single-turn conversation is created. This is what makes multi-turn context possible.</p>
+        <div class="step-meta">
+          <span class="badge file">routes/search.py <code>search_pipeline()</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-body">
+        <h3>Chat context loading</h3>
+        <p>Prior <code>Query</code> rows in the conversation are loaded in order. Each becomes a (role, text) pair — "user" for the question, "assistant" for the answer. This history feeds both triage and query rewriting.</p>
+        <div class="step-meta">
+          <span class="badge file">routes/search.py (lines 173–186)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-body">
+        <h3>Triage (clarify vs answer)</h3>
+        <p>Haiku decides whether the question is answerable given the corpus and conversation context, or whether it needs clarification. If ambiguous — for example, referring to an entity never defined in the conversation — it returns <code>mode="clarify"</code> and the pipeline short-circuits.</p>
+        <div class="step-meta">
+          <span class="badge file">services/chat_triage.py <code>triage_turn()</code></span>
+          <span class="badge model">Claude Haiku 4.5</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">04</div>
+      <div class="step-body">
+        <h3>Query rewriting</h3>
+        <p>Fuses conversation history and lexicon matches into a single canonical query. Example: user says <code>"ירשתי בית"</code> after prior discussion of the pension bylaw, and the rewriter produces <code>"מה המשמעות של שיוך דירות אם אני יורש של חבר שנפטר"</code>. The rewritten query is used identically for both vector and BM25 retrieval paths.</p>
+        <div class="step-meta">
+          <span class="badge file">services/query_rewriter.py</span>
+          <span class="badge model">Claude Haiku 4.5</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">05</div>
+      <div class="step-body">
+        <h3>HITL cache lookup</h3>
+        <p>The query is embedded (<code>input_type="search_query"</code>) and cosine-matched against the <code>AuthoritativeAnswer</code> table — human-curated Q&amp;A pairs. If similarity clears the per-answer threshold, the cached answer is returned <em>directly</em>, bypassing retrieval and generation entirely.</p>
+        <div class="step-meta">
+          <span class="badge model">Cohere embed-multilingual-v3.0</span>
+          <span class="badge output">short-circuit possible</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">06</div>
+      <div class="step-body">
+        <h3>Hybrid retrieval</h3>
+        <p>Two lanes run in parallel and are then fused:</p>
+        <ul style="margin: 8px 0 12px; padding-left: 22px; color: var(--ink-soft);">
+          <li><strong>Vector.</strong> Top 64 chunks by cosine similarity. Per-document cap of 3 prevents any single large doc from saturating the candidate pool.</li>
+          <li><strong>BM25.</strong> Query normalized via <code>normalize_hebrew()</code>, then executed as <code>plainto_tsquery('simple', :q)</code> against the <code>text_search</code> tsvector. Top 20.</li>
+          <li><strong>Fusion.</strong> Reciprocal-rank fusion merges the two rankings. Top ~12 candidates advance.</li>
+        </ul>
+        <div class="step-meta">
+          <span class="badge file">services/retrieval.py <code>hybrid_retrieve()</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">07</div>
+      <div class="step-body">
+        <h3>Rerank</h3>
+        <p>The top ~15 candidates are reordered by a cross-encoder for relevance to the specific question. A diversity filter then caps at 2 chunks per document in the final top-K, so no single document monopolizes context.</p>
+        <div class="step-meta">
+          <span class="badge file">services/reranker.py <code>rerank()</code></span>
+          <span class="badge model">Cohere rerank-v3.5</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">08</div>
+      <div class="step-body">
+        <h3>Amendment overlay</h3>
+        <p>For each retrieved chunk with a <code>section_ref</code>, the amendment chain is fetched — only active amendments where <code>needs_review=false</code>. These are formatted as human-readable notes and passed to the LLM alongside the sources, so the answer reflects the current effective wording, not the pre-amendment text.</p>
+        <div class="step-meta">
+          <span class="badge file">services/retrieval.py <code>_amendment_chain_for_chunks()</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">09</div>
+      <div class="step-body">
+        <h3>LLM answer generation</h3>
+        <p>Sonnet 4.6 is called with tool-use forced to an <code>answer</code> schema — <code>{confidence, answer, references}</code>. The prompt includes: system prompt (52-section Hebrew instructions on bylaw interpretation, source hierarchy, no-hallucination rules), last 8 conversation turns, lexicon block, amendment notes, and the retrieved chunks numbered <code>[1]…[N]</code>.</p>
+        <div class="step-meta">
+          <span class="badge file">services/llm.py <code>answer_with_citations()</code></span>
+          <span class="badge model">Claude Sonnet 4.6</span>
+          <span class="badge output">→ structured JSON</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <h3>Citation binding &amp; query logging</h3>
+        <p>The chunk IDs referenced in the answer are turned into <code>SourceCitation</code> objects (filename, section_path, text). A <code>Query</code> row is written to the DB: question, answer, source chunk IDs, confidence, LLM-used flag, and a <code>retrieval_debug</code> payload with per-lane scores (vector / BM25 / fusion / reranked). Near-miss authoritative answers are computed for UI display. Response returns as a <code>SearchResponse</code> with sources, references, and the debug payload.</p>
+        <div class="step-meta">
+          <span class="badge output">→ SearchResponse</span>
+          <span class="badge output">→ Query row (for observability)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</article>
+
+<!-- ============================ MODELS ============================ -->
+
+<section id="models">
+  <h2 style="font-family:'Georgia',serif; font-size:26px; letter-spacing:-0.01em; margin: 0 0 6px;">Models used</h2>
+  <p style="color: var(--muted); font-size: 13px; margin: 0 0 16px;">Snapshot of every external model touched by the two flows.</p>
+
+  <div class="models-grid">
+    <div class="model-card emb">
+      <div class="model-role">Embeddings (primary)</div>
+      <div class="model-name">cohere/embed-multilingual-v3.0</div>
+      <div class="model-use">Document + query embeddings; multilingual with strong Hebrew support.</div>
+    </div>
+    <div class="model-card emb">
+      <div class="model-role">Embeddings (fallback)</div>
+      <div class="model-name">openai/text-embedding-3-large</div>
+      <div class="model-use">Configurable alternate for tenants preferring OpenAI infrastructure.</div>
+    </div>
+    <div class="model-card class">
+      <div class="model-role">Classification, triage, rewrite, amendments</div>
+      <div class="model-name">claude-haiku-4-5-20251001</div>
+      <div class="model-use">Fast, cheap, structured-output reliable. Fits four different jobs in the pipeline.</div>
+    </div>
+    <div class="model-card rerank">
+      <div class="model-role">Reranking</div>
+      <div class="model-name">cohere/rerank-v3.5</div>
+      <div class="model-use">Cross-encoder over top-K candidates. Boosts precision after hybrid retrieval.</div>
+    </div>
+    <div class="model-card gen">
+      <div class="model-role">Answer generation</div>
+      <div class="model-name">claude-sonnet-4-6</div>
+      <div class="model-use">Tool-forced structured answer; primary user-facing model.</div>
+    </div>
+    <div class="model-card">
+      <div class="model-role">OCR</div>
+      <div class="model-name">Azure Document Intelligence</div>
+      <div class="model-use">Hebrew RTL scans, mixed-layout PDFs, images.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ GAPS ============================ -->
+
+<section class="gaps-section" id="gaps">
+  <h2>Known gaps &amp; watch-outs</h2>
+  <p class="gaps-sub">Places where the pipeline is thinner than the code suggests. Track these against the golden set as the roadmap items land.</p>
+
+  <div class="gap-item fixed">
+    <h4>BM25 Hebrew normalization returned 0 hits</h4>
+    <p>Real problem was on the <em>query</em> side, not indexing. <code>plainto_tsquery</code> AND'd every normalized form so any doc had to contain <em>all</em> alternatives at once. Fixed 2026-07-08 with <code>normalize_hebrew_to_tsquery()</code>: per-source-word OR alternation, cross-word AND, Hebrew stop-word list. Retrieval now uses <code>to_tsquery</code>. Index unchanged.</p>
+  </div>
+
+  <div class="gap-item">
+    <h4>Retrieval is a black box to the answer step</h4>
+    <p>The LLM sees only pre-retrieved chunks. It cannot ask for a broader search, a different collection, or the amendment chain of a specific section. This is what roadmap §1.3 (wrap as tools) and §1.4 (agentic loop) address.</p>
+  </div>
+
+  <div class="gap-item">
+    <h4>Hierarchy is implicit</h4>
+    <p><code>section_path</code> is a flat string; collections and doc types live in metadata but are not first-class entities. Cross-document relationships (decision cites bylaw, protocol contains decisions) exist informally at best. Roadmap §1.2 makes hierarchy first-class.</p>
+  </div>
+
+  <div class="gap-item fixed">
+    <h4>No tenant context injection</h4>
+    <p>Landed 2026-07-09. System prompt now composed as <code>PREFIX + tenant.system_context + SUFFIX</code>. Super-admin edits the middle block per tenant in the admin panel. אל-רום's original hierarchy + precision rules seeded into the DB on deploy. Empty tenants fall through to a generic template (just identity + recency/specificity hierarchy + no-fabrication rules) — no invented structure.</p>
+  </div>
+
+  <div class="gap-item">
+    <h4>Triage relies on hand-tuned heuristics</h4>
+    <p>Edge-case ambiguous queries can slip through triage and reach generation, where the LLM's own self-clarification converts them back to clarify-mode post-hoc. Golden-set expansion (roadmap cross-cutting) should surface these.</p>
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>

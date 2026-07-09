@@ -378,6 +378,13 @@ export type UpdateUserPayload = Partial<{
   tenant_id: string;
 }>;
 
+export type TenantContext = {
+  id: string;
+  name: string;
+  segment: string;
+  system_context: string | null;
+};
+
 export type UploadResponse = {
   document_id: string;
   chunks_created: number;
@@ -675,6 +682,17 @@ export const api = {
     request<{ status: string }>(
       `/api/admin/debug-queue/${queryId}/dismiss`,
       { method: "POST" }
+    ),
+
+  adminGetTenant: (tenantId: string) =>
+    request<TenantContext>(`/api/admin/tenants/${tenantId}`),
+  adminUpdateTenantContext: (tenantId: string, systemContext: string | null) =>
+    request<TenantContext>(
+      `/api/admin/tenants/${tenantId}/system-context`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ system_context: systemContext }),
+      }
     ),
 };
 

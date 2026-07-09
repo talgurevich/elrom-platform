@@ -87,6 +87,73 @@ def list_tenants_with_stats(
     ]
 
 
+class TenantContext(BaseModel):
+    id: str
+    name: str
+    segment: str
+    # None when tenant has no override; the answerer falls through to the
+    # generic template built from tenant name. Frontend renders that as the
+    # textarea's placeholder so the super-admin sees what "empty" means.
+    system_context: str | None
+
+
+class UpdateTenantContextRequest(BaseModel):
+    # Empty string / whitespace treated as "clear override" — falls back to
+    # the generic template at answer time.
+    system_context: str | None
+
+
+@router.get("/tenants/{tenant_id}", response_model=TenantContext)
+def get_tenant(
+    tenant_id: str,
+    _: User = Depends(_require_super_admin),
+    db: Session = Depends(get_db),
+) -> TenantContext:
+    try:
+        tid = UUID(tenant_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid tenant_id") from e
+    t = db.get(Tenant, tid)
+    if t is None:
+        raise HTTPException(404, "Tenant not found")
+    return TenantContext(
+        id=str(t.id),
+        name=t.name,
+        segment=t.segment,
+        system_context=t.system_context,
+    )
+
+
+@router.patch("/tenants/{tenant_id}/system-context", response_model=TenantContext)
+def update_tenant_system_context(
+    tenant_id: str,
+    req: UpdateTenantContextRequest,
+    _: User = Depends(_require_super_admin),
+    db: Session = Depends(get_db),
+) -> TenantContext:
+    try:
+        tid = UUID(tenant_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid tenant_id") from e
+    t = db.get(Tenant, tid)
+    if t is None:
+        raise HTTPException(404, "Tenant not found")
+    val = (req.system_context or "").strip()
+    t.system_context = val if val else None
+    db.commit()
+    log.info(
+        "admin.tenant_context_updated",
+        tenant_id=str(t.id),
+        length=len(val),
+    )
+    return TenantContext(
+        id=str(t.id),
+        name=t.name,
+        segment=t.segment,
+        system_context=t.system_context,
+    )
+
+
 @router.post("/tenants", response_model=TenantStats, status_code=201)
 def create_tenant(
     req: CreateTenantRequest,

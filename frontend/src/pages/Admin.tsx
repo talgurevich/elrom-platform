@@ -6,6 +6,7 @@ import {
   type AdminUser,
   type CreateUserPayload,
   type DebugQueueItem,
+  type TenantContext,
   type TenantSegment,
 } from "../lib/api";
 
@@ -133,6 +134,17 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
         }}
         onError={(msg) => flash("err", msg)}
       />
+
+      {selectedTenantId && (
+        <TenantContextSection
+          tenantId={selectedTenantId}
+          tenantName={
+            tenants.find((t) => t.id === selectedTenantId)?.name || "—"
+          }
+          onSaved={(msg) => flash("ok", msg)}
+          onError={(msg) => flash("err", msg)}
+        />
+      )}
 
       <DebugQueueSection
         tenants={tenants}
@@ -578,6 +590,177 @@ function UsersSection({
     </section>
   );
 }
+
+/* ─── Tenant system context editor ─────────────────────────────────── */
+
+function TenantContextSection({
+  tenantId,
+  tenantName,
+  onSaved,
+  onError,
+}: {
+  tenantId: string;
+  tenantName: string;
+  onSaved: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [data, setData] = useState<TenantContext | null>(null);
+  const [draft, setDraft] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .adminGetTenant(tenantId)
+      .then((t) => {
+        if (cancelled) return;
+        setData(t);
+        setDraft(t.system_context || "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        onError(err instanceof ApiError ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, onError]);
+
+  const dirty = (data?.system_context || "") !== draft;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.adminUpdateTenantContext(
+        tenantId,
+        draft.trim() || null
+      );
+      setData(updated);
+      setDraft(updated.system_context || "");
+      onSaved(
+        updated.system_context
+          ? `הקשר ארגוני נשמר עבור ${tenantName}`
+          : `הקשר ארגוני נמחק עבור ${tenantName} — יחזור לתבנית ברירת מחדל`
+      );
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revert = () => {
+    setDraft(data?.system_context || "");
+  };
+
+  const clearOverride = async () => {
+    if (
+      !confirm(
+        `למחוק את ההקשר הארגוני של ${tenantName}? המערכת תחזור לתבנית ברירת מחדל.`
+      )
+    )
+      return;
+    setDraft("");
+    setSaving(true);
+    try {
+      const updated = await api.adminUpdateTenantContext(tenantId, null);
+      setData(updated);
+      onSaved(`הקשר ארגוני נמחק — ${tenantName} משתמש עכשיו בתבנית ברירת מחדל`);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section>
+      <SectionHeader
+        title="הקשר ארגוני"
+        subtitle={`הבלוק הזה מוזרק לתוך system-prompt של המערכת בכל שאלה של ${tenantName}. כאן מגדירים מפת מסמכים, מונחים ייחודיים, וכללי היררכיה של הארגון. אופציונלי — אם ריק, המערכת נופלת לתבנית ברירת מחדל שבה רק שם הארגון + כלל היררכיה גנרי.`}
+        action={
+          data?.system_context && (
+            <button
+              onClick={clearOverride}
+              className="text-xs text-ink-soft hover:text-accent underline underline-offset-4"
+            >
+              מחק והחזר לברירת מחדל
+            </button>
+          )
+        }
+      />
+
+      <div className="mt-4 border-2 border-ink bg-surface p-4">
+        {loading ? (
+          <div className="p-6 text-center text-ink-soft text-sm animate-pulse">
+            טוען…
+          </div>
+        ) : (
+          <>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              dir="rtl"
+              placeholder={CONTEXT_PLACEHOLDER}
+              className="w-full h-96 border border-line-strong p-3 bg-surface focus:outline-none focus:border-ink text-sm leading-relaxed font-sans resize-y"
+            />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-soft">
+              <span>
+                {draft.trim().length.toLocaleString()} תווים
+                {!data?.system_context && draft.trim().length === 0 && (
+                  <span className="mr-2">· משתמש בתבנית ברירת מחדל</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                {dirty && (
+                  <button
+                    onClick={revert}
+                    className="text-ink-soft hover:text-ink underline underline-offset-4"
+                  >
+                    בטל שינויים
+                  </button>
+                )}
+                <button
+                  onClick={save}
+                  disabled={!dirty || saving}
+                  className="bg-ink text-surface px-5 py-2 text-sm font-bold hover:bg-accent disabled:opacity-40 transition"
+                >
+                  {saving ? "שומר…" : "שמור"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const CONTEXT_PLACEHOLDER = `דוגמה למה כדאי לכתוב כאן:
+
+## זהות והיררכיית מקורות
+
+אתה יועץ של [שם הארגון].
+
+מפת מסמכים:
+- תקנון ראשי — משנת ...
+- תקנוני משנה קיימים: פנסיה, שיוך דירות, ...
+- החלטות אסיפה: מהשנתיים האחרונות
+
+מונחים חשובים:
+- "ותק" = שנות חברות מלאות בארגון
+- "מזכירות" ≠ "ועד הנהלה"
+
+כללים ייחודיים:
+- כשמופיע "החלטת אסיפה" — צטט לפי תאריך ההחלטה, המאוחרת גוברת.
+- ...
+
+אם משאירים ריק — המערכת משתמשת בתבנית ברירת מחדל: שם הארגון + כללי היררכיה גנריים בלבד.`;
 
 /* ─── Debug queue ─────────────────────────────────────────────────── */
 

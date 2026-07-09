@@ -22,6 +22,11 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     segment: Mapped[str] = mapped_column(String, nullable=False)  # kibbutz_shitufi | kibbutz_mitchadesh | moshav
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Free-text block injected into the answerer's system prompt. Editable via
+    # the super-admin panel. When NULL, the answerer falls through to a
+    # generic template (identity + hierarchy fallback + no-fabrication rules).
+    # See app/services/llm.py for the injection point.
+    system_context: Mapped[str | None] = mapped_column(Text)
 
 
 class User(Base):
