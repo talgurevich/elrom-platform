@@ -44,7 +44,10 @@ class Settings(BaseSettings):
     magic_link_from_email: str = "noreply@elrom.tv"  # legacy — kept for compat
     # Public URL of the app — used to build clickable links in transactional
     # emails ("כניסה למערכת", "פתח בתור הבאגים"). Overridden in Render.
-    klaser_app_url: str = "https://klaser.co.il"
+    # Public URL used in transactional email CTAs. Points at www because the
+    # apex A record isn't saved at My Names yet; flip back to the apex once
+    # the DNS row is committed at the registrar.
+    klaser_app_url: str = "https://www.klaser.co.il"
 
     # App
     app_env: str = "development"

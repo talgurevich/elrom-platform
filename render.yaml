@@ -58,8 +58,13 @@ services:
         value: noreply@klaser.co.il
       - key: MAIL_FROM_NAME
         value: Klaser
+      # Note: use www.klaser.co.il, not the apex. The apex A record is
+      # still parked at My Names' server until the DNS row is saved
+      # (Google OAuth returns origin_mismatch when the apex resolves to
+      # anything other than Render's IP). Flip back to the apex once that's
+      # fixed at the registrar.
       - key: KLASER_APP_URL
-        value: https://klaser.co.il
+        value: https://www.klaser.co.il
       - key: RESEND_API_KEY
         sync: false
       # Secrets — set these in Render UI after first deploy:
@@ -162,8 +167,13 @@ services:
         value: noreply@klaser.co.il
       - key: MAIL_FROM_NAME
         value: Klaser
+      # Note: use www.klaser.co.il, not the apex. The apex A record is
+      # still parked at My Names' server until the DNS row is saved
+      # (Google OAuth returns origin_mismatch when the apex resolves to
+      # anything other than Render's IP). Flip back to the apex once that's
+      # fixed at the registrar.
       - key: KLASER_APP_URL
-        value: https://klaser.co.il
+        value: https://www.klaser.co.il
       - key: RESEND_API_KEY
         sync: false
 
