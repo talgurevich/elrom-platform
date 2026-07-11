@@ -171,6 +171,7 @@
   .track[data-color="amber"] { --track-color: var(--amber); --track-tint: var(--amber-soft); }
   .track[data-color="rose"] { --track-color: var(--rose); --track-tint: var(--rose-soft); }
   .track[data-color="slate"] { --track-color: var(--slate); --track-tint: var(--slate-soft); }
+  .track[data-color="emerald"] { --track-color: #047857; --track-tint: #d1fae5; }
 
   .track-header {
     display: flex;
@@ -874,6 +875,7 @@
     <a href="#t4"><span class="num">4</span> Meeting capture</a>
     <a href="#t5"><span class="num">5</span> Observability</a>
     <a href="#t6"><span class="num">6</span> Mailer service</a>
+    <a href="#t7"><span class="num">7</span> Sales CRM</a>
     <div class="divider"></div>
     <a href="#north-star"><span class="num">★</span> North star</a>
   </nav>
@@ -1490,6 +1492,79 @@
       <li>Weekly "unanswered questions" report to admins.</li>
       <li>Scheduled report exports.</li>
       <li>Transactional infrastructure: templates, unsubscribe, deliverability.</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="emerald" id="t7">
+  <div class="track-header">
+    <div class="track-num">7</div>
+    <div class="track-titles">
+      <span class="track-tag">Internal · Sales ops</span>
+      <h2>Sales CRM</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Internal tool for tracking the Klaser sales pipeline — <strong>not a customer product</strong>. Prospect universe in the hundreds (every kibbutz and moshav in Israel is addressable), so a real system beats scattered spreadsheets and WhatsApps from day one. Two-week delivery target. Owner: Tal or Gil (TBD). Placement in the master timeline is TBD; likely August–September once Takanon and Klaser Meetings are live.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.0</span> Buy vs build — decide first</h3>
+    <p>Open question, answered before any code. The right answer isn't obvious at hundreds-of-prospects scale.</p>
+    <h4>Off-the-shelf candidates</h4>
+    <ul>
+      <li><strong>HubSpot Free / Starter</strong> — familiar UX, generous free tier, weak on custom lifecycle sync.</li>
+      <li><strong>Pipedrive</strong> — pipeline-first, cheap per seat.</li>
+      <li><strong>Attio</strong> — modern, API-first, strong for custom objects (would map cleanly to tenant records).</li>
+      <li><strong>Airtable / Notion</strong> — cheapest, most flexible, weakest as a sales surface for daily use.</li>
+    </ul>
+    <h4>Decision criteria</h4>
+    <ul>
+      <li>Cost at hundreds of contacts, single-digit seats.</li>
+      <li>API surface for the tenant-lifecycle sync (§7.2) — critical.</li>
+      <li>Hebrew UX / RTL for anyone else logging notes.</li>
+      <li>Time-to-live vs. the two-week build target.</li>
+      <li>Exit cost — how bad is it to move off later?</li>
+    </ul>
+    <div class="benefit"><strong>Bias.</strong> Start with Attio or HubSpot Free and only build if a real integration or workflow limit hits. Buying wins on the first two weeks; building only wins if the CRM has to become the operational hub of the business (tenant provisioning, billing, health signals).</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.1</span> Pipeline</h3>
+    <ol>
+      <li>Stages: lead → contacted → demo booked → pilot → paying → churned.</li>
+      <li>Per-prospect record: organization (kibbutz / moshav name), contact person, role, region, size, notes, next action.</li>
+      <li>Bulk import — seed from the existing spreadsheet / list of every kibbutz &amp; moshav.</li>
+      <li>Kanban and list views; filter by stage, region, last-contact-age.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.2</span> Tenant lifecycle sync</h3>
+    <ol>
+      <li>A prospect promoted to "paying" auto-provisions (or flags for provisioning) a real tenant in Takanon.</li>
+      <li>Usage stats from Takanon (last activity, doc count, query volume, health flags) flow back to the CRM record.</li>
+      <li>Churn signal — a paying tenant idle for N weeks surfaces in the CRM as at-risk.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> This is the one feature no off-the-shelf CRM gives for free, and the strongest argument for build. Without it the CRM is just a nicer address book.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.3</span> Notes, tasks, reminders</h3>
+    <ol>
+      <li>One shared timeline per prospect — call notes, emails, doc attachments.</li>
+      <li>Tasks with due dates and owner; a daily "what's on my plate today" list.</li>
+      <li>Follow-up reminders when a prospect goes silent past a threshold.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.4</span> Later (post-MVP)</h3>
+    <ol>
+      <li>Email / calendar hooks — log Gmail threads and Calendar meetings against the prospect automatically.</li>
+      <li>Contract e-sign flow.</li>
+      <li>Invoicing / payment status.</li>
+      <li>Prospect self-service intake form (public "book a demo" page).</li>
     </ol>
   </div>
 </article>
