@@ -81,7 +81,7 @@ _BASE_STYLE = """
     .btn { display: inline-block; background: #171717; color: #fafaf9 !important; text-decoration: none;
            padding: 14px 28px; font-weight: 700; letter-spacing: 0.02em; }
     .muted { color: #525252; font-size: 13px; line-height: 1.6; }
-    .card { max-width: 560px; margin: 0 auto; background: #fafaf9; border: 1px solid #e7e5e4; padding: 40px 32px; }
+    .card { max-width: 560px; margin: 0 auto; background: #fafaf9; border: 1px solid #e7e5e4; padding: 40px 32px; direction: rtl; text-align: right; }
     h1 { font-size: 28px; font-weight: 900; margin: 0 0 12px; letter-spacing: -0.01em; }
     h2 { font-size: 18px; font-weight: 700; margin: 24px 0 6px; letter-spacing: -0.005em; }
     p  { line-height: 1.65; margin: 0 0 12px; font-size: 15px; }
@@ -92,15 +92,19 @@ _BASE_STYLE = """
 """
 
 
+# Gmail and Outlook strip <html>/<body> and their CSS, so `dir="rtl"` on those
+# is lost. We repeat dir="rtl" and inline direction/text-align on every wrapper
+# div so RTL survives the strip in every client. Any template using
+# _wrap_html inherits RTL by default — do not add new wrappers without these.
 def _wrap_html(body: str) -> str:
     return f"""<!doctype html>
 <html lang="he" dir="rtl">
 <head>{_BASE_STYLE}</head>
-<body>
-  <div style="padding: 32px 16px;">
-    <div class="card">
+<body dir="rtl" style="direction: rtl; text-align: right;">
+  <div dir="rtl" style="padding: 32px 16px; direction: rtl; text-align: right;">
+    <div class="card" dir="rtl" style="direction: rtl; text-align: right;">
       {body}
-      <div class="foot">
+      <div class="foot" dir="rtl" style="direction: rtl; text-align: right;">
         Klaser · <a href="{html.escape(settings.klaser_app_url)}">klaser.co.il</a>
       </div>
     </div>
