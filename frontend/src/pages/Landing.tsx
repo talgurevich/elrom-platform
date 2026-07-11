@@ -258,7 +258,7 @@ export default function Landing({ onLogin }: Props) {
               עלינו
             </div>
             <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight">
-              נבנה עם ארגונים.
+              נבנה עם ארגונים,
               <br />
               לא עבורם.
             </h2>
