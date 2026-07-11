@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>El-Rom Platform Roadmap</title>
+<title>Klaser Platform Roadmap</title>
 <style>
   :root {
     --bg: #faf7f2;
@@ -686,6 +686,175 @@
     border: 1px solid #10b981;
     border-radius: 3px;
   }
+
+  /* TEAM & RESOURCES */
+  .section-head {
+    margin: 56px 0 20px;
+  }
+  .section-head h2 {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.02em;
+  }
+  .section-head .section-sub {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .person {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    border-left: 4px solid var(--person-color, var(--accent));
+  }
+  .person[data-role="owner"] { --person-color: var(--accent); }
+  .person[data-role="dev"] { --person-color: var(--rose); }
+  .person[data-role="design"] { --person-color: var(--violet); }
+  .person .p-role {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--person-color);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .person .p-name {
+    font-family: 'Georgia', serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .person .p-title {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .person .p-focus {
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .person .p-focus strong { color: var(--ink); }
+  .person .p-tracks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .person .p-tracks a {
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.04);
+    color: var(--ink-soft);
+  }
+  .person .p-tracks a:hover { background: rgba(0,0,0,0.08); }
+
+  .budget-note {
+    background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+  }
+  .budget-note strong { color: var(--coral); }
+
+  /* TIMELINE */
+  .timeline {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px;
+  }
+  .tl-phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .tl-phase {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    position: relative;
+    border-top: 4px solid var(--phase-color, var(--accent));
+    background: rgba(0,0,0,0.01);
+  }
+  .tl-phase[data-phase="now"] { --phase-color: var(--coral); }
+  .tl-phase[data-phase="next"] { --phase-color: var(--accent); }
+  .tl-phase[data-phase="later"] { --phase-color: var(--violet); }
+  .tl-phase[data-phase="horizon"] { --phase-color: var(--slate); }
+  .tl-phase .tl-tag {
+    display: inline-block;
+    background: var(--phase-color);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .tl-phase .tl-window {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .tl-phase h4 {
+    font-family: 'Georgia', serif;
+    font-size: 17px;
+    margin: 4px 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .tl-phase ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+  .tl-phase li {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 4px 0;
+    line-height: 1.45;
+  }
+  .tl-phase li .tl-owner {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(0,0,0,0.05);
+    color: var(--ink-soft);
+    margin-right: 6px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .tl-phase li .tl-owner.tal { background: var(--accent-soft); color: var(--accent); }
+  .tl-phase li .tl-owner.gil { background: var(--rose-soft); color: var(--rose); }
+  .tl-phase li .tl-owner.talia { background: var(--violet-soft); color: var(--violet); }
+  .tl-note {
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+  }
 </style>
 </head>
 <body>
@@ -693,10 +862,11 @@
 <div class="layout">
 
 <aside>
-  <div class="brand">El-Rom</div>
+  <div class="brand">Klaser</div>
   <div class="brand-sub">Platform Roadmap</div>
   <nav>
-    <a href="#objectives"><span class="num">◇</span> Objectives</a>
+    <a href="#resources"><span class="num">◈</span> Team &amp; resources</a>
+    <a href="#timeline"><span class="num">◐</span> Timeline</a>
     <div class="divider"></div>
     <a href="#t1"><span class="num">1</span> Core engine</a>
     <a href="#t2"><span class="num">2</span> User experience</a>
@@ -712,7 +882,7 @@
 <main>
 
 <section class="hero">
-  <h1>El-Rom Platform Roadmap</h1>
+  <h1>Klaser Platform Roadmap</h1>
   <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
   <div class="meta">
     <span>Owner<strong>Tal Gurevich</strong></span>
@@ -721,107 +891,58 @@
   </div>
 </section>
 
-<section id="objectives">
-  <div class="mapping-header">
-    <h2>Objectives &rarr; Tracks</h2>
-    <span class="mapping-sub">How the 5 objectives map to the 6 delivery tracks</span>
+<section id="resources">
+  <div class="section-head" style="margin-top: 0;">
+    <h2>Team &amp; resources</h2>
+    <div class="section-sub">Who's on the platform and how their time splits across the tracks.</div>
   </div>
-  <div class="mapping">
-    <div class="mapping-legend">
-      <span>Objectives</span>
-      <span>Delivery tracks</span>
-    </div>
-    <div class="map-grid">
-      <div class="map-col left">
-        <div class="map-node" data-c="teal">
-          <div class="node-num">Obj 01</div>
-          <div class="node-title">Performance</div>
-          <div class="node-desc">Recall, precision, hallucination control.</div>
-        </div>
-        <div class="map-node" data-c="coral">
-          <div class="node-num">Obj 02</div>
-          <div class="node-title">UX for main users</div>
-          <div class="node-desc">Good enough for go-live.</div>
-        </div>
-        <div class="map-node" data-c="amber">
-          <div class="node-num">Obj 03</div>
-          <div class="node-title">Observability</div>
-          <div class="node-desc">Useful monitoring in place.</div>
-        </div>
-        <div class="map-node" data-c="violet">
-          <div class="node-num">Obj 04</div>
-          <div class="node-title">Enterprise readiness</div>
-          <div class="node-desc">Key peripherals for basic go-live.</div>
-        </div>
-        <div class="map-node" data-c="slate">
-          <div class="node-num">Obj 05</div>
-          <div class="node-title">Communication</div>
-          <div class="node-desc">Mode &amp; tooling for management.</div>
+
+  <div class="team-grid">
+    <div class="person" data-role="owner">
+      <div class="p-role">Product builder · Takanon</div>
+      <div class="p-name">Tal Gurevich</div>
+      <div class="p-title">Founder, full-stack</div>
+      <div class="p-focus">
+        <strong>Focus.</strong> Core engine, retrieval quality, tenant infra, superadmin surface, mailer. Owns <strong>Takanon</strong> end-to-end and the golden set.
+        <div class="p-tracks">
+          <a href="#t1">T1 Core</a>
+          <a href="#t3">T3 Documents</a>
+          <a href="#t5">T5 Observability</a>
+          <a href="#t6">T6 Mailer</a>
         </div>
       </div>
+    </div>
 
-      <div class="map-links">
-        <svg viewBox="0 0 200 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- Obj 1 Performance → T1 Core engine (teal) -->
-          <path d="M 0 10 C 80 10, 120 7, 200 7" stroke="#0d9488"/>
-
-          <!-- Obj 2 UX → T2 UX (primary, coral) -->
-          <path d="M 0 30 C 80 30, 120 25, 200 25" stroke="#ea580c"/>
-          <!-- Obj 2 UX → T3 Documents (secondary, coral, dashed) -->
-          <path d="M 0 30 C 80 30, 120 42, 200 42" stroke="#ea580c" stroke-dasharray="4 3" opacity="0.35"/>
-
-          <!-- Obj 3 Observability → T5 Observability (amber) -->
-          <path d="M 0 50 C 80 50, 120 75, 200 75" stroke="#ca8a04"/>
-
-          <!-- Obj 4 Enterprise → T3 Documents (primary, violet) -->
-          <path d="M 0 70 C 80 70, 120 42, 200 42" stroke="#7c3aed"/>
-          <!-- Obj 4 Enterprise → T4 Meeting capture (secondary, violet) -->
-          <path d="M 0 70 C 80 70, 120 58, 200 58" stroke="#7c3aed" stroke-dasharray="4 3" opacity="0.35"/>
-
-          <!-- Obj 5 Communication → T6 Mailer (primary, slate) -->
-          <path d="M 0 90 C 80 90, 120 93, 200 93" stroke="#475569"/>
-          <!-- Obj 5 Communication → T4 Meeting capture (secondary, slate) -->
-          <path d="M 0 90 C 80 90, 120 58, 200 58" stroke="#475569" stroke-dasharray="4 3" opacity="0.35"/>
-        </svg>
-      </div>
-
-      <div class="map-col right">
-        <a class="map-node" data-c="teal" href="#t1" style="text-decoration:none;">
-          <div class="node-num">Track 1</div>
-          <div class="node-title">Core engine</div>
-          <div class="node-desc">Hierarchy, context, tooling.</div>
-        </a>
-        <a class="map-node" data-c="coral" href="#t2" style="text-decoration:none;">
-          <div class="node-num">Track 2</div>
-          <div class="node-title">User experience</div>
-          <div class="node-desc">Go-live polish.</div>
-        </a>
-        <a class="map-node" data-c="violet" href="#t3" style="text-decoration:none;">
-          <div class="node-num">Track 3</div>
-          <div class="node-title">Documents &amp; archive</div>
-          <div class="node-desc">Browse, search, integration.</div>
-        </a>
-        <a class="map-node" data-c="rose" href="#t4" style="text-decoration:none;">
-          <div class="node-num">Track 4</div>
-          <div class="node-title">Meeting capture</div>
-          <div class="node-desc">Minutes &amp; governance workflow.</div>
-        </a>
-        <a class="map-node" data-c="amber" href="#t5" style="text-decoration:none;">
-          <div class="node-num">Track 5</div>
-          <div class="node-title">Observability</div>
-          <div class="node-desc">Metrics, cost, analytics.</div>
-        </a>
-        <a class="map-node" data-c="slate" href="#t6" style="text-decoration:none;">
-          <div class="node-num">Track 6</div>
-          <div class="node-title">Mailer service</div>
-          <div class="node-desc">Digests, notifications.</div>
-        </a>
+    <div class="person" data-role="dev">
+      <div class="p-role">Product builder · Klaser Meetings</div>
+      <div class="p-name">Gil Toledo</div>
+      <div class="p-title">Full-stack</div>
+      <div class="p-focus">
+        <strong>Focus.</strong> Owns Track 4 — <strong>Klaser Meetings</strong> — as a separate product under the Klaser brand. Ships audio → draft protocol end-to-end, then the governance workflow. Coordinates with Tal on the shared decision/bylaw registry seams.
+        <div class="p-tracks">
+          <a href="#t4">T4 Meeting capture</a>
+        </div>
       </div>
     </div>
-    <div class="mapping-legend" style="margin-top: 20px; margin-bottom: 0; padding-bottom: 0; border: none; font-style: italic; text-transform: none; letter-spacing: 0;">
-      <span>Solid line = primary track for objective</span>
-      <span>Dashed line = secondary contribution</span>
+
+    <div class="person" data-role="design">
+      <div class="p-role">Design · Cross-track</div>
+      <div class="p-name">Talia Savchenko</div>
+      <div class="p-title">UX designer</div>
+      <div class="p-focus">
+        <strong>Focus.</strong> Runs across <strong>every</strong> project — Takanon and Klaser Meetings. Owns end-user surface polish, admin surface consistency, first-run &amp; onboarding, empty states, and the visual system shared across the Klaser brand.
+        <div class="p-tracks">
+          <a href="#t2">T2 UX</a>
+          <a href="#t3">T3 Documents</a>
+          <a href="#t4">T4 Meeting capture</a>
+          <a href="#t3">T3 Onboarding</a>
+        </div>
+      </div>
     </div>
+  </div>
+
+  <div class="budget-note">
+    <strong>Budget.</strong> Being worked on offline first. Headcount cost, model/infra spend (Anthropic, OpenAI, Resend, Render, transcription), and per-tenant unit economics tracked separately. A summary lands in this section once the offline pass is settled.
   </div>
 </section>
 
@@ -1291,38 +1412,20 @@
   <div class="track-header">
     <div class="track-num">4</div>
     <div class="track-titles">
-      <span class="track-tag">Strategic pivot</span>
+      <span class="track-tag">New product · Klaser brand</span>
       <h2>Meeting capture &amp; minute-taking</h2>
     </div>
   </div>
   <div class="focus">
-    <strong>Focus.</strong> Stop being a search layer over already-written protocols — start capturing meetings as they happen. First step toward the Governance OS long-term bet: the platform becomes the tool the meeting runs on, not just the archive it lands in.
-  </div>
-
-  <div class="phases">
-    <div class="phase">
-      <span class="phase-tag">v1</span>
-      <div class="phase-title">After-the-fact capture</div>
-      <div class="phase-desc">Lower risk. Upload audio → transcript → structured draft protocol. Ships without real-time infra.</div>
-    </div>
-    <div class="phase">
-      <span class="phase-tag">v2</span>
-      <div class="phase-title">Real-time capture</div>
-      <div class="phase-desc">In-meeting agenda, live notes, inline decisions, streaming transcription. Protocol ready at meeting close.</div>
-    </div>
-    <div class="phase">
-      <span class="phase-tag">cross</span>
-      <div class="phase-title">Governance workflow</div>
-      <div class="phase-desc">Draft → attendee approval → decisions promote → amendment overlay → action-item tracking.</div>
-    </div>
+    <strong>Focus.</strong> A <strong>separate product</strong> under the Klaser brand, alongside Takanon. Upload meeting audio → transcript → structured draft protocol. Owned end-to-end by Gil. Feeds Takanon via the shared decision registry, but stands alone commercially.
   </div>
 
   <div class="subtrack">
-    <h3><span class="sub-num">4.1</span> After-the-fact capture (v1)</h3>
+    <h3><span class="sub-num">4.1</span> Audio → draft protocol</h3>
     <ol>
-      <li>Upload meeting audio (or video) — Hebrew-tuned transcription (Whisper large-v3 or equivalent, RTL-aware).</li>
+      <li>Upload meeting audio (or video) — Hebrew-tuned transcription, RTL-aware.</li>
       <li>Speaker diarization; map speakers to known attendees where possible.</li>
-      <li>Structured extraction from the transcript: attendees, agenda items, decisions taken, action items with owners, dissenting positions.</li>
+      <li>Structured extraction: attendees, agenda items, decisions, action items with owners.</li>
       <li>Auto-generated draft protocol (per tenant template) queued for secretary review.</li>
       <li>Decision entries auto-created and linked to the source protocol; classified into the doc-type registry from §3.3.</li>
       <li>Review UI — secretary approves / edits before the protocol becomes canonical.</li>
@@ -1331,26 +1434,14 @@
   </div>
 
   <div class="subtrack">
-    <h3><span class="sub-num">4.2</span> Real-time capture (v2)</h3>
-    <ol>
-      <li>In-meeting agenda surface — displayed to attendees / secretary during the meeting.</li>
-      <li>Live note-taking with per-agenda-item threading.</li>
-      <li>Decisions logged inline as they are taken (motion → vote → outcome captured on the spot).</li>
-      <li>Streaming transcription in parallel — reconciled against manual notes at meeting end.</li>
-      <li>Auto-generated protocol available immediately at meeting close; secretary polishes rather than drafts from scratch.</li>
-    </ol>
-  </div>
-
-  <div class="subtrack">
-    <h3><span class="sub-num">4.3</span> Governance workflow (cross-cutting)</h3>
+    <h3><span class="sub-num">4.2</span> Governance workflow</h3>
     <ol>
       <li>Send draft protocol to attendees for approval (integrates with §6 Mailer).</li>
       <li>Attendee comments / correction requests tracked against the draft.</li>
       <li>Approved protocol locks; decisions promote to canonical registry.</li>
-      <li>Amendment overlay: a decision that changes a bylaw section auto-proposes an amendment entry.</li>
       <li>Action-item tracker — items surface in the mailer digest until closed.</li>
     </ol>
-    <div class="benefit"><strong>Benefit.</strong> Closes the loop end-to-end: meeting happens → protocol generated → decisions logged → bylaws updated → participants notified → action items tracked. This is what "system of record for governance" actually means.</div>
+    <div class="benefit"><strong>Benefit.</strong> Closes the loop: meeting recorded → protocol drafted → decisions logged → participants notified → action items tracked.</div>
   </div>
 </article>
 
@@ -1402,6 +1493,65 @@
     </ol>
   </div>
 </article>
+
+<section id="timeline">
+  <div class="section-head">
+    <h2>General timeline</h2>
+    <div class="section-sub">Rough phasing across the two products. Windows are indicative — dates lock in with the budget pass.</div>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-phases">
+
+      <div class="tl-phase" data-phase="now">
+        <span class="tl-tag">Now</span>
+        <div class="tl-window">July 2026 — Takanon go-live</div>
+        <h4>Ship Takanon to production (design partner: אל-רום)</h4>
+        <ul>
+          <li><span class="tl-owner tal">Tal</span>Close remaining P0s — email/password auth, golden-set baseline. Takanon live end of July.</li>
+          <li><span class="tl-owner talia">Talia</span>Onboards fast; audits Takanon UX; ships the first polish targets from the P1 list (welcome + tour, "no confident answer" state) alongside launch.</li>
+          <li><span class="tl-owner gil">Gil</span>Onboards; scopes and starts Klaser Meetings v1 (audio → draft protocol) in parallel.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="next">
+        <span class="tl-tag">Next</span>
+        <div class="tl-window">August 2026 — Klaser Meetings go-live</div>
+        <h4>Klaser Meetings ships · Takanon hardens</h4>
+        <ul>
+          <li><span class="tl-owner gil">Gil</span>Klaser Meetings live end of August — audio → transcript → draft protocol, secretary review UI.</li>
+          <li><span class="tl-owner talia">Talia</span>Shared Klaser visual system; Meetings flow design; onboarding runbook for tenant admins.</li>
+          <li><span class="tl-owner tal">Tal</span>Post-launch Takanon fixes; Track 1 hierarchy work (§1.2); superadmin support console.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="later">
+        <span class="tl-tag">Later</span>
+        <div class="tl-window">Q4 2026</div>
+        <h4>Agentic retrieval · governance workflow</h4>
+        <ul>
+          <li><span class="tl-owner tal">Tal</span>Tools + agent loop (§1.3–1.4); doc-type expansion (§3.3); Drive bulk import (§3.4); observability build-out (§5).</li>
+          <li><span class="tl-owner gil">Gil</span>Governance workflow (§4.2) — attendee approval, decisions promote to registry, action-item tracker.</li>
+          <li><span class="tl-owner talia">Talia</span>Decision-registry surface shared between both products; action-item UX.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="horizon">
+        <span class="tl-tag">Horizon</span>
+        <div class="tl-window">2027+</div>
+        <h4>Second tenants · North-star bets</h4>
+        <ul>
+          <li>Second tenant onboarding; move from design-partner mode to repeatable rollout.</li>
+          <li>North-star bets evaluated: member-facing surface (#2), cross-community precedent network (#3).</li>
+        </ul>
+      </div>
+
+    </div>
+    <div class="tl-note">
+      Aggressive: two products live inside eight weeks. Assumes Gil Toledo and Talia Savchenko both onboarded and productive from day one. Windows lock with the budget pass; ordering and per-owner allocation stay stable regardless.
+    </div>
+  </div>
+</section>
 
 <section class="north-star" id="north-star">
   <div class="ns-tag">Beyond the single product</div>
