@@ -798,6 +798,11 @@
   .tl-phase[data-phase="next"] { --phase-color: var(--accent); }
   .tl-phase[data-phase="later"] { --phase-color: var(--violet); }
   .tl-phase[data-phase="horizon"] { --phase-color: var(--slate); }
+  .tl-phase[data-phase="tbd"] { --phase-color: #047857; }
+  .tl-phase[data-phase="tbd"] .tl-tag::after {
+    content: " · TBD";
+    opacity: 0.85;
+  }
   .tl-phase .tl-tag {
     display: inline-block;
     background: var(--phase-color);
@@ -1586,6 +1591,17 @@
           <li><span class="tl-owner tal">Tal</span>Close remaining P0s — email/password auth, golden-set baseline. Takanon live end of July.</li>
           <li><span class="tl-owner talia">Talia</span>Onboards fast; audits Takanon UX; ships the first polish targets from the P1 list (welcome + tour, "no confident answer" state) alongside launch.</li>
           <li><span class="tl-owner gil">Gil</span>Onboards; scopes and starts Klaser Meetings v1 (audio → draft protocol) in parallel.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="tbd">
+        <span class="tl-tag">Interleaved</span>
+        <div class="tl-window">Window TBD — between Takanon and Klaser Meetings</div>
+        <h4>Sales CRM (§7) — 2-week build or buy</h4>
+        <ul>
+          <li><span class="tl-owner tal">Tal / Gil</span>Owner TBD. First step is §7.0 — decide buy vs build; only then schedule the two-week slot.</li>
+          <li>If <strong>buy</strong>: pick tool (HubSpot / Attio / Pipedrive), seed the prospect list, wire the minimum tenant-lifecycle hook we can. Days, not weeks.</li>
+          <li>If <strong>build</strong>: 2-week sprint slotted between Takanon go-live and Klaser Meetings go-live, or immediately after Meetings ships — whichever protects the two product launches.</li>
         </ul>
       </div>
 
