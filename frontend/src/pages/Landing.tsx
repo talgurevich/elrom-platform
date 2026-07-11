@@ -68,7 +68,7 @@ export default function Landing({ onLogin }: Props) {
               <br />
               הזיכרון של הארגון,
               <br />
-              <span className="text-accent">בהישג שאלה.</span>
+              <span className="text-accent">במרחק שאלה.</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-ink-soft max-w-2xl leading-relaxed">
               קלאסר בונה כלים לארגונים שמנהלים ידע מסמכי — תקנונים, פרוטוקולים,
