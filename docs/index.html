@@ -1246,15 +1246,75 @@
       <h2>User experience</h2>
     </div>
   </div>
-  <div class="focus"><strong>Focus.</strong> Is it good enough for secretaries and managers on day one?</div>
+  <div class="focus"><strong>Focus.</strong> Is it good enough for secretaries and managers on day one? Four surfaces get the day-one lift — support, onboarding, chat, and documents. Talia leads across all four; each has a concrete P0/P1 slice ahead of go-live.</div>
+
   <div class="subtrack">
+    <h3><span class="sub-num">2.1</span> Support experience</h3>
+    <p>A secretary who's stuck at 22:00 needs help without a phone call to Tal. Support has to feel present without becoming a distraction on the main surface.</p>
     <ol>
-      <li>First-run tour and empty-state guidance.</li>
-      <li>Better answer citations — jump-to-source in the document viewer.</li>
-      <li>Query suggestions and recent searches.</li>
-      <li>Clearer distinction between "no confident answer" and "here's a guess" states.</li>
-      <li>Mobile polish.</li>
+      <li>In-app support widget — chat channel (Intercom / Crisp / equivalent) with session context (tenant, role, current page, last query) attached automatically. Bottom-corner, dismissible.</li>
+      <li>Contextual help — inline "?" tooltips next to non-obvious features (amendment review, HITL cache, folder filters, "why refused" explainer).</li>
+      <li>One-click bug / feedback report — grabs current URL, recent actions, optional screenshot; routes into the debug queue with a "user-reported" tag.</li>
+      <li>Self-serve diagnostics — "why did I get no answer?" surface exposing the retrieval trace in a friendly form (not raw JSON).</li>
+      <li>Public status page for platform-wide incidents.</li>
+      <li>Ticket lifecycle visible to the reporting user — "your issue is being worked on" beats silence.</li>
     </ol>
+    <div class="benefit"><strong>Benefit.</strong> Every ticket that gets resolved without a human touch is a step toward operating at more than a handful of tenants. Also feeds §7 sales — support quality is a churn signal.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.2</span> Onboarding experience</h3>
+    <p>Formalize the path from first sign-in to daily use. First-run polish should get every new user to first value in under two minutes, without a call.</p>
+    <ol>
+      <li>Welcome email on account creation — tenant-branded, one clear CTA to the first action per role.</li>
+      <li>Role-aware landing — secretary lands on "upload your first document"; end user lands on Q&amp;A with 3–5 suggested-question chips from tenant context.</li>
+      <li>Empty states across every surface — no "no data" screens; each empty view teaches the next action.</li>
+      <li>Progressive disclosure — advanced surfaces (bulk ops, amendment review, HITL cache) unlock as usage grows, not on day one.</li>
+      <li>Sample corpus / demo tenant for evaluators and sales calls — no more staring at an empty box during a pitch.</li>
+      <li>Tenant-admin onboarding runbook — a separate flow for the person setting up the tenant vs the end users.</li>
+      <li>Onboarding checklist (later) — visible until dismissed: upload first doc, try a query, invite a colleague, set notifications.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Turns onboarding from bespoke Tal-time into a repeatable, measurable path. Precondition for scaling beyond design-partner customers. Metrics feed §5 (time-to-first-query, D7 return).</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.3</span> Chat enhancements</h3>
+    <p>The Q&amp;A surface is where 90% of user attention lives. Small polish here compounds.</p>
+    <ol>
+      <li>Clearer confidence states — "confident + cited" vs "low-confidence guess" vs "refused" render as three visually distinct answer types, not one style with a badge.</li>
+      <li>Refined refused state — integrity framing (already shipped in §1) reinforced with a one-click "the corpus should know this" path into the debug queue.</li>
+      <li>Suggested next questions — after every answer, 2–3 follow-ups derived from the retrieved chunks. "Did you also want to see…"</li>
+      <li>Recent-searches surface — quick access to the last 10 queries per user; pinnable.</li>
+      <li>Inline citation preview — hover a citation → mini-preview of the surrounding paragraph without opening the PDF.</li>
+      <li>Copy answer with citations — one button that copies the answer + inline source references, ready to paste into an email.</li>
+      <li>Query rewriting hints — when the retrieval was empty, suggest a rewrite ("try mentioning the committee name") rather than a bare refusal.</li>
+      <li>Conversation memory polish — visible "this thread" indicator when a follow-up builds on the previous turn.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Increases both perceived quality and actual trust per answer. Follow-up suggestions and refused-to-flag path directly reduce zero-result frustration, the top complaint in early usage.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.4</span> Document enhancements</h3>
+    <p>Documents are the trust artifact. Every improvement here reinforces "the answer is grounded in something real you can open."</p>
+    <ol>
+      <li>Jump-to-page from citations — click a citation → PDF opens at the referenced page, not just the file (v1 opens the file; this is the v2 upgrade).</li>
+      <li>Passage highlight on open — the cited paragraph is visually marked in the PDF when the viewer opens.</li>
+      <li>Rich document detail page — beyond the current file view: metadata sidebar (type, date, uploader), amendment chain, related documents, "questions this document answered."</li>
+      <li>Doc-type badges throughout the UI — bylaws / decisions / protocols / contracts each get a distinct color + icon so the user always knows what kind of source they're looking at.</li>
+      <li>In-viewer search — Ctrl+F inside a document, RTL-aware, works on OCR text layer too.</li>
+      <li>Side-by-side mode — original PDF on one side, extracted / answered text on the other. Useful for reviewers.</li>
+      <li>Print / download the original with tenant-level ACL respected.</li>
+      <li>Better cards on the Documents browse view — richer previews, better visual hierarchy, faster scan.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Closes the trust loop end-to-end: retrieved → cited → opened at the exact spot → verified. This is the single biggest lever for "the platform feels serious" perception on the first visit.</div>
+  </div>
+
+  <div class="subtrack">
+    <h4>Cross-cutting</h4>
+    <ul>
+      <li><strong>Mobile polish</strong> — every above surface has to survive a secretary opening it on a phone in a meeting. Not a separate track, a constraint on every §2 item.</li>
+      <li><strong>Design system</strong> — Talia owns the shared visual language across Takanon and Klaser Meetings so §2 improvements ship consistent, not one-off.</li>
+    </ul>
   </div>
 </article>
 
