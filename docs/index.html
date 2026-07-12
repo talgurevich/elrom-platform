@@ -172,6 +172,7 @@
   .track[data-color="rose"] { --track-color: var(--rose); --track-tint: var(--rose-soft); }
   .track[data-color="slate"] { --track-color: var(--slate); --track-tint: var(--slate-soft); }
   .track[data-color="emerald"] { --track-color: #047857; --track-tint: #d1fae5; }
+  .track[data-color="indigo"] { --track-color: #4338ca; --track-tint: #e0e7ff; }
 
   .track-header {
     display: flex;
@@ -881,6 +882,7 @@
     <a href="#t5"><span class="num">5</span> Observability</a>
     <a href="#t6"><span class="num">6</span> Mailer service</a>
     <a href="#t7"><span class="num">7</span> Sales CRM</a>
+    <a href="#t8"><span class="num">8</span> Marketing site</a>
     <div class="divider"></div>
     <a href="#north-star"><span class="num">★</span> North star</a>
   </nav>
@@ -893,7 +895,7 @@
   <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
   <div class="meta">
     <span>Owner<strong>Tal Gurevich</strong></span>
-    <span>Updated<strong>2026-07-07</strong></span>
+    <span>Updated<strong>2026-07-12</strong></span>
     <span>Status<strong>Draft for discussion</strong></span>
   </div>
 </section>
@@ -1630,6 +1632,79 @@
       <li>Contract e-sign flow.</li>
       <li>Invoicing / payment status.</li>
       <li>Prospect self-service intake form (public "book a demo" page).</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="indigo" id="t8">
+  <div class="track-header">
+    <div class="track-num">8</div>
+    <div class="track-titles">
+      <span class="track-tag">Marketing · klaser.co.il</span>
+      <h2>Marketing site</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> The public site (<a href="https://www.klaser.co.il" target="_blank" rel="noopener">klaser.co.il</a>) is the top of the funnel for two very different audiences — the <strong>buyer</strong> (kibbutz / moshav manager, B2B) and the <strong>end user</strong> (member looking for day-to-day info). Findings below come from a walk-through of the current site; each item calls out what's already shipped and what's still open.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.1</span> Two personas — write the site to both</h3>
+    <ol>
+      <li>Buyer path — kibbutz / moshav manager wanting to know "can this run my organization's memory?" Needs product proof, pricing, security, contact.</li>
+      <li>End-user path — member curious about a tool their organization runs. Needs "what does this do for me?" and a low-friction way to try it or ask.</li>
+      <li>Site structure should let each persona self-select within the first fold, not funnel both into the same login CTA.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.2</span> Header &amp; navigation — the entry problem</h3>
+    <p>Finding: every button on the page currently says "כניסה למערכת" and every button leads to a login screen — with a footer note that access is restricted to approved Google accounts. Effectively, there is no way to <em>start</em> using the product from the marketing site. Either the platform isn't live yet (fine, but the UX doesn't reflect that) or the CTA is broken.</p>
+    <ol>
+      <li>Differentiate <strong>"התחל עכשיו"</strong> (for real users) from <strong>"בקש הדגמה"</strong> / <strong>"צור קשר"</strong> (for prospects). Same button doing double duty is what breaks today.</li>
+      <li>Login page needs a <strong>"חזרה לאתר"</strong> escape hatch — someone who clicks by mistake shouldn't be trapped.</li>
+      <li>Enable the browser back button on the login route (SPA history push, not replace).</li>
+      <li>Footer copy about "approved Google accounts only" should live inside the login page, not on the marketing homepage — it reads as a wall to a first-time visitor.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.3</span> Hero polish</h3>
+    <ol>
+      <li>Q&amp;A "דוגמה חיה" — <strong>3-sample carousel shipped ✓</strong> (auto-cycles, larger heading, dot indicators). Reviewer feedback that spawned this is closed.</li>
+      <li>Trust bullets under the CTAs (citations / RTL / built-for-kibbutzim) — currently too small; these carry a lot of the trust signal. <strong>Open:</strong> bump size + weight, give them room to breathe.</li>
+      <li>Consider a rotating headline that pairs with the sample carousel — same question type framing on both sides of the fold.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.4</span> Products section</h3>
+    <ol>
+      <li><strong>Product mocks / screenshots.</strong> Today the products section describes the product without showing it. Buyers want to see the UI — even a static hero shot of the Q&amp;A screen with a real citation would carry weight. Talia to design 2–3 hero mocks per product.</li>
+      <li><strong>Content partner logos.</strong> The line "קלאסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים" is doing a lot of work — surface the actual partners as logos (with permission). אל-רום first; others as they join.</li>
+      <li><strong>CTA naming consistency.</strong> Currently "כניסה למערכת" and "כניסה לתקנון" both exist and point at the same login. Pick one label per action; ties in with §8.2.</li>
+      <li><strong>Coming-soon products (Klaser Meetings).</strong> Today the "בקרוב" state has no way to register interest. Add "אני מעוניין לשמוע" / "הצטרף לרשימת המתנה" secondary CTA — captures leads from prospects who wouldn't otherwise contact us.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.5</span> Trust surfaces — social proof, security, pricing</h3>
+    <ol>
+      <li><strong>Social proof.</strong> Logos of partner organizations (§8.4), plus 1–2 testimonials from אל-רום once the design partnership yields quotable moments. Ships when we have material — no fake placeholders.</li>
+      <li><strong>Security &amp; privacy messaging.</strong> "המסמכים שלכם נשארים פרטיים" — a short section covering: data isolation per tenant, no training of external models on tenant data, hosting region, retention. Buyers ask about this before anything else.</li>
+      <li><strong>Pricing page.</strong> Currently missing. Even a "בקש הצעת מחיר" landing surface with a scoping form is better than the empty state. Free trial? Design-partner pricing? Needs a decision from Tal first.</li>
+      <li><strong>Contact us.</strong> <strong>Shipped ✓</strong> — public form on the landing page routes to tal.gurevich@elrom.tv via Resend. Replaces the weak <code>mailto:</code> pattern flagged in feedback.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> The site's job is to earn a first call from a manager. Security, social proof, and pricing are what turn "interesting" into "let's talk" for the buyer persona; the design-partner pipeline hinges on this.</div>
+  </div>
+
+  <div class="subtrack">
+    <h4>Sequencing bet</h4>
+    <ol>
+      <li>Fix §8.2 (login escape hatch + CTA naming) — quick wins, unblock accidental clicks. Half a day.</li>
+      <li>§8.3 trust bullets bigger + §8.4 CTA consistency — same-day polish.</li>
+      <li>§8.4 mocks + partner logos — Talia leads once אל-רום agrees to be named.</li>
+      <li>§8.5 security messaging + pricing decision — needs product/business decision before copy.</li>
     </ol>
   </div>
 </article>
