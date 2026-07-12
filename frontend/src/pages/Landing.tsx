@@ -7,6 +7,35 @@ type Props = {
 
 type ContactStatus = "idle" | "sending" | "sent" | "error";
 
+type QASample = {
+  question: string;
+  answer: string;
+  source: string;
+};
+
+const HERO_SAMPLES: QASample[] = [
+  {
+    question: "מה קורה אם חבר לא שילם דמי חבר במשך שנתיים?",
+    answer:
+      "סעיף 12(ב) קובע כי חבר שאינו משלם דמי חבר במשך תקופה העולה על שנה — יוזמן לשימוע…",
+    source: "תקנון עדכני · עמוד 4",
+  },
+  {
+    question: "מתי אושרה תוספת הבנייה במגרשי הצעירים?",
+    answer:
+      "החלטת ועדת בינוי מיום 14.3.2024 (החלטה מס' 27/2024) אישרה תוספת של עד 40 מ״ר לכל יחידת דיור צעירה, בכפוף לאישור הוועדה המקומית…",
+    source: "פרוטוקול ועדת בינוי · מרץ 2024",
+  },
+  {
+    question: "מה הנוהל להעברת נחלה לבן ממשיך?",
+    answer:
+      "לפי נוהל העברות (סעיף 4), נדרשים אישור ועד הנהלה, הצהרת מס וחתימת שני עדים. הנוהל עודכן ב-2024 בעקבות החלטה 1553…",
+    source: "נוהל העברות נחלה · עודכן 2024",
+  },
+];
+
+const HERO_SAMPLE_INTERVAL_MS = 5500;
+
 export default function Landing({ onLogin }: Props) {
   const [scrolled, setScrolled] = useState(false);
   const [contactName, setContactName] = useState("");
@@ -15,6 +44,14 @@ export default function Landing({ onLogin }: Props) {
   const [contactMessage, setContactMessage] = useState("");
   const [contactStatus, setContactStatus] = useState<ContactStatus>("idle");
   const [contactError, setContactError] = useState<string | null>(null);
+  const [activeSample, setActiveSample] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setActiveSample((i) => (i + 1) % HERO_SAMPLES.length);
+    }, HERO_SAMPLE_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -146,24 +183,56 @@ export default function Landing({ onLogin }: Props) {
 
           <div className="md:col-span-4 hidden md:block">
             <div className="border-2 border-ink bg-surface p-6 shadow-lift">
-              <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3">
-                דוגמה חיה
+              <div className="flex items-baseline justify-between mb-5">
+                <div className="font-display font-black text-2xl text-ink tracking-tight leading-none">
+                  דוגמה חיה
+                </div>
+                <span className="flex items-center gap-1.5" aria-hidden>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+                  </span>
+                  <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold">
+                    Live
+                  </span>
+                </span>
               </div>
-              <div className="border-r-2 border-accent pr-3 mb-4">
-                <div className="text-xs text-ink-soft mb-1">שאלה:</div>
-                <div className="text-sm font-semibold text-ink">
-                  מה קורה אם חבר לא שילם דמי חבר במשך שנתיים?
+
+              {/* Fixed-height wrapper so cycling samples of different length
+                  don't jerk the layout around. */}
+              <div className="relative min-h-[240px]">
+                <div key={activeSample} className="animate-fade-up">
+                  <div className="border-r-2 border-accent pr-3 mb-4">
+                    <div className="text-xs text-ink-soft mb-1">שאלה:</div>
+                    <div className="text-sm font-semibold text-ink leading-snug">
+                      {HERO_SAMPLES[activeSample].question}
+                    </div>
+                  </div>
+                  <div className="border border-line p-3">
+                    <div className="text-xs text-ink-soft mb-1">תשובה מהמקור:</div>
+                    <div className="text-sm text-ink leading-relaxed">
+                      {HERO_SAMPLES[activeSample].answer}
+                    </div>
+                    <div className="mt-3 text-[10px] tracking-widest uppercase text-accent font-bold">
+                      מקור: {HERO_SAMPLES[activeSample].source}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="border border-line p-3">
-                <div className="text-xs text-ink-soft mb-1">תשובה מהתקנון:</div>
-                <div className="text-sm text-ink leading-relaxed">
-                  סעיף 12(ב) קובע כי חבר שאינו משלם דמי חבר במשך תקופה העולה על
-                  שנה — יוזמן לשימוע…
-                </div>
-                <div className="mt-3 text-[10px] tracking-widest uppercase text-accent font-bold">
-                  מקור: תקנון עדכני · עמוד 4
-                </div>
+
+              <div className="mt-4 pt-4 border-t border-line flex items-center justify-center gap-2">
+                {HERO_SAMPLES.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveSample(i)}
+                    aria-label={`דוגמה ${i + 1}`}
+                    className={`h-1.5 transition-all ${
+                      i === activeSample
+                        ? "w-8 bg-accent"
+                        : "w-3 bg-line-strong hover:bg-ink-soft"
+                    }`}
+                  />
+                ))}
               </div>
             </div>
           </div>
