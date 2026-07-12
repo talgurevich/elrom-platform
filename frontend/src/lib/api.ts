@@ -398,6 +398,13 @@ export type UploadResponse = {
 
 // ─── Endpoints ─────────────────────────────────────────────────────────
 export const api = {
+  // Public contact form (unauthenticated)
+  sendContact: (body: { name: string; email: string; phone?: string; message: string }) =>
+    request<{ status: string }>("/api/contact", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // Auth
   me: () => request<CurrentUser>("/api/auth/me"),
   googleLogin: (credential: string) =>

@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
+import { api } from "../lib/api";
 
 type Props = {
   onLogin: () => void;
 };
 
+type ContactStatus = "idle" | "sending" | "sent" | "error";
+
 export default function Landing({ onLogin }: Props) {
   const [scrolled, setScrolled] = useState(false);
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactStatus, setContactStatus] = useState<ContactStatus>("idle");
+  const [contactError, setContactError] = useState<string | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -15,6 +24,33 @@ export default function Landing({ onLogin }: Props) {
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const submitContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (contactStatus === "sending") return;
+    setContactStatus("sending");
+    setContactError(null);
+    try {
+      await api.sendContact({
+        name: contactName.trim(),
+        email: contactEmail.trim(),
+        phone: contactPhone.trim() || undefined,
+        message: contactMessage.trim(),
+      });
+      setContactStatus("sent");
+      setContactName("");
+      setContactEmail("");
+      setContactPhone("");
+      setContactMessage("");
+    } catch (err) {
+      setContactStatus("error");
+      setContactError(
+        err instanceof Error && err.message
+          ? "לא הצלחנו לשלוח את ההודעה. נסה שוב או שלח מייל ישירות."
+          : "שגיאה לא ידועה."
+      );
+    }
   };
 
   return (
@@ -43,6 +79,9 @@ export default function Landing({ onLogin }: Props) {
             </button>
             <button onClick={() => scrollTo("about")} className="hover:text-ink transition">
               עלינו
+            </button>
+            <button onClick={() => scrollTo("contact")} className="hover:text-ink transition">
+              יצירת קשר
             </button>
           </nav>
 
@@ -280,6 +319,105 @@ export default function Landing({ onLogin }: Props) {
         </div>
       </section>
 
+      {/* Contact */}
+      <section id="contact" className="border-b border-ink bg-line/20">
+        <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
+          <div className="mb-10">
+            <div className="text-[10px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+              יצירת קשר
+            </div>
+            <h2 className="font-display font-black text-3xl md:text-5xl leading-tight text-ink">
+              מעוניינים לשמוע עוד?
+            </h2>
+            <p className="mt-4 text-ink-soft max-w-xl leading-relaxed">
+              השאירו פרטים ונחזור אליכם. אפשר גם לשלוח מייל ישירות ל־
+              <a href="mailto:tal.gurevich@elrom.tv" className="text-accent hover:underline">
+                tal.gurevich@elrom.tv
+              </a>
+              .
+            </p>
+          </div>
+
+          <form
+            onSubmit={submitContact}
+            className="bg-surface border border-line p-8 md:p-10 space-y-5"
+            noValidate
+          >
+            <div className="grid md:grid-cols-2 gap-5">
+              <label className="block">
+                <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">שם</span>
+                <input
+                  type="text"
+                  required
+                  maxLength={120}
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  disabled={contactStatus === "sending"}
+                  className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">טלפון</span>
+                <input
+                  type="tel"
+                  maxLength={40}
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  disabled={contactStatus === "sending"}
+                  className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">אימייל</span>
+              <input
+                type="email"
+                required
+                dir="ltr"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                disabled={contactStatus === "sending"}
+                className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">הודעה</span>
+              <textarea
+                required
+                rows={5}
+                maxLength={4000}
+                value={contactMessage}
+                onChange={(e) => setContactMessage(e.target.value)}
+                disabled={contactStatus === "sending"}
+                className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors resize-y"
+              />
+            </label>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-2">
+              <button
+                type="submit"
+                disabled={contactStatus === "sending" || contactStatus === "sent"}
+                className="bg-ink text-surface px-8 py-3 text-sm font-bold hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {contactStatus === "sending" ? "שולח…" : contactStatus === "sent" ? "נשלח ✓" : "שלח הודעה ←"}
+              </button>
+
+              {contactStatus === "sent" && (
+                <span className="text-sm text-accent font-medium">
+                  תודה. נחזור אליכם בהקדם.
+                </span>
+              )}
+              {contactStatus === "error" && contactError && (
+                <span className="text-sm text-red-600">{contactError}</span>
+              )}
+            </div>
+          </form>
+        </div>
+      </section>
+
       {/* Final CTA */}
       <section className="bg-ink text-surface">
         <div className="max-w-6xl mx-auto px-6 py-20 md:py-24 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
@@ -332,8 +470,13 @@ export default function Landing({ onLogin }: Props) {
             </div>
             <ul className="space-y-2 text-sm text-ink">
               <li>
-                <a href="mailto:tal@elrom.tv" className="hover:text-accent transition">
-                  tal@elrom.tv
+                <button onClick={() => scrollTo("contact")} className="hover:text-accent transition">
+                  שלח לנו הודעה
+                </button>
+              </li>
+              <li>
+                <a href="mailto:tal.gurevich@elrom.tv" className="hover:text-accent transition">
+                  tal.gurevich@elrom.tv
                 </a>
               </li>
               <li>

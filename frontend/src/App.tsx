@@ -531,10 +531,10 @@ export default function App() {
           <span>© כל הזכויות שמורות לאלרום סטודיוס בע״מ</span>
           <span className="flex items-center gap-3">
             <a
-              href="mailto:tal@elrom.tv"
+              href="mailto:tal.gurevich@elrom.tv"
               className="hover:text-accent transition-colors"
             >
-              תמיכה: tal@elrom.tv
+              תמיכה: tal.gurevich@elrom.tv
             </a>
             <span className="text-line-strong">·</span>
             <a

@@ -239,6 +239,67 @@ def send_broken_answer_alert(
         )
 
 
+# ─── Public contact form ────────────────────────────────────────────────
+
+
+def send_contact_message(
+    *,
+    name: str,
+    email: str,
+    phone: str | None,
+    message: str,
+) -> None:
+    """Public landing-page contact form → Tal's inbox.
+
+    Recipient is hardcoded rather than a setting: this is a marketing
+    surface, not per-tenant. Sender fields are user-supplied and untrusted —
+    everything gets html.escape'd before hitting the template.
+    """
+    recipient = "tal.gurevich@elrom.tv"
+
+    safe_name = html.escape(name.strip())
+    safe_email = html.escape(email.strip())
+    safe_phone = html.escape((phone or "").strip()) or "—"
+    safe_message = html.escape(message.strip()).replace("\n", "<br>")
+
+    html_body = _wrap_html(
+        f"""
+        <div class="tag">Klaser · פנייה חדשה</div>
+        <h1>פנייה חדשה מהאתר</h1>
+        <p>התקבלה פנייה חדשה דרך טופס יצירת הקשר.</p>
+
+        <h2>שם</h2>
+        <blockquote>{safe_name}</blockquote>
+
+        <h2>אימייל</h2>
+        <blockquote><a href="mailto:{safe_email}">{safe_email}</a></blockquote>
+
+        <h2>טלפון</h2>
+        <blockquote>{safe_phone}</blockquote>
+
+        <h2>הודעה</h2>
+        <blockquote>{safe_message}</blockquote>
+        """
+    )
+
+    text_body = (
+        f"פנייה חדשה מהאתר\n\n"
+        f"שם: {name}\n"
+        f"אימייל: {email}\n"
+        f"טלפון: {phone or '—'}\n\n"
+        f"הודעה:\n{message}\n"
+    )
+
+    _send(
+        Message(
+            to=recipient,
+            subject=f"[Klaser] פנייה חדשה — {name}",
+            html_body=html_body,
+            text_body=text_body,
+        )
+    )
+
+
 # ─── Weekly lexicon digest ──────────────────────────────────────────────
 
 
