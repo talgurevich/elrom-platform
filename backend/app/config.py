@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     password_reset_token_ttl_hours: int = 1
     bcrypt_rounds: int = 12
 
+    # Identity service — the shared klaser-identity backend that owns
+    # users, tenants, sessions, and per-product subscriptions. This
+    # backend calls /api/introspect to validate the session cookie once
+    # the cutover from local auth is complete. See services/identity.py.
+    #
+    # `identity_url` — where identity lives (auth.klaser.co.il in prod).
+    # `identity_service_token` — bearer token for /api/service/* calls
+    # (invites, tenant lookups outside a request context). Different
+    # token per product; rotate via SERVICE_TOKENS on the identity side.
+    identity_url: str = "https://auth.klaser.co.il"
+    identity_service_token: str = ""
+
     # Mail — Resend. Until the sender domain (klaser.co.il) verifies in the
     # Resend dashboard, use the shared onboarding sandbox address. Once
     # verified, flip MAIL_FROM_EMAIL to noreply@klaser.co.il.
