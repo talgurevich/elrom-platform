@@ -10,6 +10,7 @@ The super-admin should perform these actions from their home tenant (not while
 "viewing" a customer). The frontend enforces that by refusing to open the
 admin panel while viewing_other_tenant is true.
 """
+from datetime import timedelta
 from uuid import UUID
 
 import structlog
@@ -18,10 +19,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models import Chunk, Document, Query, Tenant, User
 from app.routes.auth import current_user
-from app.services.mail import send_invite
+from app.services.mail import send_registration_invite
+from app.services.tokens import PURPOSE_REGISTRATION, issue_token
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -194,6 +197,11 @@ class UserItem(BaseModel):
     tenant_id: str
     tenant_name: str | None = None
     created_at: str
+    # False until the user completes email/password registration (or sets
+    # one via password reset). Drives the "resend invite" affordance —
+    # Google-only users always show False here, which is fine: Google
+    # sign-in never needs an invite link resent.
+    has_password: bool = False
 
 
 class AddUserRequest(BaseModel):
@@ -211,6 +219,38 @@ class UpdateUserRequest(BaseModel):
     tenant_id: str | None = None  # allow moving a user between tenants
 
 
+def _send_registration_invite(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    user: User,
+    tenant: Tenant,
+    invited_by: str | None,
+) -> None:
+    """Issue a fresh registration token and email the set-password link.
+    Any previously issued, still-unused registration token for this user is
+    invalidated (issue_token's default), so only the newest link works —
+    important for resend-invite, where an old email might still be sitting
+    in an inbox."""
+    raw_token = issue_token(
+        db,
+        user_id=user.id,
+        purpose=PURPOSE_REGISTRATION,
+        ttl=timedelta(days=settings.registration_token_ttl_days),
+    )
+    registration_url = f"{settings.klaser_app_url.rstrip('/')}/register?token={raw_token}"
+    background_tasks.add_task(
+        send_registration_invite,
+        to_email=user.email,
+        display_name=user.display_name,
+        tenant_name=tenant.name,
+        role=user.role,
+        invited_by=invited_by,
+        registration_url=registration_url,
+        ttl_days=settings.registration_token_ttl_days,
+    )
+
+
 def _user_to_item(u: User, tenant_name: str | None) -> UserItem:
     return UserItem(
         id=str(u.id),
@@ -220,6 +260,7 @@ def _user_to_item(u: User, tenant_name: str | None) -> UserItem:
         is_super_admin=bool(u.is_super_admin),
         tenant_id=str(u.tenant_id),
         tenant_name=tenant_name,
+        has_password=u.password_hash is not None,
         created_at=u.created_at.isoformat() if u.created_at else "",
     )
 
@@ -283,18 +324,54 @@ def add_user(
         super_admin=u.is_super_admin,
     )
 
-    # Fire welcome/invite email in the background so a slow SMTP hop doesn't
-    # delay the admin's create-user request. send_invite is no-raising.
-    background_tasks.add_task(
-        send_invite,
-        to_email=email,
-        display_name=req.display_name,
-        tenant_name=tenant.name,
-        role=u.role,
+    # Issue a registration token and fire the invite email in the
+    # background so a slow SMTP hop doesn't delay the admin's create-user
+    # request. Mail sending never raises (see app.services.mail._send).
+    _send_registration_invite(
+        db,
+        background_tasks,
+        user=u,
+        tenant=tenant,
         invited_by=me.display_name or me.email,
     )
 
     return _user_to_item(u, tenant.name)
+
+
+@router.post("/users/{user_id}/resend-invite")
+def resend_invite(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    me: User = Depends(_require_super_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Re-issue a registration link for a user who hasn't set a password
+    yet (link expired, email lost, etc). No-op safety: refuses once the
+    user already has a password — use forgot-password for that case."""
+    try:
+        uid = UUID(user_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid user_id") from e
+    target = db.get(User, uid)
+    if target is None:
+        raise HTTPException(404, "User not found")
+    if target.password_hash is not None:
+        raise HTTPException(
+            409, "המשתמש כבר הגדיר סיסמה — יש להשתמש באיפוס סיסמה במקום."
+        )
+    tenant = db.get(Tenant, target.tenant_id)
+    if tenant is None:
+        raise HTTPException(404, "Tenant not found")
+
+    _send_registration_invite(
+        db,
+        background_tasks,
+        user=target,
+        tenant=tenant,
+        invited_by=me.display_name or me.email,
+    )
+    log.info("admin.invite_resent", user_id=str(target.id))
+    return {"status": "ok"}
 
 
 @router.patch("/users/{user_id}", response_model=UserItem)

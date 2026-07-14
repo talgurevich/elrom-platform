@@ -40,6 +40,27 @@ class User(Base):
     # When set + session.viewing_tenant_id present, current_user swaps tenant_id
     # in memory for the request and the middleware enforces read-only.
     is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Bcrypt hash — NULL until the user completes email/password registration
+    # (or sets a password via the reset flow). Google sign-in never touches
+    # this column; a user may have both a password and Google as valid
+    # sign-in methods for the same account.
+    password_hash: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthToken(Base):
+    """Single-use, expiring token backing invite-registration and
+    password-reset links. The raw token is only ever sent to the user by
+    email — we store a sha256 hash of it here so a DB leak alone can't be
+    used to complete a registration or reset."""
+
+    __tablename__ = "auth_tokens"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String, nullable=False)  # registration | password_reset
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

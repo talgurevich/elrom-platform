@@ -36,6 +36,16 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
     window.setTimeout(() => setNotice(null), 4000);
   }, []);
 
+  // Stable references — passed to child effects/useCallbacks as onError /
+  // onSaved / onDismissed. Recreating these inline on every render (as
+  // `onError={(msg) => flash("err", msg)}`) breaks any child that lists
+  // them as a useEffect/useCallback dependency: a failed fetch calls
+  // onError -> flash -> this component re-renders -> a new inline
+  // function is created -> the child's effect sees a changed dependency
+  // and refetches -> fails again -> infinite loop.
+  const flashError = useCallback((msg: string) => flash("err", msg), [flash]);
+  const flashOk = useCallback((msg: string) => flash("ok", msg), [flash]);
+
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -119,7 +129,7 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
           await reload();
           setSelectedTenantId(t.id);
         }}
-        onError={(msg) => flash("err", msg)}
+        onError={flashError}
       />
 
       <UsersSection
@@ -132,7 +142,7 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
           flash("ok", msg);
           await reload();
         }}
-        onError={(msg) => flash("err", msg)}
+        onError={flashError}
       />
 
       {selectedTenantId && (
@@ -141,15 +151,15 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
           tenantName={
             tenants.find((t) => t.id === selectedTenantId)?.name || "—"
           }
-          onSaved={(msg) => flash("ok", msg)}
-          onError={(msg) => flash("err", msg)}
+          onSaved={flashOk}
+          onError={flashError}
         />
       )}
 
       <DebugQueueSection
         tenants={tenants}
-        onError={(msg) => flash("err", msg)}
-        onDismissed={(msg) => flash("ok", msg)}
+        onError={flashError}
+        onDismissed={flashOk}
       />
 
       <SuperAdminsSection superAdmins={superAdmins} />
@@ -427,6 +437,15 @@ function UsersSection({
     }
   };
 
+  const resendInvite = async (u: AdminUser) => {
+    try {
+      await api.adminResendInvite(u.id);
+      await onChanged(`הזמנה נשלחה מחדש ל-${u.email}`);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    }
+  };
+
   return (
     <section>
       <SectionHeader
@@ -541,6 +560,14 @@ function UsersSection({
                     · את/ה
                   </span>
                 )}
+                {!u.has_password && (
+                  <span
+                    className="mr-2 text-[10px] tracking-widest uppercase text-ink-soft"
+                    title="עדיין לא הגדיר סיסמה — ייתכן שהתחבר עם Google או שההזמנה עדיין ממתינה"
+                  >
+                    · לא נרשם
+                  </span>
+                )}
               </div>
               <div className="col-span-3 text-sm text-ink-soft truncate">
                 {u.display_name || "—"}
@@ -574,7 +601,16 @@ function UsersSection({
                   aria-label="toggle super-admin"
                 />
               </div>
-              <div className="col-span-2 text-left">
+              <div className="col-span-2 text-left flex items-center justify-end gap-3">
+                {!u.has_password && (
+                  <button
+                    onClick={() => resendInvite(u)}
+                    className="text-xs text-ink-soft hover:text-ink"
+                    title="שלח שוב מייל הזמנה עם קישור להרשמה"
+                  >
+                    שלח הזמנה
+                  </button>
+                )}
                 <button
                   onClick={() => removeUser(u)}
                   disabled={u.id === currentUserId}

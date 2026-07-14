@@ -66,14 +66,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cross-site session cookie: frontend and backend live on different Render
-# subdomains, so the cookie must be SameSite=None + Secure.
+# In production, frontend and backend live on different Render subdomains,
+# so the cookie must be SameSite=None + Secure to be sent cross-site.
+# Locally, frontend (localhost:5173) and backend (localhost:8000) are
+# same-site (same host, different port) and not served over HTTPS — a
+# SameSite=None cookie without Secure is silently rejected by the browser,
+# so it must fall back to Lax in dev or the cookie never gets stored at all.
+_is_dev = settings.app_env == "development"
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
     session_cookie="elrom_session",
-    same_site="none",
-    https_only=settings.app_env != "development",
+    same_site="lax" if _is_dev else "none",
+    https_only=not _is_dev,
     max_age=60 * 60 * 24 * 30,  # 30 days
 )
 

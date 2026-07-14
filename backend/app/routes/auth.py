@@ -1,16 +1,29 @@
-"""Google OAuth login (invite-only).
+"""Google OAuth login + email/password auth (invite-only).
 
-Flow: frontend uses Google Identity Services to obtain an ID token, POSTs it
-here. We verify the token against Google's public keys, look up the user by
-email — if they exist they're signed in (session cookie), otherwise rejected.
+Google flow: frontend uses Google Identity Services to obtain an ID token,
+POSTs it here. We verify the token against Google's public keys, look up
+the user by email — if they exist they're signed in (session cookie),
+otherwise rejected.
+
+Email/password flow: a super-admin creates the User row (app.routes.admin)
+and that issues a "registration" AuthToken, emailed as a /register?token=
+link. GET /registration/{token} lets the frontend show who's registering
+before the form is filled in; POST /register sets the password and signs
+the user in. POST /login is plain email+password against that hash.
+POST /forgot-password issues a "password_reset" AuthToken (always a generic
+response, to avoid leaking which emails have accounts); POST /reset-password
+consumes it. Both routes reuse the same session mechanism as Google login,
+so a user may have Google, a password, or both wired up to one account.
 
 Super-admin tenant switching: a flagged user may set session.viewing_tenant_id
 via POST /switch-tenant. While that's set, current_user swaps user.tenant_id
 in memory for the request, and the middleware in app.main enforces read-only.
 """
+from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
@@ -19,7 +32,17 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Tenant, User
+from app.services.mail import send_password_reset_email, send_welcome_email
+from app.services.security import hash_password, validate_password_strength, verify_password
+from app.services.tokens import (
+    PURPOSE_PASSWORD_RESET,
+    PURPOSE_REGISTRATION,
+    consume_token,
+    find_valid_token,
+    issue_token,
+)
 
+log = structlog.get_logger()
 router = APIRouter()
 
 
@@ -162,6 +185,202 @@ def me(
 def logout(request: Request) -> dict:
     request.session.clear()
     return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Email/password registration (invite-only — the token is the invite)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class RegistrationInfo(BaseModel):
+    email: str
+    display_name: str | None
+    tenant_name: str
+    role: str
+
+
+@router.get("/registration/{token}", response_model=RegistrationInfo)
+def get_registration_info(token: str, db: Session = Depends(get_db)) -> RegistrationInfo:
+    """Lets the register page show who's signing up before the form is
+    filled in, and 400s early on a dead/expired/used link."""
+    auth_token = find_valid_token(db, raw_token=token, purpose=PURPOSE_REGISTRATION)
+    if auth_token is None:
+        raise HTTPException(400, "קישור ההרשמה אינו תקף או שפג תוקפו")
+    user = db.get(User, auth_token.user_id)
+    if user is None:
+        raise HTTPException(404, "המשתמש לא נמצא")
+    tenant = db.get(Tenant, user.tenant_id)
+    return RegistrationInfo(
+        email=user.email,
+        display_name=user.display_name,
+        tenant_name=tenant.name if tenant else "",
+        role=user.role,
+    )
+
+
+class RegisterRequest(BaseModel):
+    token: str
+    password: str
+    display_name: str | None = None
+
+
+@router.post("/register", response_model=MeResponse)
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    auth_token = find_valid_token(db, raw_token=payload.token, purpose=PURPOSE_REGISTRATION)
+    if auth_token is None:
+        raise HTTPException(400, "קישור ההרשמה אינו תקף או שפג תוקפו")
+    user = db.get(User, auth_token.user_id)
+    if user is None:
+        raise HTTPException(404, "המשתמש לא נמצא")
+    if user.password_hash is not None:
+        # Token should already be single-use, but guard against a race
+        # rather than silently overwrite an existing password.
+        raise HTTPException(409, "החשבון כבר מוגדר. נסה להתחבר או לאפס סיסמה.")
+
+    error = validate_password_strength(payload.password)
+    if error:
+        raise HTTPException(400, error)
+
+    if payload.display_name and payload.display_name.strip():
+        user.display_name = payload.display_name.strip()
+
+    user.password_hash = hash_password(payload.password)
+    consume_token(db, auth_token)  # commits password_hash + display_name too
+    db.refresh(user)
+
+    tenant = db.get(Tenant, user.tenant_id)
+    background_tasks.add_task(
+        send_welcome_email,
+        to_email=user.email,
+        display_name=user.display_name,
+        tenant_name=tenant.name if tenant else "",
+    )
+
+    request.session["user_id"] = str(user.id)
+    request.session["is_super_admin"] = bool(user.is_super_admin)
+    request.session.pop("viewing_tenant_id", None)
+    log.info("auth.registered", user_id=str(user.id))
+    return _user_to_response(user, db)
+
+
+class PasswordLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@router.post("/login", response_model=MeResponse)
+def password_login(
+    payload: PasswordLoginRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    email = payload.email.lower().strip()
+    user = db.query(User).filter(User.email == email).first()
+    if (
+        user is None
+        or user.password_hash is None
+        or not verify_password(payload.password, user.password_hash)
+    ):
+        # Deliberately identical error whether the email doesn't exist, has
+        # no password set, or the password is wrong.
+        raise HTTPException(401, "אימייל או סיסמה שגויים")
+
+    request.session["user_id"] = str(user.id)
+    request.session["is_super_admin"] = bool(user.is_super_admin)
+    request.session.pop("viewing_tenant_id", None)
+    return _user_to_response(user, db)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Password reset
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Always returns the same generic response — doesn't reveal whether
+    the email belongs to an account."""
+    email = payload.email.lower().strip()
+    user = db.query(User).filter(User.email == email).first()
+    if user is not None:
+        raw_token = issue_token(
+            db,
+            user_id=user.id,
+            purpose=PURPOSE_PASSWORD_RESET,
+            ttl=timedelta(hours=settings.password_reset_token_ttl_hours),
+        )
+        reset_url = f"{settings.klaser_app_url.rstrip('/')}/reset-password?token={raw_token}"
+        background_tasks.add_task(
+            send_password_reset_email,
+            to_email=user.email,
+            display_name=user.display_name,
+            reset_url=reset_url,
+            ttl_hours=settings.password_reset_token_ttl_hours,
+        )
+    return {"status": "ok"}
+
+
+class ResetPasswordInfo(BaseModel):
+    email: str
+
+
+@router.get("/reset-password/{token}", response_model=ResetPasswordInfo)
+def get_reset_password_info(token: str, db: Session = Depends(get_db)) -> ResetPasswordInfo:
+    auth_token = find_valid_token(db, raw_token=token, purpose=PURPOSE_PASSWORD_RESET)
+    if auth_token is None:
+        raise HTTPException(400, "קישור איפוס הסיסמה אינו תקף או שפג תוקפו")
+    user = db.get(User, auth_token.user_id)
+    if user is None:
+        raise HTTPException(404, "המשתמש לא נמצא")
+    return ResetPasswordInfo(email=user.email)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/reset-password", response_model=MeResponse)
+def reset_password(
+    payload: ResetPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    auth_token = find_valid_token(db, raw_token=payload.token, purpose=PURPOSE_PASSWORD_RESET)
+    if auth_token is None:
+        raise HTTPException(400, "קישור איפוס הסיסמה אינו תקף או שפג תוקפו")
+    user = db.get(User, auth_token.user_id)
+    if user is None:
+        raise HTTPException(404, "המשתמש לא נמצא")
+
+    error = validate_password_strength(payload.password)
+    if error:
+        raise HTTPException(400, error)
+
+    user.password_hash = hash_password(payload.password)
+    consume_token(db, auth_token)  # commits password_hash too
+    db.refresh(user)
+
+    # Auto-login, matching the registration flow — one less step for a user
+    # who just proved control of their inbox.
+    request.session["user_id"] = str(user.id)
+    request.session["is_super_admin"] = bool(user.is_super_admin)
+    request.session.pop("viewing_tenant_id", None)
+    log.info("auth.password_reset", user_id=str(user.id))
+    return _user_to_response(user, db)
 
 
 # ─────────────────────────────────────────────────────────────────────────
