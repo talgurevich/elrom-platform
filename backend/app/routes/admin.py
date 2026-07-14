@@ -3,27 +3,24 @@
 Post-identity-cutover state
 ---------------------------
 
-Users and tenants now live in the `klaser-identity` service — this
-backend no longer owns those tables. Auth-related writes have moved:
+Users and tenants live in the `klaser-identity` service. Every read and
+write for those tables goes through identity now:
 
-  - `POST /admin/users` (invite) → calls identity's `/api/service/users`
-    via `identity_service.invite_user`. Identity issues the token,
-    emails the invite, and stores the row.
+  Users:   list / get / invite / patch / delete / resend-invite
+  Tenants: list / get / create
 
-Auth-related writes still pending an identity endpoint are temporarily
-disabled (501). They come back once identity grows a matching write:
+Doc counts on the tenant list still come from this backend's local DB
+because documents are Takanon-owned domain data. We call identity for
+the tenant list, then join in the local `documents` counts.
 
-  - `POST /admin/users/{id}/resend-invite`
-  - `PATCH /admin/users/{id}` (role/display_name/tenant/super-admin)
-  - `DELETE /admin/users/{id}`
-  - `POST /admin/tenants` (create tenant)
+The `PATCH /admin/tenants/{id}/system-context` is the one exception
+that still writes locally: the LLM reads system_context from this
+backend's tenants table at answer time. Sync-to-identity of that field
+is a follow-up.
 
-Reads (`GET /admin/tenants`, `GET /admin/users`, `GET
-/admin/tenants/{id}`, `GET /admin/debug-queue`, `PATCH
-/admin/tenants/{id}/system-context`) still hit this backend's local
-DB — the migration seeded those tables and they're kept as a read
-snapshot during the transition. The system-context patch also stays
-local because the LLM reads it from here.
+`GET /admin/debug-queue` is entirely local — Query/Chunk/Document are
+Takanon domain data, and it enriches tenant names from the local
+snapshot which the migration seeded (fine for the debug surface).
 
 Everything here requires is_super_admin, enforced via the identity
 introspect response. The frontend refuses to open the admin panel while
@@ -82,34 +79,45 @@ def list_tenants_with_stats(
     _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> list[TenantStats]:
-    """List every tenant with headline counts. Powers the admin dashboard.
-    Reads from this backend's local snapshot of the tenants table
-    (populated by the identity migration + kept in sync manually during
-    the transition). New tenants created after cutover won't appear until
-    admin tenant-creation is rewired through identity."""
-    user_counts = dict(
-        db.execute(
-            select(User.tenant_id, func.count(User.id)).group_by(User.tenant_id)
-        ).all()
-    )
-    doc_counts = dict(
+    """List every tenant with headline counts.
+
+    Tenants and per-tenant user counts come from identity (authoritative).
+    Document counts come from this backend's local Documents table
+    (Takanon domain data). We stitch them together by tenant_id."""
+    try:
+        tenants = identity_service.list_tenants()
+        users = identity_service.list_users()
+    except Exception as e:
+        log.warning("admin.list_tenants_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשליפת ארגונים מול שירות הזהויות: {e}",
+        ) from e
+
+    user_counts: dict[str, int] = {}
+    for u in users:
+        tid = u["tenant_id"]
+        user_counts[tid] = user_counts.get(tid, 0) + 1
+
+    doc_counts_raw = dict(
         db.execute(
             select(Document.tenant_id, func.count(Document.id)).group_by(
                 Document.tenant_id
             )
         ).all()
     )
-    rows = db.query(Tenant).order_by(Tenant.name).all()
+    doc_counts: dict[str, int] = {str(k): int(v) for k, v in doc_counts_raw.items()}
+
     return [
         TenantStats(
-            id=str(t.id),
-            name=t.name,
-            segment=t.segment,
-            user_count=int(user_counts.get(t.id, 0)),
-            document_count=int(doc_counts.get(t.id, 0)),
-            created_at=t.created_at.isoformat() if t.created_at else "",
+            id=t["id"],
+            name=t["name"],
+            segment=t["segment"],
+            user_count=user_counts.get(t["id"], 0),
+            document_count=doc_counts.get(t["id"], 0),
+            created_at="",  # identity's list response doesn't include created_at yet
         )
-        for t in rows
+        for t in tenants
     ]
 
 
@@ -130,20 +138,26 @@ class UpdateTenantContextRequest(BaseModel):
 def get_tenant(
     tenant_id: str,
     _: IdentityUser = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
 ) -> TenantContext:
+    """Fetch tenant + its system_context. Reads from identity now, so
+    tenants created after cutover show up immediately."""
     try:
-        tid = UUID(tenant_id)
+        UUID(tenant_id)
     except (ValueError, TypeError) as e:
         raise HTTPException(400, "Invalid tenant_id") from e
-    t = db.get(Tenant, tid)
-    if t is None:
-        raise HTTPException(404, "Tenant not found")
+    try:
+        t = identity_service.get_tenant(tenant_id)
+    except Exception as e:
+        log.warning("admin.get_tenant_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשליפת הארגון מול שירות הזהויות: {e}",
+        ) from e
     return TenantContext(
-        id=str(t.id),
-        name=t.name,
-        segment=t.segment,
-        system_context=t.system_context,
+        id=t["id"],
+        name=t["name"],
+        segment=t["segment"],
+        system_context=t.get("system_context"),
     )
 
 
@@ -264,20 +278,45 @@ def _user_to_item(u: User, tenant_name: str | None) -> UserItem:
 def list_users(
     tenant_id: str | None = None,
     _: IdentityUser = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
 ) -> list[UserItem]:
-    """List users across tenants. Reads from this backend's local users
-    snapshot (populated by the identity migration)."""
-    q = db.query(User)
+    """List users across tenants. Reads from identity now — new invites
+    appear immediately, and phantom rows from the pre-cutover local
+    snapshot no longer show.
+
+    Note: identity's ServiceUserOut doesn't yet expose has_password or
+    created_at, so those fields render as False / empty here. Follow-up
+    to add them to identity's response if the admin panel needs them."""
     if tenant_id:
         try:
-            tid = UUID(tenant_id)
+            UUID(tenant_id)
         except (ValueError, TypeError) as e:
             raise HTTPException(400, "Invalid tenant_id") from e
-        q = q.filter(User.tenant_id == tid)
-    users = q.order_by(User.email).all()
-    tenants = {t.id: t.name for t in db.query(Tenant).all()}
-    return [_user_to_item(u, tenants.get(u.tenant_id)) for u in users]
+
+    try:
+        users = identity_service.list_users(tenant_id=tenant_id)
+        tenants = identity_service.list_tenants()
+    except Exception as e:
+        log.warning("admin.list_users_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשליפת המשתמשים מול שירות הזהויות: {e}",
+        ) from e
+
+    tenant_names = {t["id"]: t["name"] for t in tenants}
+    return [
+        UserItem(
+            id=u["id"],
+            email=u["email"],
+            display_name=u.get("display_name"),
+            role=u["role"],
+            is_super_admin=bool(u.get("is_super_admin", False)),
+            tenant_id=u["tenant_id"],
+            tenant_name=tenant_names.get(u["tenant_id"]),
+            has_password=False,
+            created_at="",
+        )
+        for u in users
+    ]
 
 
 @router.post("/users", response_model=UserItem, status_code=201)
