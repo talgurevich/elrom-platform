@@ -895,7 +895,7 @@
   <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
   <div class="meta">
     <span>Owner<strong>Tal Gurevich</strong></span>
-    <span>Updated<strong>2026-07-12</strong></span>
+    <span>Updated<strong>2026-07-14</strong></span>
     <span>Status<strong>Draft for discussion</strong></span>
   </div>
 </section>
@@ -999,11 +999,11 @@
         </div>
       </div>
 
-      <div class="cl-item">
+      <div class="cl-item done">
         <div class="check"></div>
         <div class="cl-body">
           <span class="cl-title">Email + password auth &amp; password reset</span> <a class="cl-ref" href="#t3">§3.6 Auth</a>
-          <div class="cl-desc">Not every staff member has a Google account. Blocks user provisioning today.</div>
+          <div class="cl-desc">Invite-only registration via signed <code>AuthToken</code> — super-admin creates the user, mailer sends a <code>/register?token=</code> link, user sets a password and lands signed-in. <code>POST /login</code> against the bcrypt hash; <code>POST /forgot-password</code> issues a reset token with a generic response (no account enumeration); <code>POST /reset-password</code> consumes it. Google OAuth and password auth co-exist on the same user row, so a member may have either or both. Shipped by Gil in PR #3.</div>
         </div>
       </div>
 
