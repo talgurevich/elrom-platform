@@ -1,5 +1,12 @@
 const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
+// Identity service — every auth-related call (login, register, /me,
+// logout, tenant-switch, password reset) goes here instead of the
+// Takanon backend now that identity was extracted. Cookies are shared
+// across .klaser.co.il in production so both bases see the same session.
+const IDENTITY_BASE =
+  import.meta.env.VITE_IDENTITY_BASE_URL || "http://localhost:8001";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -21,8 +28,8 @@ export function apiErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${BASE}${path}`, {
+async function _fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(url, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
@@ -32,6 +39,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(r.status, body || r.statusText);
   }
   return r.json();
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return _fetchJson<T>(`${BASE}${path}`, init);
+}
+
+/** Same shape as `request` but hits the identity service instead of the
+ * Takanon backend. Used for all auth endpoints. */
+async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return _fetchJson<T>(`${IDENTITY_BASE}${path}`, init);
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────
@@ -432,50 +449,57 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  // Auth
-  me: () => request<CurrentUser>("/api/auth/me"),
+  // Auth — every call below goes to the identity service (auth.klaser.co.il)
+  // via authRequest, not to the Takanon backend. Cookies span .klaser.co.il
+  // so both bases see the same session.
+  me: () => authRequest<CurrentUser>("/api/auth/me"),
   googleLogin: (credential: string) =>
-    request<CurrentUser>("/api/auth/google", {
+    authRequest<CurrentUser>("/api/auth/google", {
       method: "POST",
       body: JSON.stringify({ credential }),
     }),
-  logout: () => request<{ status: string }>("/api/auth/logout", { method: "POST" }),
+  logout: () =>
+    authRequest<{ status: string }>("/api/auth/logout", { method: "POST" }),
   passwordLogin: (email: string, password: string) =>
-    request<CurrentUser>("/api/auth/login", {
+    authRequest<CurrentUser>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
 
   getRegistrationInfo: (token: string) =>
-    request<RegistrationInfo>(`/api/auth/registration/${encodeURIComponent(token)}`),
+    authRequest<RegistrationInfo>(
+      `/api/auth/registration/${encodeURIComponent(token)}`,
+    ),
   register: (token: string, password: string, displayName?: string) =>
-    request<CurrentUser>("/api/auth/register", {
+    authRequest<CurrentUser>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({ token, password, display_name: displayName || null }),
     }),
 
   forgotPassword: (email: string) =>
-    request<{ status: string }>("/api/auth/forgot-password", {
+    authRequest<{ status: string }>("/api/auth/forgot-password", {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
   getResetPasswordInfo: (token: string) =>
-    request<ResetPasswordInfo>(`/api/auth/reset-password/${encodeURIComponent(token)}`),
+    authRequest<ResetPasswordInfo>(
+      `/api/auth/reset-password/${encodeURIComponent(token)}`,
+    ),
   resetPassword: (token: string, password: string) =>
-    request<CurrentUser>("/api/auth/reset-password", {
+    authRequest<CurrentUser>("/api/auth/reset-password", {
       method: "POST",
       body: JSON.stringify({ token, password }),
     }),
 
-  // Super-admin only — driving the tenant switcher
-  listTenants: () => request<TenantItem[]>("/api/auth/tenants"),
+  // Super-admin only — driving the tenant switcher (also on identity now)
+  listTenants: () => authRequest<TenantItem[]>("/api/auth/tenants"),
   switchTenant: (tenantId: string) =>
-    request<CurrentUser>("/api/auth/switch-tenant", {
+    authRequest<CurrentUser>("/api/auth/switch-tenant", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenantId }),
     }),
   exitSwitch: () =>
-    request<CurrentUser>("/api/auth/exit-switch", { method: "POST" }),
+    authRequest<CurrentUser>("/api/auth/exit-switch", { method: "POST" }),
 
   search: (question: string, conversationId?: string | null) =>
     request<SearchResponse>("/api/search", {

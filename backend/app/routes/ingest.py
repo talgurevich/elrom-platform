@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Chunk, Document, Tenant, User
-from app.routes.auth import current_user
+from app.services.identity import IdentityUser, current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
 from app.services.embedding import embed_texts
@@ -58,7 +58,7 @@ def ingest(
     req: IngestRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> IngestResponse:
     """Ingest a single document into the caller's tenant."""
     tenant_id = user.tenant_id
@@ -160,7 +160,7 @@ async def ingest_upload(
     prefer_ocr: bool | None = Form(None),
     auto_classify: bool = Form(True),
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> IngestResponse:
     """Accept a file upload (txt/md/docx/pdf), extract text (with OCR fallback for scanned PDFs),
     chunk + embed + store. Returns chunks_created + extractor metadata.

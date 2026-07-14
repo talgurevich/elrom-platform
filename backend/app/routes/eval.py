@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import GoldenQuestion, Query, Tenant, User
-from app.routes.auth import current_user
+from app.services.identity import IdentityUser, current_user
 from app.services.embedding import embed_texts
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
@@ -172,7 +172,7 @@ def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunRes
 @router.get("/goldens", response_model=list[GoldenOut])
 def list_goldens(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> list[GoldenOut]:
     goldens = (
         db.query(GoldenQuestion)
@@ -187,7 +187,7 @@ def list_goldens(
 def create_golden(
     body: GoldenIn,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> GoldenOut:
     g = GoldenQuestion(
         tenant_id=user.tenant_id,
@@ -208,7 +208,7 @@ def promote_query_to_golden(
     query_id: UUID,
     body: PromoteGoldenIn | None = None,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> GoldenOut:
     """Promote an existing answered query into a golden. Defaults pull from the
     query (the cited sources become expected_doc_filenames) but the caller can
@@ -247,7 +247,7 @@ def promote_query_to_golden(
 def delete_golden(
     golden_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     g = db.get(GoldenQuestion, golden_id)
     if g is None or g.tenant_id != user.tenant_id:
@@ -260,7 +260,7 @@ def delete_golden(
 @router.post("/run", response_model=EvalRunSummary)
 def run_eval(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> EvalRunSummary:
     tenant_id = user.tenant_id
     goldens = (

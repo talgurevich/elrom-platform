@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
 from app.models import AuthoritativeAnswer, Chunk, Conversation, Document, Query, Tenant, User
-from app.routes.auth import current_user
+from app.services.identity import IdentityUser, current_user
 from app.services.mail import send_broken_answer_alert
 from app.services.chat_triage import triage_turn
 from app.services.embedding import embed_texts
@@ -565,7 +565,7 @@ async def search_pipeline(
 async def search(
     req: SearchRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> SearchResponse:
     """JSON endpoint — runs the pipeline to completion and returns the final
     SearchResponse. Identical behavior to /search/stream, just without the
@@ -589,7 +589,7 @@ async def search(
 @router.post("/stream")
 async def search_stream(
     req: SearchRequest,
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ):
     """Server-Sent Events endpoint — emits progress events as the pipeline
     runs, ending with a "done" event carrying the full SearchResponse JSON.
@@ -632,7 +632,7 @@ async def search_stream(
 @router.get("/recent", response_model=list[str])
 def recent_questions(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     limit: int = QParam(8, ge=1, le=25),
 ) -> list[str]:
     """Distinct recent questions for the caller's tenant — drives the
@@ -659,7 +659,7 @@ def submit_feedback(
     query_id: UUID,
     req: FeedbackRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """👍 / 👎 on a returned answer — the in-flow signal Ido gives.
 
@@ -699,7 +699,7 @@ def tag_failure_mode(
     query_id: UUID,
     req: FailureModeRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Tag *why* an answer was wrong, so we can route the fix correctly."""
     valid = {"retrieval_miss", "wrong_generation", "other"}
@@ -732,7 +732,7 @@ class MarkGoodResponse(BaseModel):
 def mark_good(
     query_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> MarkGoodResponse:
     """User marked the answer as good — auto-promote to authoritative library.
 
@@ -788,7 +788,7 @@ def mark_broken(
     query_id: UUID,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """User marked the answer as wrong ("the corpus knows the right answer,
     the system just didn't find it") — surfaces in the super-admin debug queue.

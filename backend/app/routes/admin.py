@@ -1,30 +1,49 @@
 """Super-admin management API.
 
-Everything here requires is_super_admin. Provides tenant creation, per-tenant
-user CRUD, and grant/revoke super-admin — replacing the previous CLI-only
-flow (scripts/create_tenant.py, scripts/add_user.py, scripts/grant_super_admin.py).
+Post-identity-cutover state
+---------------------------
 
-Note: none of these routes are gated by the switch-mode read-only middleware
-because they're the super-admin's own control surface, not a tenant's data.
-The super-admin should perform these actions from their home tenant (not while
-"viewing" a customer). The frontend enforces that by refusing to open the
-admin panel while viewing_other_tenant is true.
+Users and tenants now live in the `klaser-identity` service — this
+backend no longer owns those tables. Auth-related writes have moved:
+
+  - `POST /admin/users` (invite) → calls identity's `/api/service/users`
+    via `identity_service.invite_user`. Identity issues the token,
+    emails the invite, and stores the row.
+
+Auth-related writes still pending an identity endpoint are temporarily
+disabled (501). They come back once identity grows a matching write:
+
+  - `POST /admin/users/{id}/resend-invite`
+  - `PATCH /admin/users/{id}` (role/display_name/tenant/super-admin)
+  - `DELETE /admin/users/{id}`
+  - `POST /admin/tenants` (create tenant)
+
+Reads (`GET /admin/tenants`, `GET /admin/users`, `GET
+/admin/tenants/{id}`, `GET /admin/debug-queue`, `PATCH
+/admin/tenants/{id}/system-context`) still hit this backend's local
+DB — the migration seeded those tables and they're kept as a read
+snapshot during the transition. The system-context patch also stays
+local because the LLM reads it from here.
+
+Everything here requires is_super_admin, enforced via the identity
+introspect response. The frontend refuses to open the admin panel while
+viewing another tenant.
 """
-from datetime import timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db import get_db
 from app.models import Chunk, Document, Query, Tenant, User
-from app.routes.auth import current_user
-from app.services.mail import send_registration_invite
-from app.services.tokens import PURPOSE_REGISTRATION, issue_token
+from app.services.identity import (
+    IdentityUser,
+    current_user,
+    identity_service,
+)
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -33,7 +52,7 @@ VALID_SEGMENTS = {"kibbutz_shitufi", "kibbutz_mitchadesh", "moshav"}
 VALID_ROLES = {"admin", "reviewer", "secretary"}
 
 
-def _require_super_admin(user: User = Depends(current_user)) -> User:
+def _require_super_admin(user: IdentityUser = Depends(current_user)) -> IdentityUser:
     if not user.is_super_admin:
         raise HTTPException(403, "Super-admin only")
     return user
@@ -60,10 +79,14 @@ class CreateTenantRequest(BaseModel):
 
 @router.get("/tenants", response_model=list[TenantStats])
 def list_tenants_with_stats(
-    _: User = Depends(_require_super_admin),
+    _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> list[TenantStats]:
-    """List every tenant with headline counts. Powers the admin dashboard."""
+    """List every tenant with headline counts. Powers the admin dashboard.
+    Reads from this backend's local snapshot of the tenants table
+    (populated by the identity migration + kept in sync manually during
+    the transition). New tenants created after cutover won't appear until
+    admin tenant-creation is rewired through identity."""
     user_counts = dict(
         db.execute(
             select(User.tenant_id, func.count(User.id)).group_by(User.tenant_id)
@@ -95,21 +118,18 @@ class TenantContext(BaseModel):
     name: str
     segment: str
     # None when tenant has no override; the answerer falls through to the
-    # generic template built from tenant name. Frontend renders that as the
-    # textarea's placeholder so the super-admin sees what "empty" means.
+    # generic template built from tenant name.
     system_context: str | None
 
 
 class UpdateTenantContextRequest(BaseModel):
-    # Empty string / whitespace treated as "clear override" — falls back to
-    # the generic template at answer time.
     system_context: str | None
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantContext)
 def get_tenant(
     tenant_id: str,
-    _: User = Depends(_require_super_admin),
+    _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> TenantContext:
     try:
@@ -131,9 +151,13 @@ def get_tenant(
 def update_tenant_system_context(
     tenant_id: str,
     req: UpdateTenantContextRequest,
-    _: User = Depends(_require_super_admin),
+    _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> TenantContext:
+    """Update the tenant's system_context override — kept local because
+    the LLM reads it directly from this backend's tenants table at
+    answer time. Identity's copy stays authoritative for its own reads
+    but isn't the source of truth for the LLM prompt yet."""
     try:
         tid = UUID(tenant_id)
     except (ValueError, TypeError) as e:
@@ -160,26 +184,22 @@ def update_tenant_system_context(
 @router.post("/tenants", response_model=TenantStats, status_code=201)
 def create_tenant(
     req: CreateTenantRequest,
-    _: User = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
+    _: IdentityUser = Depends(_require_super_admin),
 ) -> TenantStats:
-    if req.segment not in VALID_SEGMENTS:
-        raise HTTPException(400, f"Invalid segment. Allowed: {sorted(VALID_SEGMENTS)}")
-    name = req.name.strip()
-    if db.query(Tenant).filter(Tenant.name == name).first():
-        raise HTTPException(409, f"Tenant with name {name!r} already exists")
-    t = Tenant(name=name, segment=req.segment)
-    db.add(t)
-    db.commit()
-    db.refresh(t)
-    log.info("admin.tenant_created", tenant_id=str(t.id), name=name)
-    return TenantStats(
-        id=str(t.id),
-        name=t.name,
-        segment=t.segment,
-        user_count=0,
-        document_count=0,
-        created_at=t.created_at.isoformat() if t.created_at else "",
+    """Blocked during the identity transition — creating a tenant here
+    would write only to this backend's snapshot, not to identity, so
+    users invited into it wouldn't be able to log in.
+
+    Workaround: create tenants via a direct `POST /api/service/tenants`
+    call to identity once that endpoint exists (TODO), or seed via SQL
+    on the identity DB.
+    """
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "יצירת ארגונים מהפאנל מושבתת זמנית עד לחיבור מלא לשירות "
+            "הזהויות. פנה לצוות הפיתוח."
+        ),
     )
 
 
@@ -197,10 +217,6 @@ class UserItem(BaseModel):
     tenant_id: str
     tenant_name: str | None = None
     created_at: str
-    # False until the user completes email/password registration (or sets
-    # one via password reset). Drives the "resend invite" affordance —
-    # Google-only users always show False here, which is fine: Google
-    # sign-in never needs an invite link resent.
     has_password: bool = False
 
 
@@ -216,39 +232,7 @@ class UpdateUserRequest(BaseModel):
     role: str | None = None
     display_name: str | None = None
     is_super_admin: bool | None = None
-    tenant_id: str | None = None  # allow moving a user between tenants
-
-
-def _send_registration_invite(
-    db: Session,
-    background_tasks: BackgroundTasks,
-    *,
-    user: User,
-    tenant: Tenant,
-    invited_by: str | None,
-) -> None:
-    """Issue a fresh registration token and email the set-password link.
-    Any previously issued, still-unused registration token for this user is
-    invalidated (issue_token's default), so only the newest link works —
-    important for resend-invite, where an old email might still be sitting
-    in an inbox."""
-    raw_token = issue_token(
-        db,
-        user_id=user.id,
-        purpose=PURPOSE_REGISTRATION,
-        ttl=timedelta(days=settings.registration_token_ttl_days),
-    )
-    registration_url = f"{settings.klaser_app_url.rstrip('/')}/register?token={raw_token}"
-    background_tasks.add_task(
-        send_registration_invite,
-        to_email=user.email,
-        display_name=user.display_name,
-        tenant_name=tenant.name,
-        role=user.role,
-        invited_by=invited_by,
-        registration_url=registration_url,
-        ttl_days=settings.registration_token_ttl_days,
-    )
+    tenant_id: str | None = None
 
 
 def _user_to_item(u: User, tenant_name: str | None) -> UserItem:
@@ -268,10 +252,11 @@ def _user_to_item(u: User, tenant_name: str | None) -> UserItem:
 @router.get("/users", response_model=list[UserItem])
 def list_users(
     tenant_id: str | None = None,
-    _: User = Depends(_require_super_admin),
+    _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> list[UserItem]:
-    """List users across all tenants. Optionally filter by tenant_id."""
+    """List users across tenants. Reads from this backend's local users
+    snapshot (populated by the identity migration)."""
     q = db.query(User)
     if tenant_id:
         try:
@@ -287,91 +272,88 @@ def list_users(
 @router.post("/users", response_model=UserItem, status_code=201)
 def add_user(
     req: AddUserRequest,
-    background_tasks: BackgroundTasks,
-    me: User = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
+    me: IdentityUser = Depends(_require_super_admin),
 ) -> UserItem:
+    """Invite a new user via the identity service.
+
+    Identity creates the User row, issues a registration token, and
+    emails the invite. No writes to this backend's local users snapshot —
+    the snapshot will pick up the new row on the next manual sync (or
+    once /admin/users is rewired to read from identity)."""
     if req.role not in VALID_ROLES:
         raise HTTPException(400, f"Invalid role. Allowed: {sorted(VALID_ROLES)}")
+    # is_super_admin isn't supported on invite yet — identity handles it
+    # via a separate `PATCH` we haven't wired here. Fail loudly rather
+    # than silently drop the flag.
+    if req.is_super_admin:
+        raise HTTPException(
+            400,
+            "הרשאת super-admin לא נתמכת בהזמנה — יש להעניק ידנית לאחר יצירה.",
+        )
     try:
-        tid = UUID(req.tenant_id)
+        UUID(req.tenant_id)
     except (ValueError, TypeError) as e:
         raise HTTPException(400, "Invalid tenant_id") from e
-    tenant = db.get(Tenant, tid)
-    if tenant is None:
-        raise HTTPException(404, "Tenant not found")
+
     email = req.email.lower().strip()
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(400, f"Invalid email: {email!r}")
-    if db.query(User).filter(User.email == email).first():
-        raise HTTPException(409, f"User with email {email!r} already exists")
-    u = User(
-        tenant_id=tid,
-        email=email,
-        display_name=req.display_name,
-        role=req.role,
-        is_super_admin=req.is_super_admin,
-    )
-    db.add(u)
-    db.commit()
-    db.refresh(u)
+
+    try:
+        created = identity_service.invite_user(
+            email=email,
+            tenant_id=req.tenant_id,
+            role=req.role,
+            display_name=req.display_name,
+            invited_by=me.display_name or me.email,
+        )
+    except Exception as e:
+        # Bubble up identity's error to the admin panel so they see why
+        # the invite failed (409 on existing email, 404 on unknown
+        # tenant, etc).
+        log.warning("admin.invite_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בהזמנה מול שירות הזהויות: {e}",
+        ) from e
+
     log.info(
-        "admin.user_created",
-        user_id=str(u.id),
+        "admin.user_invited_via_identity",
+        user_id=created.get("id"),
         email=email,
-        tenant=tenant.name,
-        role=u.role,
-        super_admin=u.is_super_admin,
+        tenant_id=req.tenant_id,
+        role=req.role,
     )
-
-    # Issue a registration token and fire the invite email in the
-    # background so a slow SMTP hop doesn't delay the admin's create-user
-    # request. Mail sending never raises (see app.services.mail._send).
-    _send_registration_invite(
-        db,
-        background_tasks,
-        user=u,
-        tenant=tenant,
-        invited_by=me.display_name or me.email,
+    return UserItem(
+        id=created["id"],
+        email=created["email"],
+        display_name=created.get("display_name"),
+        role=created["role"],
+        is_super_admin=bool(created.get("is_super_admin", False)),
+        tenant_id=created["tenant_id"],
+        tenant_name=None,  # identity's invite response doesn't include tenant name
+        has_password=False,  # newly invited — no password yet
+        created_at="",  # identity's invite response doesn't include created_at
     )
-
-    return _user_to_item(u, tenant.name)
 
 
 @router.post("/users/{user_id}/resend-invite")
 def resend_invite(
     user_id: str,
-    background_tasks: BackgroundTasks,
-    me: User = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
+    _: IdentityUser = Depends(_require_super_admin),
 ) -> dict:
-    """Re-issue a registration link for a user who hasn't set a password
-    yet (link expired, email lost, etc). No-op safety: refuses once the
-    user already has a password — use forgot-password for that case."""
-    try:
-        uid = UUID(user_id)
-    except (ValueError, TypeError) as e:
-        raise HTTPException(400, "Invalid user_id") from e
-    target = db.get(User, uid)
-    if target is None:
-        raise HTTPException(404, "User not found")
-    if target.password_hash is not None:
-        raise HTTPException(
-            409, "המשתמש כבר הגדיר סיסמה — יש להשתמש באיפוס סיסמה במקום."
-        )
-    tenant = db.get(Tenant, target.tenant_id)
-    if tenant is None:
-        raise HTTPException(404, "Tenant not found")
-
-    _send_registration_invite(
-        db,
-        background_tasks,
-        user=target,
-        tenant=tenant,
-        invited_by=me.display_name or me.email,
+    """Blocked during the identity transition — resending requires an
+    identity endpoint that re-issues a registration token for an
+    existing user. Workaround for now: create the account fresh under a
+    different email, or ask the user to run forgot-password once they
+    have any password set."""
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "שליחת הזמנה מחדש מושבתת זמנית עד לחיבור מלא לשירות "
+            "הזהויות."
+        ),
     )
-    log.info("admin.invite_resent", user_id=str(target.id))
-    return {"status": "ok"}
 
 
 @router.patch("/users/{user_id}", response_model=UserItem)
@@ -379,43 +361,18 @@ def update_user(
     user_id: str,
     req: UpdateUserRequest,
     request: Request,
-    me: User = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
+    me: IdentityUser = Depends(_require_super_admin),
 ) -> UserItem:
-    try:
-        uid = UUID(user_id)
-    except (ValueError, TypeError) as e:
-        raise HTTPException(400, "Invalid user_id") from e
-    target = db.get(User, uid)
-    if target is None:
-        raise HTTPException(404, "User not found")
-
-    if req.role is not None:
-        if req.role not in VALID_ROLES:
-            raise HTTPException(400, f"Invalid role. Allowed: {sorted(VALID_ROLES)}")
-        target.role = req.role
-    if req.display_name is not None:
-        target.display_name = req.display_name
-    if req.tenant_id is not None:
-        try:
-            new_tid = UUID(req.tenant_id)
-        except (ValueError, TypeError) as e:
-            raise HTTPException(400, "Invalid tenant_id") from e
-        if db.get(Tenant, new_tid) is None:
-            raise HTTPException(404, "Tenant not found")
-        target.tenant_id = new_tid
-    if req.is_super_admin is not None:
-        # Guard: don't let the acting super-admin demote themselves — they'd
-        # instantly lose access to this very endpoint.
-        if str(target.id) == str(me.id) and req.is_super_admin is False:
-            raise HTTPException(400, "You cannot revoke your own super-admin")
-        target.is_super_admin = req.is_super_admin
-
-    db.commit()
-    db.refresh(target)
-    tenant = db.get(Tenant, target.tenant_id)
-    log.info("admin.user_updated", user_id=str(target.id))
-    return _user_to_item(target, tenant.name if tenant else None)
+    """Blocked during the identity transition — updating a user here
+    would drift from identity. Workaround: run SQL against identity DB
+    directly, or wait for the identity update endpoint."""
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "עדכון משתמשים מהפאנל מושבת זמנית עד לחיבור מלא לשירות "
+            "הזהויות."
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -448,11 +405,12 @@ class DebugQueueItem(BaseModel):
 def debug_queue(
     tenant_id: str | None = None,
     limit: int = 50,
-    _: User = Depends(_require_super_admin),
+    _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> list[DebugQueueItem]:
-    """Queries the end-user flagged as broken ("the corpus knows this, the
-    system didn't find it"). Cross-tenant by default; filter with tenant_id."""
+    """Queries the end-user flagged as broken. Reads Query + Chunk +
+    Document from this backend's DB (all Takanon-owned domain data),
+    and enriches tenant names from the local tenant snapshot."""
     if limit < 1 or limit > 200:
         raise HTTPException(400, "limit must be between 1 and 200")
 
@@ -470,7 +428,6 @@ def debug_queue(
 
     tenants = {t.id: t.name for t in db.query(Tenant).all()}
 
-    # Batch-load source chunks + docs to avoid N+1.
     all_chunk_ids: set[UUID] = set()
     for r in rows:
         for cid in r.source_chunk_ids or []:
@@ -525,11 +482,10 @@ def debug_queue(
 @router.post("/debug-queue/{query_id}/dismiss")
 def dismiss_debug_item(
     query_id: str,
-    _: User = Depends(_require_super_admin),
+    _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Remove a query from the debug queue after the super-admin diagnosed it.
-    Clears failure_mode + sets reviewer_action=rejected."""
+    """Remove a query from the debug queue after diagnosis."""
     try:
         qid = UUID(query_id)
     except (ValueError, TypeError) as e:
@@ -546,19 +502,15 @@ def dismiss_debug_item(
 @router.delete("/users/{user_id}")
 def delete_user(
     user_id: str,
-    me: User = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
+    me: IdentityUser = Depends(_require_super_admin),
 ) -> dict:
-    try:
-        uid = UUID(user_id)
-    except (ValueError, TypeError) as e:
-        raise HTTPException(400, "Invalid user_id") from e
-    target = db.get(User, uid)
-    if target is None:
-        raise HTTPException(404, "User not found")
-    if str(target.id) == str(me.id):
-        raise HTTPException(400, "You cannot delete your own account")
-    db.delete(target)
-    db.commit()
-    log.info("admin.user_deleted", user_id=user_id)
-    return {"status": "ok"}
+    """Blocked during the identity transition — deleting here would
+    leave the user in identity, still able to log in. Workaround: run
+    SQL against identity DB directly."""
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "מחיקת משתמשים מהפאנל מושבתת זמנית עד לחיבור מלא לשירות "
+            "הזהויות."
+        ),
+    )

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db import get_db
 from app.models import Chunk, Conversation, Query, User
-from app.routes.auth import current_user
+from app.services.identity import IdentityUser, current_user
 
 router = APIRouter()
 
@@ -61,7 +61,7 @@ def _confidence_to_mode(confidence: str | None) -> str:
 @router.get("", response_model=list[ConversationSummary])
 def list_conversations(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     limit: int = 30,
 ) -> list[ConversationSummary]:
     convs = (
@@ -99,7 +99,7 @@ def list_conversations(
 def get_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> ConversationDetail:
     conv = db.get(Conversation, conversation_id)
     if conv is None or conv.tenant_id != user.tenant_id:
@@ -173,7 +173,7 @@ def rename_conversation(
     conversation_id: UUID,
     req: RenameRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     conv = db.get(Conversation, conversation_id)
     if conv is None or conv.tenant_id != user.tenant_id:
@@ -187,7 +187,7 @@ def rename_conversation(
 def delete_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     conv = db.get(Conversation, conversation_id)
     if conv is None or conv.tenant_id != user.tenant_id:

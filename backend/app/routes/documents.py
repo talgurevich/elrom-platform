@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Chunk, Document, Tenant, User
-from app.routes.auth import current_user
+from app.services.identity import IdentityUser, current_user
 from app.services.storage import guess_content_type, resolve_stored_file
 
 log = structlog.get_logger()
@@ -88,7 +88,7 @@ def _quality_verdict(
 @router.get("", response_model=list[DocumentItem])
 def list_documents(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> list[DocumentItem]:
     """List documents for the caller's tenant with chunk + char counts."""
     tenant_id = user.tenant_id
@@ -162,7 +162,7 @@ def list_documents(
 def delete_all_documents(
     confirm: bool = QParam(False, description="Must be true to actually delete."),
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Wipe every document (and its chunks via cascade) for the caller's tenant.
 
@@ -492,7 +492,7 @@ def classify_document_by_id_bg(document_id: UUID) -> None:
 @router.post("/classify", response_model=ClassifySummary)
 def classify_documents(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     force: bool = QParam(False, description="Re-classify even already-classified docs"),
 ) -> ClassifySummary:
     """Walk every document in the caller's tenant and classify any that need it.
@@ -571,7 +571,7 @@ class FixRtlSummary(BaseModel):
 def fix_rtl(
     document_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> FixRtlSummary:
     """Repair an RTL-reversed document in place: reverse each line of every
     chunk's text, then re-embed so the chunks become findable in search."""
@@ -623,7 +623,7 @@ class ChunkPreview(BaseModel):
 def get_document_file(
     document_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> FileResponse:
     """Stream the original uploaded file back to the browser so users can
     click a citation and open the source PDF. Tenant-scoped; super-admins in
@@ -659,7 +659,7 @@ def get_document_file(
 def get_chunks(
     document_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> list[ChunkPreview]:
     """Return all chunks of a document with their text. For debugging chunking
     + OCR quality."""
@@ -700,7 +700,7 @@ def update_document_metadata(
     document_id: UUID,
     patch: MetadataPatch,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """User-confirms/edits the AI-extracted metadata. Sets metadata_reviewed=True
     so future re-classify runs won't overwrite the human's values.
@@ -750,7 +750,7 @@ def update_document_metadata(
 def delete_document(
     document_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Delete a document and its chunks (queries that reference its chunks become orphaned but stay)."""
     doc = db.get(Document, document_id)

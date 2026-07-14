@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Amendment, AuthoritativeAnswer, Chunk, Document, Lexicon, Query, Tenant, User
-from app.routes.auth import current_user
+from app.services.identity import IdentityUser, current_user
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -43,7 +43,7 @@ class QueryListItem(BaseModel):
 @router.get("/queries", response_model=list[QueryListItem])
 def list_queries(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     needs_review: bool = QParam(False, description="Only show queries with no reviewer action yet"),
     feedback_only: bool = QParam(False, description="Only show queries with feedback (👎 first)"),
     limit: int = QParam(50, le=200),
@@ -98,7 +98,7 @@ def approve_query(
     query_id: UUID,
     req: ApproveRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> ApproveResponse:
     """Promote a query/answer pair to an authoritative answer.
 
@@ -144,7 +144,7 @@ def approve_query(
 def reject_query(
     query_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Mark a query/answer pair as incorrect — does NOT create an authoritative entry."""
     query = db.get(Query, query_id)
@@ -174,7 +174,7 @@ class AuthoritativeItem(BaseModel):
 @router.get("/authoritative", response_model=list[AuthoritativeItem])
 def list_authoritative(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     include_retired: bool = QParam(False),
 ) -> list[AuthoritativeItem]:
     """List authoritative answers for the caller's tenant."""
@@ -209,7 +209,7 @@ def update_authoritative(
     auth_id: UUID,
     req: UpdateAuthoritativeRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Edit or retire an authoritative answer."""
     auth = db.get(AuthoritativeAnswer, auth_id)
@@ -269,7 +269,7 @@ class UpdateLexiconRequest(BaseModel):
 @router.get("/lexicon", response_model=list[LexiconItem])
 def list_lexicon(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     status: str | None = None,
 ) -> list[LexiconItem]:
     """List lexicon entries for the caller's tenant.
@@ -304,7 +304,7 @@ def list_lexicon(
 def create_lexicon(
     req: CreateLexiconRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> LexiconItem:
     """Add a new lexicon entry in the caller's tenant."""
     if not req.term.strip() or not req.expansion.strip():
@@ -334,7 +334,7 @@ def update_lexicon(
     lex_id: UUID,
     req: UpdateLexiconRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Edit a lexicon entry."""
     entry = db.get(Lexicon, lex_id)
@@ -359,7 +359,7 @@ def update_lexicon(
 def delete_lexicon(
     lex_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Delete a lexicon entry."""
     entry = db.get(Lexicon, lex_id)
@@ -382,7 +382,7 @@ class LexiconSuggestion(BaseModel):
 @router.post("/lexicon/suggestions", response_model=list[LexiconSuggestion])
 def lexicon_suggestions(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> list[LexiconSuggestion]:
     """Propose lexicon entries from recent failed queries (Claude Haiku-driven)."""
     from app.services.lexicon import suggest_lexicon_entries_from_failures
@@ -437,7 +437,7 @@ def _amendment_to_item(a: Amendment, docs: dict[UUID, Document]) -> AmendmentIte
 @router.get("/amendments", response_model=list[AmendmentItem])
 def list_amendments(
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
     needs_review: bool | None = QParam(None, description="Filter by needs_review flag"),
     limit: int = QParam(100, le=500),
 ) -> list[AmendmentItem]:
@@ -463,7 +463,7 @@ def update_amendment(
     amendment_id: UUID,
     req: UpdateAmendmentRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Reviewer edits to a pending amendment. Does NOT change ``needs_review``
     — call /approve or /reject once the row is right."""
@@ -500,7 +500,7 @@ def update_amendment(
 def approve_amendment(
     amendment_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Clear ``needs_review`` and run the supersession pass so any matching
     chunk gets flipped. Safe to call on an already-active amendment (no-op)."""
@@ -522,7 +522,7 @@ def approve_amendment(
 def reject_amendment(
     amendment_id: UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: IdentityUser = Depends(current_user),
 ) -> dict:
     """Delete an incorrect amendment row and unlink any chunk it flipped."""
     a = db.get(Amendment, amendment_id)
