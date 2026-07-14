@@ -173,6 +173,7 @@
   .track[data-color="slate"] { --track-color: var(--slate); --track-tint: var(--slate-soft); }
   .track[data-color="emerald"] { --track-color: #047857; --track-tint: #d1fae5; }
   .track[data-color="indigo"] { --track-color: #4338ca; --track-tint: #e0e7ff; }
+  .track[data-color="sky"] { --track-color: #0284c7; --track-tint: #e0f2fe; }
 
   .track-header {
     display: flex;
@@ -883,6 +884,7 @@
     <a href="#t6"><span class="num">6</span> Mailer service</a>
     <a href="#t7"><span class="num">7</span> Sales CRM</a>
     <a href="#t8"><span class="num">8</span> Marketing site</a>
+    <a href="#t9"><span class="num">9</span> Shared infra</a>
     <div class="divider"></div>
     <a href="#north-star"><span class="num">★</span> North star</a>
   </nav>
@@ -1707,6 +1709,119 @@
       <li>§8.4 mocks + partner logos — Talia leads once אל-רום agrees to be named.</li>
       <li>§8.5 security messaging + pricing decision — needs product/business decision before copy.</li>
     </ol>
+  </div>
+</article>
+
+<article class="track" data-color="sky" id="t9">
+  <div class="track-header">
+    <div class="track-num">9</div>
+    <div class="track-titles">
+      <span class="track-tag">Foundational · Shared platform</span>
+      <h2>Shared infrastructure — Klaser identity service</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Klaser is a multi-product brand — Takanon today, Klaser Meetings next, more later. This track builds the shared identity, tenants, and subscriptions layer that both products (and every future product) sit on top of. Full plan in <a href="klaser-platform-infra.md">klaser-platform-infra.md</a>. Decision: <strong>Approach B1</strong> — a dedicated identity service, own repo, own Render project, own Postgres. No shortcuts.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.1</span> The three-service shape</h3>
+    <p>Three independent services replacing the current single-service layout:</p>
+    <ol>
+      <li><code>klaser-identity</code> (new) — users, tenants, sessions, subscriptions, Google OAuth callback, email/password, invites, resets. Own DB. Hosted at <code>auth.klaser.co.il</code>.</li>
+      <li><code>klaser-takanon</code> (rename of <code>elrom-platform</code>) — docs, chunks, lexicon, amendments, goldens. No user or tenant tables anymore. Frontend at <code>takanon.klaser.co.il</code>.</li>
+      <li><code>klaser-meetings</code> (new, Gil owns) — recordings, transcripts, protocols. Same auth pattern. Frontend at <code>meetings.klaser.co.il</code>.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Every product deploys on its own cadence. A third product plugs in without a migration. אל-רום appears as the same tenant in all products because tenants live in one place.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.2</span> Auth flow</h3>
+    <ol>
+      <li>User hits a product frontend → cookie check on <code>.klaser.co.il</code>.</li>
+      <li>If no session → redirect to <code>auth.klaser.co.il/login?redirect=…</code>.</li>
+      <li>Identity handles Google OAuth (single client) or email+password, sets cookie on <code>.klaser.co.il</code>, redirects back.</li>
+      <li>Product backend calls identity <code>/api/me</code> with the cookie → gets <code>{ user, tenant, entitlements: [...] }</code>.</li>
+      <li>Backend checks its entitlement is in the list, or 403s.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Sign in once, land in any product. Cookie-scope trick avoids building an auth proxy.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.3</span> Data ownership rule</h3>
+    <ul>
+      <li><strong>Identity DB</strong>: users, tenants, user_tenants, subscriptions, auth_tokens, sessions. Nothing else.</li>
+      <li><strong>Takanon DB</strong>: everything doc-related. User/tenant IDs are UUIDs — no cross-DB joins.</li>
+      <li><strong>Meetings DB</strong>: everything meeting-related. Same rule.</li>
+      <li>Enrichment across DBs is always an HTTP call to the identity API, never a direct DB read.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.4</span> Product switcher &amp; entitlements</h3>
+    <ol>
+      <li>Each frontend renders a header switcher from <code>me.entitlements</code>.</li>
+      <li><code>["takanon"]</code> → no switcher; <code>["takanon", "meetings"]</code> → both shown, deep-link to the other.</li>
+      <li>Entitlements live in the identity DB (<code>subscriptions</code> table: <code>tenant_id, product, plan, active, expires_at</code>).</li>
+      <li>Product IDs are stable strings — <code>takanon</code>, <code>meetings</code>. Adding a product = adding an entitlement, not a schema change.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.5</span> Service-to-service auth</h3>
+    <ol>
+      <li>Each product backend gets a long-lived service token for the identity API.</li>
+      <li>Used for background jobs, cron, admin scripts — anything outside a request context.</li>
+      <li>Passed as <code>Authorization: Bearer &lt;service-token&gt;</code>. Per-product, rotatable.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.6</span> Migration order</h3>
+    <ol>
+      <li><strong>Stand up <code>klaser-identity</code></strong> — port auth routes, users/tenants tables from Takanon backend. Same schema, new home. ~1 week Tal.</li>
+      <li><strong>One-shot data migration</strong> — dump users + tenants + auth_tokens from Takanon DB into identity DB.</li>
+      <li><strong>Point Takanon backend at identity</strong> — swap local auth code for HTTP calls; keep the same session cookie so nobody gets logged out.</li>
+      <li><strong>Widen cookie scope to <code>.klaser.co.il</code></strong>.</li>
+      <li><strong>Gil starts <code>klaser-meetings</code></strong> against the live identity service. No temporary local auth — ever.</li>
+    </ol>
+    <div class="benefit"><strong>Rollback.</strong> Every step above is reversible until step 2 completes. Once data is migrated, identity DB is authoritative.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.7</span> Render layout</h3>
+    <ul>
+      <li>3 Render projects (one per service).</li>
+      <li>3 web services (backends) + 3 static-site services (frontends).</li>
+      <li>3 managed Postgres instances (identity can be smallest tier).</li>
+      <li>All under <code>klaser.co.il</code> so the parent-domain cookie works.</li>
+      <li>Cost delta vs "identity inside Takanon" — ~$20–30/month. Cheap vs a future migration.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h4>Non-negotiables</h4>
+    <ul>
+      <li>Do not build a second users table in either product.</li>
+      <li>Do not create a second Google OAuth client.</li>
+      <li>Do not scope the session cookie to a specific subdomain — must be <code>.klaser.co.il</code>.</li>
+      <li>Do not have Meetings call Takanon's backend for auth (that's the abandoned B2 shape).</li>
+      <li>Do not put shared code in cross-repo <code>shared/</code> folders and expect it to work; publish a package or copy-paste until it stabilizes.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h4>Sequencing bet</h4>
+    <div class="sequence">
+      <div class="step">9.1<small>Stand up</small></div>
+      <div class="arrow">→</div>
+      <div class="step">9.6<small>Migrate</small></div>
+      <div class="arrow">→</div>
+      <div class="step">9.2<small>Cut over</small></div>
+      <div class="arrow">→</div>
+      <div class="step">T4<small>Meetings</small></div>
+    </div>
+    <div class="sequence-caption">§9 must be live before Track 4 (Klaser Meetings) enters real development. If it slips, Gil stubs the identity SDK in dev but never ships a local users table.</div>
   </div>
 </article>
 
