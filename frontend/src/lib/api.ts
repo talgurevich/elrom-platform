@@ -6,6 +6,21 @@ export class ApiError extends Error {
   }
 }
 
+/** Best-effort extraction of a human-readable message from any thrown
+ * error — unwraps FastAPI's {"detail": "..."} body when present. */
+export function apiErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    try {
+      const parsed = JSON.parse(err.message);
+      if (parsed?.detail) return parsed.detail;
+    } catch {
+      // not JSON — fall through to the raw message
+    }
+    return err.message.replace(/^\{"detail":"|"\}$/g, "");
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${BASE}${path}`, {
     credentials: "include",
@@ -335,6 +350,17 @@ export type TenantItem = {
   segment: string;
 };
 
+export type RegistrationInfo = {
+  email: string;
+  display_name: string | null;
+  tenant_name: string;
+  role: string;
+};
+
+export type ResetPasswordInfo = {
+  email: string;
+};
+
 // Admin panel — super-admin only
 export type TenantSegment = "kibbutz_shitufi" | "kibbutz_mitchadesh" | "moshav";
 
@@ -356,6 +382,7 @@ export type AdminUser = {
   tenant_id: string;
   tenant_name: string | null;
   created_at: string;
+  has_password: boolean;
 };
 
 export type CreateTenantPayload = {
@@ -413,6 +440,32 @@ export const api = {
       body: JSON.stringify({ credential }),
     }),
   logout: () => request<{ status: string }>("/api/auth/logout", { method: "POST" }),
+  passwordLogin: (email: string, password: string) =>
+    request<CurrentUser>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+
+  getRegistrationInfo: (token: string) =>
+    request<RegistrationInfo>(`/api/auth/registration/${encodeURIComponent(token)}`),
+  register: (token: string, password: string, displayName?: string) =>
+    request<CurrentUser>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ token, password, display_name: displayName || null }),
+    }),
+
+  forgotPassword: (email: string) =>
+    request<{ status: string }>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  getResetPasswordInfo: (token: string) =>
+    request<ResetPasswordInfo>(`/api/auth/reset-password/${encodeURIComponent(token)}`),
+  resetPassword: (token: string, password: string) =>
+    request<CurrentUser>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
 
   // Super-admin only — driving the tenant switcher
   listTenants: () => request<TenantItem[]>("/api/auth/tenants"),
@@ -679,6 +732,10 @@ export const api = {
   adminDeleteUser: (userId: string) =>
     request<{ status: string }>(`/api/admin/users/${userId}`, {
       method: "DELETE",
+    }),
+  adminResendInvite: (userId: string) =>
+    request<{ status: string }>(`/api/admin/users/${userId}/resend-invite`, {
+      method: "POST",
     }),
 
   adminDebugQueue: (tenantId?: string) => {

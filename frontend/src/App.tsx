@@ -6,6 +6,8 @@ import Eval from "./pages/Eval";
 import Landing from "./pages/Landing";
 import Lexicon from "./pages/Lexicon";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import Review from "./pages/Review";
 import Search from "./pages/Search";
 import Upload from "./pages/Upload";
@@ -241,6 +243,20 @@ export default function App() {
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [showLogin, setShowLogin] = useState(false);
 
+  // Deep-link routes that must work for logged-out visitors coming from an
+  // email link (invite / password reset) — rendered below, before the
+  // normal loading/anonymous/signed-in gate. Real URL paths work because
+  // the static-site host rewrites everything to index.html (SPA fallback).
+  const [routePath, setRoutePath] = useState<string>(() =>
+    typeof window !== "undefined" ? window.location.pathname : "/"
+  );
+  const clearRoute = () => {
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", "/");
+    }
+    setRoutePath("/");
+  };
+
   const isSuper =
     state.kind === "signed_in" && state.user.is_super_admin === true;
   const isViewingOther =
@@ -289,6 +305,19 @@ export default function App() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  if (routePath === "/register" || routePath === "/reset-password") {
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (token) {
+      return routePath === "/register" ? (
+        <Register token={token} onDone={clearRoute} />
+      ) : (
+        <ResetPassword token={token} onDone={clearRoute} />
+      );
+    }
+    // No token in the URL — nothing to do here, fall through to the
+    // normal app/login gate below.
+  }
 
   if (state.kind === "loading") {
     return (

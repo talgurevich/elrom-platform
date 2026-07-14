@@ -1,90 +1,47 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError } from "../lib/api";
+import { useMemo, useState, type FormEvent } from "react";
+import { api, apiErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
+import { PasswordInput } from "../components/PasswordInput";
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential: string }) => void;
-          }) => void;
-          renderButton: (
-            parent: HTMLElement,
-            options: {
-              theme?: "outline" | "filled_blue" | "filled_black";
-              size?: "small" | "medium" | "large";
-              shape?: "rectangular" | "pill" | "circle" | "square";
-              text?: "signin_with" | "signup_with" | "continue_with" | "signin";
-              locale?: string;
-              width?: number;
-            }
-          ) => void;
-        };
-      };
-    };
-  }
-}
-
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+type View = "signin" | "forgot" | "forgot_sent";
 
 export default function Login() {
-  const { signInWithGoogle } = useAuth();
-  const btnRef = useRef<HTMLDivElement>(null);
+  const { signInWithPassword } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!CLIENT_ID) {
-      setError("VITE_GOOGLE_CLIENT_ID לא הוגדר");
-      return;
-    }
+  const [view, setView] = useState<View>("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
 
-    const SCRIPT_ID = "google-identity-services";
-    if (document.getElementById(SCRIPT_ID)) {
-      init();
-      return;
+  async function handlePasswordSubmit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await signInWithPassword(email.trim().toLowerCase(), password);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
     }
-    const s = document.createElement("script");
-    s.id = SCRIPT_ID;
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
-    s.onload = init;
-    document.head.appendChild(s);
+  }
 
-    function init() {
-      if (!window.google || !btnRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: CLIENT_ID!,
-        callback: async (response) => {
-          setBusy(true);
-          setError(null);
-          try {
-            await signInWithGoogle(response.credential);
-          } catch (err) {
-            if (err instanceof ApiError) {
-              setError(err.message.replace(/^\{"detail":"|"\}$/g, ""));
-            } else {
-              setError(err instanceof Error ? err.message : String(err));
-            }
-            setBusy(false);
-          }
-        },
-      });
-      btnRef.current.innerHTML = "";
-      window.google.accounts.id.renderButton(btnRef.current, {
-        theme: "outline",
-        size: "large",
-        shape: "pill",
-        text: "continue_with",
-        locale: "he",
-        width: 280,
-      });
+  async function handleForgotSubmit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.forgotPassword(forgotEmail.trim().toLowerCase());
+      setView("forgot_sent");
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
     }
-  }, [signInWithGoogle]);
+  }
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden bg-surface">
@@ -102,20 +59,117 @@ export default function Login() {
           </p>
         </div>
 
-        <div className="mt-12 pt-6 border-t border-line flex flex-col items-center gap-3">
-          <div ref={btnRef} className={busy ? "opacity-50 pointer-events-none" : ""} />
-          {busy && (
-            <div className="text-xs text-ink-soft animate-pulse">מתחבר…</div>
-          )}
-          {error && (
-            <div className="w-full mt-2 px-4 py-3 border-r-4 border-accent bg-surface text-ink text-sm text-center">
-              {error}
-            </div>
-          )}
+        <div className="mt-12 pt-6 border-t border-line">
+          <GoogleSignInButton onError={setError} />
         </div>
 
+        <div className="mt-6 flex items-center gap-3 text-ink-soft">
+          <div className="h-px flex-1 bg-line" />
+          <span className="text-[11px] uppercase tracking-widest">או</span>
+          <div className="h-px flex-1 bg-line" />
+        </div>
+
+        {view === "signin" && (
+          <form onSubmit={handlePasswordSubmit} className="mt-6 flex flex-col gap-3">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="אימייל"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="border border-line-strong px-3 py-2 bg-surface focus:outline-none focus:border-ink text-sm"
+            />
+            <PasswordInput
+              required
+              autoComplete="current-password"
+              placeholder="סיסמה"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-line-strong px-3 py-2 bg-surface focus:outline-none focus:border-ink text-sm"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="bg-ink text-surface px-4 py-2 text-sm font-bold hover:bg-accent disabled:opacity-40 transition"
+            >
+              {busy ? "מתחבר…" : "כניסה עם אימייל"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setForgotEmail(email);
+                setView("forgot");
+              }}
+              className="text-xs text-ink-soft hover:text-ink transition self-center"
+            >
+              שכחת סיסמה?
+            </button>
+          </form>
+        )}
+
+        {view === "forgot" && (
+          <form onSubmit={handleForgotSubmit} className="mt-6 flex flex-col gap-3">
+            <p className="text-xs text-ink-soft text-center">
+              נשלח קישור לאיפוס סיסמה לכתובת האימייל שלך.
+            </p>
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="אימייל"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+              className="border border-line-strong px-3 py-2 bg-surface focus:outline-none focus:border-ink text-sm"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="bg-ink text-surface px-4 py-2 text-sm font-bold hover:bg-accent disabled:opacity-40 transition"
+            >
+              {busy ? "שולח…" : "שליחת קישור לאיפוס"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setView("signin");
+              }}
+              className="text-xs text-ink-soft hover:text-ink transition self-center"
+            >
+              חזרה לכניסה
+            </button>
+          </form>
+        )}
+
+        {view === "forgot_sent" && (
+          <div className="mt-6 flex flex-col gap-3 text-center">
+            <p className="text-sm text-ink">
+              אם קיים חשבון בכתובת <strong>{forgotEmail}</strong>, נשלח אליו קישור
+              לאיפוס סיסמה.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setView("signin");
+              }}
+              className="text-xs text-ink-soft hover:text-ink transition self-center"
+            >
+              חזרה לכניסה
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="w-full mt-4 px-4 py-3 border-r-4 border-accent bg-surface text-ink text-sm text-center">
+            {error}
+          </div>
+        )}
+
         <p className="mt-10 text-xs text-ink-soft text-center leading-relaxed">
-          הגישה למערכת מוגבלת למשתמשים מאושרים בלבד.
+          הגישה למערכת מוגבלת למשתמשים מוזמנים בלבד.
           <br />
           אם אינך מצליח להתחבר — פנה למנהל המערכת.
         </p>
@@ -132,7 +186,7 @@ export default function Login() {
  * connect each node to its 2 nearest neighbors. Generated once at mount and
  * memoized — no re-shuffle between renders.
  */
-function NeuralMesh() {
+export function NeuralMesh() {
   const W = 1000;
   const H = 1000;
   const COLS = 9;

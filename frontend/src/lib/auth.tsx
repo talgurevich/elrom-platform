@@ -17,6 +17,13 @@ type AuthState =
 type AuthContextValue = {
   state: AuthState;
   signInWithGoogle: (credential: string) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  registerWithToken: (
+    token: string,
+    password: string,
+    displayName?: string
+  ) => Promise<void>;
+  resetPasswordWithToken: (token: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
   switchTenant: (tenantId: string) => Promise<void>;
@@ -50,6 +57,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ kind: "signed_in", user });
   }, []);
 
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    const user = await api.passwordLogin(email, password);
+    setState({ kind: "signed_in", user });
+  }, []);
+
+  const registerWithToken = useCallback(
+    async (token: string, password: string, displayName?: string) => {
+      const user = await api.register(token, password, displayName);
+      setState({ kind: "signed_in", user });
+    },
+    []
+  );
+
+  const resetPasswordWithToken = useCallback(async (token: string, password: string) => {
+    const user = await api.resetPassword(token, password);
+    setState({ kind: "signed_in", user });
+  }, []);
+
   const signOut = useCallback(async () => {
     await api.logout();
     setState({ kind: "anonymous" });
@@ -66,8 +91,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ state, signInWithGoogle, signOut, refresh, switchTenant, exitSwitch }),
-    [state, signInWithGoogle, signOut, refresh, switchTenant, exitSwitch]
+    () => ({
+      state,
+      signInWithGoogle,
+      signInWithPassword,
+      registerWithToken,
+      resetPasswordWithToken,
+      signOut,
+      refresh,
+      switchTenant,
+      exitSwitch,
+    }),
+    [
+      state,
+      signInWithGoogle,
+      signInWithPassword,
+      registerWithToken,
+      resetPasswordWithToken,
+      signOut,
+      refresh,
+      switchTenant,
+      exitSwitch,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

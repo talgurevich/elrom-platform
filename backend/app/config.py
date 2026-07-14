@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # Auth
     session_secret: str = "dev-secret-change-me"
     google_client_id: str = ""
+    # Email/password auth — lifetimes for invite-registration and
+    # password-reset links. Tokens are stored hashed and single-use; these
+    # only bound how long an unused link stays valid.
+    registration_token_ttl_days: int = 7
+    password_reset_token_ttl_hours: int = 1
+    bcrypt_rounds: int = 12
 
     # Mail — Resend. Until the sender domain (klaser.co.il) verifies in the
     # Resend dashboard, use the shared onboarding sandbox address. Once

@@ -27,6 +27,7 @@ httpx==0.28.1
 # Auth
 itsdangerous==2.2.0
 google-auth==2.36.0
+bcrypt==4.2.1
 
 # Mail (Resend)
 resend==2.4.0
