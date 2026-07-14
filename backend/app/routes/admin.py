@@ -186,20 +186,31 @@ def create_tenant(
     req: CreateTenantRequest,
     _: IdentityUser = Depends(_require_super_admin),
 ) -> TenantStats:
-    """Blocked during the identity transition — creating a tenant here
-    would write only to this backend's snapshot, not to identity, so
-    users invited into it wouldn't be able to log in.
-
-    Workaround: create tenants via a direct `POST /api/service/tenants`
-    call to identity once that endpoint exists (TODO), or seed via SQL
-    on the identity DB.
-    """
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "יצירת ארגונים מהפאנל מושבתת זמנית עד לחיבור מלא לשירות "
-            "הזהויות. פנה לצוות הפיתוח."
-        ),
+    """Create a tenant via identity. Auto-seeds a `takanon`
+    subscription so users invited into the new tenant can log in
+    immediately. Response returns zero user/document counts because
+    the tenant is fresh."""
+    if req.segment not in VALID_SEGMENTS:
+        raise HTTPException(400, f"Invalid segment. Allowed: {sorted(VALID_SEGMENTS)}")
+    try:
+        created = identity_service.create_tenant(
+            name=req.name.strip(),
+            segment=req.segment,
+            seed_default_subscription=True,
+        )
+    except Exception as e:
+        log.warning("admin.create_tenant_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה ביצירת הארגון מול שירות הזהויות: {e}",
+        ) from e
+    return TenantStats(
+        id=created["id"],
+        name=created["name"],
+        segment=created["segment"],
+        user_count=0,
+        document_count=0,
+        created_at="",
     )
 
 
@@ -342,18 +353,21 @@ def resend_invite(
     user_id: str,
     _: IdentityUser = Depends(_require_super_admin),
 ) -> dict:
-    """Blocked during the identity transition — resending requires an
-    identity endpoint that re-issues a registration token for an
-    existing user. Workaround for now: create the account fresh under a
-    different email, or ask the user to run forgot-password once they
-    have any password set."""
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "שליחת הזמנה מחדש מושבתת זמנית עד לחיבור מלא לשירות "
-            "הזהויות."
-        ),
-    )
+    """Re-issue a registration token via identity and email a fresh
+    invite. Identity refuses if the user already has a password
+    (409) — bubble that up so the admin sees why."""
+    try:
+        UUID(user_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid user_id") from e
+    try:
+        return identity_service.resend_invite(user_id)
+    except Exception as e:
+        log.warning("admin.resend_invite_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשליחת ההזמנה מחדש מול שירות הזהויות: {e}",
+        ) from e
 
 
 @router.patch("/users/{user_id}", response_model=UserItem)
@@ -363,15 +377,48 @@ def update_user(
     request: Request,
     me: IdentityUser = Depends(_require_super_admin),
 ) -> UserItem:
-    """Blocked during the identity transition — updating a user here
-    would drift from identity. Workaround: run SQL against identity DB
-    directly, or wait for the identity update endpoint."""
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "עדכון משתמשים מהפאנל מושבת זמנית עד לחיבור מלא לשירות "
-            "הזהויות."
-        ),
+    """PATCH via identity. Fields left as None on the payload are not
+    touched. Guards against a super-admin demoting themselves — that
+    would instantly lock them out of this endpoint."""
+    try:
+        UUID(user_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid user_id") from e
+
+    if req.role is not None and req.role not in VALID_ROLES:
+        raise HTTPException(400, f"Invalid role. Allowed: {sorted(VALID_ROLES)}")
+
+    if (
+        req.is_super_admin is False
+        and str(me.id) == user_id
+    ):
+        raise HTTPException(400, "You cannot revoke your own super-admin")
+
+    try:
+        updated = identity_service.update_user(
+            user_id,
+            role=req.role,
+            display_name=req.display_name,
+            tenant_id=req.tenant_id,
+            is_super_admin=req.is_super_admin,
+        )
+    except Exception as e:
+        log.warning("admin.update_user_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בעדכון המשתמש מול שירות הזהויות: {e}",
+        ) from e
+
+    return UserItem(
+        id=updated["id"],
+        email=updated["email"],
+        display_name=updated.get("display_name"),
+        role=updated["role"],
+        is_super_admin=bool(updated.get("is_super_admin", False)),
+        tenant_id=updated["tenant_id"],
+        tenant_name=None,
+        has_password=False,  # identity doesn't return this — leave conservative
+        created_at="",
     )
 
 
@@ -504,13 +551,21 @@ def delete_user(
     user_id: str,
     me: IdentityUser = Depends(_require_super_admin),
 ) -> dict:
-    """Blocked during the identity transition — deleting here would
-    leave the user in identity, still able to log in. Workaround: run
-    SQL against identity DB directly."""
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "מחיקת משתמשים מהפאנל מושבתת זמנית עד לחיבור מלא לשירות "
-            "הזהויות."
-        ),
-    )
+    """Hard-delete via identity. Refuses self-delete — otherwise the
+    acting super-admin would lose access to the panel mid-request."""
+    try:
+        UUID(user_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid user_id") from e
+    if str(me.id) == user_id:
+        raise HTTPException(400, "You cannot delete your own account")
+    try:
+        identity_service.delete_user(user_id)
+    except Exception as e:
+        log.warning("admin.delete_user_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה במחיקת המשתמש מול שירות הזהויות: {e}",
+        ) from e
+    log.info("admin.user_deleted", user_id=user_id)
+    return {"status": "ok"}

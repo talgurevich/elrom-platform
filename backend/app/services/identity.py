@@ -226,18 +226,22 @@ class IdentityServiceClient:
             )
         return {"Authorization": f"Bearer {self.token}"}
 
-    def get_user(self, user_id: str) -> dict:
+    # ─── Users ─────────────────────────────────────────────────────
+
+    def list_users(self, *, tenant_id: str | None = None) -> list[dict]:
+        params = {"tenant_id": tenant_id} if tenant_id else None
         r = httpx.get(
-            f"{self.base_url}/api/service/users/{user_id}",
+            f"{self.base_url}/api/service/users",
             headers=self._headers(),
+            params=params,
             timeout=5.0,
         )
         r.raise_for_status()
         return r.json()
 
-    def get_tenant(self, tenant_id: str) -> dict:
+    def get_user(self, user_id: str) -> dict:
         r = httpx.get(
-            f"{self.base_url}/api/service/tenants/{tenant_id}",
+            f"{self.base_url}/api/service/users/{user_id}",
             headers=self._headers(),
             timeout=5.0,
         )
@@ -264,6 +268,92 @@ class IdentityServiceClient:
                 "invited_by": invited_by,
             },
             timeout=10.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def update_user(
+        self,
+        user_id: str,
+        *,
+        role: str | None = None,
+        display_name: str | None = None,
+        tenant_id: str | None = None,
+        is_super_admin: bool | None = None,
+    ) -> dict:
+        """PATCH — fields left as None are not touched on the server.
+        Pass `display_name=""` to explicitly clear."""
+        payload: dict = {}
+        if role is not None:
+            payload["role"] = role
+        if display_name is not None:
+            payload["display_name"] = display_name
+        if tenant_id is not None:
+            payload["tenant_id"] = tenant_id
+        if is_super_admin is not None:
+            payload["is_super_admin"] = is_super_admin
+        r = httpx.patch(
+            f"{self.base_url}/api/service/users/{user_id}",
+            headers=self._headers(),
+            json=payload,
+            timeout=5.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def delete_user(self, user_id: str) -> None:
+        r = httpx.delete(
+            f"{self.base_url}/api/service/users/{user_id}",
+            headers=self._headers(),
+            timeout=5.0,
+        )
+        r.raise_for_status()
+
+    def resend_invite(self, user_id: str) -> dict:
+        r = httpx.post(
+            f"{self.base_url}/api/service/users/{user_id}/resend-invite",
+            headers=self._headers(),
+            timeout=10.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    # ─── Tenants ───────────────────────────────────────────────────
+
+    def list_tenants(self) -> list[dict]:
+        r = httpx.get(
+            f"{self.base_url}/api/service/tenants",
+            headers=self._headers(),
+            timeout=5.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def get_tenant(self, tenant_id: str) -> dict:
+        r = httpx.get(
+            f"{self.base_url}/api/service/tenants/{tenant_id}",
+            headers=self._headers(),
+            timeout=5.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def create_tenant(
+        self,
+        *,
+        name: str,
+        segment: str,
+        seed_default_subscription: bool = True,
+    ) -> dict:
+        r = httpx.post(
+            f"{self.base_url}/api/service/tenants",
+            headers=self._headers(),
+            json={
+                "name": name,
+                "segment": segment,
+                "seed_default_subscription": seed_default_subscription,
+            },
+            timeout=5.0,
         )
         r.raise_for_status()
         return r.json()
