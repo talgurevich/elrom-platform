@@ -322,6 +322,27 @@ export default function Upload() {
     [folderCounts]
   );
 
+  // Duplicate detection: docs sharing (chars_extracted, pages, chunks) are
+  // almost certainly the same file uploaded multiple times with different
+  // filenames. False-positive rate at ~7K-char precision is effectively zero.
+  // Map: docId -> list of sibling ids (excluding self).
+  const duplicateSiblings = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    for (const d of docs) {
+      if (d.chars_extracted == null || d.pages == null) continue;
+      const key = `${d.chars_extracted}:${d.pages}:${d.chunks}`;
+      (groups[key] ||= []).push(d.id);
+    }
+    const out: Record<string, string[]> = {};
+    for (const ids of Object.values(groups)) {
+      if (ids.length < 2) continue;
+      for (const id of ids) {
+        out[id] = ids.filter((x) => x !== id);
+      }
+    }
+    return out;
+  }, [docs]);
+
   // Group the (already-filtered+sorted) list by the chosen key.
   const groupedDocs = useMemo(() => {
     if (groupKey === "none") return null;
@@ -701,6 +722,7 @@ export default function Upload() {
                         <DocumentRow
                           key={d.id}
                           doc={d}
+                          duplicateSiblingCount={duplicateSiblings[d.id]?.length ?? 0}
                           onDelete={() => deleteDoc(d)}
                           onOpen={() => setOpenDoc(d)}
                         />
@@ -715,6 +737,7 @@ export default function Upload() {
                   <DocumentRow
                     key={d.id}
                     doc={d}
+                    duplicateSiblingCount={duplicateSiblings[d.id]?.length ?? 0}
                     onDelete={() => deleteDoc(d)}
                     onOpen={() => setOpenDoc(d)}
                   />
@@ -939,10 +962,12 @@ function FacetRadio({
 
 function DocumentRow({
   doc,
+  duplicateSiblingCount = 0,
   onDelete,
   onOpen,
 }: {
   doc: DocumentItem;
+  duplicateSiblingCount?: number;
   onDelete: () => void;
   onOpen: () => void;
 }) {
@@ -975,6 +1000,14 @@ function DocumentRow({
                 title="המערכת מילאה מטא־דאטה אוטומטית — כדאי לאשר"
               >
                 בדיקה
+              </span>
+            )}
+            {duplicateSiblingCount > 0 && (
+              <span
+                className="text-[10px] tracking-[0.2em] uppercase font-bold text-red-900 bg-red-100 border border-red-300 px-1.5 py-0.5"
+                title={`מסמך זה חולק אורך טקסט, מס' עמודים ומס' קטעים עם ${duplicateSiblingCount} מסמכ${duplicateSiblingCount === 1 ? "" : "ים"} אחר${duplicateSiblingCount === 1 ? "" : "ים"} — כנראה כפילות`}
+              >
+                כפילות אפשרית
               </span>
             )}
             {doc.doc_type && (
