@@ -26,8 +26,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
-from app.models import AuthoritativeAnswer, Chunk, Conversation, Document, Query, Tenant, User
-from app.services.identity import IdentityUser, current_user
+from app.models import AuthoritativeAnswer, Chunk, Conversation, Document, Query
+from app.services.identity import (
+    IdentityUser,
+    current_user,
+    get_tenant_cached,
+    identity_service,
+)
 from app.services.mail import send_broken_answer_alert
 from app.services.chat_triage import triage_turn
 from app.services.embedding import embed_texts
@@ -227,11 +232,13 @@ async def search_pipeline(
     try:
         yield {"type": "stage", "stage": "analyzing"}
 
-        # Load the tenant so we can inject its identity + system_context block
-        # into the answerer's prompt. Cached on the pipeline for the LLM call.
-        tenant = db.get(Tenant, tenant_id)
-        tenant_name = tenant.name if tenant else "הארגון"
-        tenant_context = tenant.system_context if tenant else None
+        # Load the tenant from identity (cached ~5min per worker) so we
+        # can inject its identity + system_context block into the
+        # answerer's prompt. Degrades to sensible defaults if identity
+        # is unreachable rather than failing the query.
+        tenant = get_tenant_cached(tenant_id)
+        tenant_name = (tenant or {}).get("name") or "הארגון"
+        tenant_context = (tenant or {}).get("system_context")
 
         # Resolve / create the conversation thread up front so prior turns
         # (if any) inform the rewrite, and so the final Query row can be
@@ -818,17 +825,27 @@ def mark_broken(
         retired_cache=cached_answer_retired,
     )
 
-    # Notify every super-admin. Snapshot the values we need before entering
-    # the background task — we can't rely on the SQLAlchemy session there.
-    super_admin_emails = [
-        e for (e,) in db.query(User.email).filter(User.is_super_admin.is_(True)).all()
-    ]
-    tenant = db.get(Tenant, query.tenant_id)
+    # Notify every super-admin. Users + tenants live in identity now;
+    # pull both there. If identity is unreachable we log and skip the
+    # notification — the mark-broken flag itself is already saved.
+    try:
+        super_admin_emails = [
+            u["email"]
+            for u in identity_service.list_users()
+            if u.get("is_super_admin")
+        ]
+    except Exception as e:  # noqa: BLE001
+        log.warning("search.mark_broken_list_super_admins_failed", error=str(e))
+        super_admin_emails = []
+
+    tenant = get_tenant_cached(query.tenant_id)
+    tenant_name = (tenant or {}).get("name") or str(query.tenant_id)
+
     if super_admin_emails:
         background_tasks.add_task(
             send_broken_answer_alert,
             to_emails=super_admin_emails,
-            tenant_name=tenant.name if tenant else str(query.tenant_id),
+            tenant_name=tenant_name,
             question=query.question,
             answer=query.answer,
             query_id=str(query.id),

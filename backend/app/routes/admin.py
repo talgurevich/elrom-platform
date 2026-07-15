@@ -40,6 +40,7 @@ from app.services.identity import (
     IdentityUser,
     current_user,
     identity_service,
+    invalidate_tenant_cache,
 )
 
 log = structlog.get_logger()
@@ -166,32 +167,34 @@ def update_tenant_system_context(
     tenant_id: str,
     req: UpdateTenantContextRequest,
     _: IdentityUser = Depends(_require_super_admin),
-    db: Session = Depends(get_db),
 ) -> TenantContext:
-    """Update the tenant's system_context override — kept local because
-    the LLM reads it directly from this backend's tenants table at
-    answer time. Identity's copy stays authoritative for its own reads
-    but isn't the source of truth for the LLM prompt yet."""
+    """Write the tenant's system_context override to identity (source
+    of truth) and invalidate the local per-worker cache so the next
+    query sees the change immediately."""
     try:
-        tid = UUID(tenant_id)
+        UUID(tenant_id)
     except (ValueError, TypeError) as e:
         raise HTTPException(400, "Invalid tenant_id") from e
-    t = db.get(Tenant, tid)
-    if t is None:
-        raise HTTPException(404, "Tenant not found")
-    val = (req.system_context or "").strip()
-    t.system_context = val if val else None
-    db.commit()
+    val = (req.system_context or "").strip() or None
+    try:
+        updated = identity_service.update_tenant_system_context(tenant_id, val)
+    except Exception as e:
+        log.warning("admin.update_system_context_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בעדכון ההקשר מול שירות הזהויות: {e}",
+        ) from e
+    invalidate_tenant_cache(tenant_id)
     log.info(
         "admin.tenant_context_updated",
-        tenant_id=str(t.id),
-        length=len(val),
+        tenant_id=tenant_id,
+        length=len(val or ""),
     )
     return TenantContext(
-        id=str(t.id),
-        name=t.name,
-        segment=t.segment,
-        system_context=t.system_context,
+        id=updated["id"],
+        name=updated["name"],
+        segment=updated["segment"],
+        system_context=updated.get("system_context"),
     )
 
 

@@ -37,6 +37,8 @@ middleware, so we fold the check into `current_user`.
 """
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Callable
 from uuid import UUID
@@ -340,6 +342,20 @@ class IdentityServiceClient:
         r.raise_for_status()
         return r.json()
 
+    def update_tenant_system_context(
+        self, tenant_id: str, system_context: str | None
+    ) -> dict:
+        """Set (or clear, if None) the tenant's system_context. Fully
+        replaces — no partial semantics."""
+        r = httpx.patch(
+            f"{self.base_url}/api/service/tenants/{tenant_id}/system-context",
+            headers=self._headers(),
+            json={"system_context": system_context},
+            timeout=5.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
     def create_tenant(
         self,
         *,
@@ -371,3 +387,47 @@ class IdentityServiceClient:
 
 
 identity_service = IdentityServiceClient()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Tenant cache — the LLM answer-path needs tenant.name + system_context
+# on every query. Hitting identity per query would be wasteful and slow.
+# Small TTL cache lives per-worker in memory; a super-admin editing the
+# system context sees the change on the next TTL boundary (or after an
+# explicit invalidate).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+_TENANT_CACHE_TTL_SECONDS = 300  # 5 minutes
+_tenant_cache: dict[str, tuple[float, dict]] = {}
+_tenant_cache_lock = threading.Lock()
+
+
+def get_tenant_cached(tenant_id: str | UUID) -> dict | None:
+    """Cached wrapper over identity_service.get_tenant. Returns the raw
+    dict (id, name, segment, system_context) or None if identity 404s /
+    the call fails — callers should degrade gracefully rather than 500.
+    """
+    key = str(tenant_id)
+    now = time.time()
+    with _tenant_cache_lock:
+        cached = _tenant_cache.get(key)
+        if cached is not None:
+            ts, data = cached
+            if now - ts < _TENANT_CACHE_TTL_SECONDS:
+                return data
+    try:
+        data = identity_service.get_tenant(key)
+    except Exception as e:  # noqa: BLE001 — never break the answer path
+        log.warning("identity.get_tenant_cached_failed", tenant_id=key, error=str(e))
+        return None
+    with _tenant_cache_lock:
+        _tenant_cache[key] = (now, data)
+    return data
+
+
+def invalidate_tenant_cache(tenant_id: str | UUID) -> None:
+    """Called from admin panel writes so the next query sees the change
+    without waiting for the TTL."""
+    with _tenant_cache_lock:
+        _tenant_cache.pop(str(tenant_id), None)
