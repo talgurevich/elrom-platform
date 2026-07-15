@@ -44,7 +44,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Chunk, Conversation, Document, Lexicon, Query, Tenant
+from app.models import Chunk, Conversation, Document, Lexicon, Query
+from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
 
 log = structlog.get_logger()
 
@@ -278,7 +279,7 @@ def _insert_mappings(
 
 
 def run_for_tenant(
-    db: Session, tenant: Tenant, *, since: datetime, max_pairs: int, min_confidence: float
+    db: Session, tenant: TenantRow, *, since: datetime, max_pairs: int, min_confidence: float
 ) -> dict:
     pairs = find_refinement_pairs(
         db, tenant_id=tenant.id, since=since, max_pairs=max_pairs
@@ -362,10 +363,11 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        q = db.query(Tenant)
         if args.tenant:
-            q = q.filter(Tenant.name == args.tenant)
-        tenants = q.all()
+            t = get_tenant_row_by_name(args.tenant)
+            tenants = [t] if t else []
+        else:
+            tenants = list_tenants_as_rows()
         if not tenants:
             print("No tenants matched.")
             return

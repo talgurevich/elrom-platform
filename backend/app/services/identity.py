@@ -431,3 +431,56 @@ def invalidate_tenant_cache(tenant_id: str | UUID) -> None:
     without waiting for the TTL."""
     with _tenant_cache_lock:
         _tenant_cache.pop(str(tenant_id), None)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# ORM-shaped helpers for maintenance scripts that used to iterate the
+# local Tenant table. Minimal wrapper — just the fields the scripts
+# actually touch. Bypass the request-scoped cache (scripts are one-shot).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TenantRow:
+    id: UUID
+    name: str
+    segment: str
+    system_context: str | None
+
+
+def list_tenants_as_rows() -> list[TenantRow]:
+    """Fetch every tenant from identity as TenantRow. For scripts that
+    previously did `db.query(Tenant).all()`."""
+    rows = []
+    for t in identity_service.list_tenants():
+        rows.append(
+            TenantRow(
+                id=UUID(t["id"]),
+                name=t["name"],
+                segment=t["segment"],
+                system_context=t.get("system_context"),
+            )
+        )
+    return rows
+
+
+def get_tenant_row_by_name(name: str) -> TenantRow | None:
+    """Convenience for scripts that accept `--tenant NAME`."""
+    for r in list_tenants_as_rows():
+        if r.name == name:
+            return r
+    return None
+
+
+def list_super_admin_emails() -> list[str]:
+    """For cron scripts that fan out to every super-admin
+    (send_weekly_digests, etc)."""
+    try:
+        return [
+            u["email"]
+            for u in identity_service.list_users()
+            if u.get("is_super_admin")
+        ]
+    except Exception as e:  # noqa: BLE001
+        log.warning("identity.list_super_admin_emails_failed", error=str(e))
+        return []

@@ -15,7 +15,8 @@ import argparse
 from sqlalchemy import text
 
 from app.db import SessionLocal
-from app.models import Chunk, Tenant
+from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
+from app.models import Chunk
 from app.services.hebrew_text import normalize_hebrew
 
 
@@ -29,7 +30,7 @@ def main() -> None:
     try:
         q = db.query(Chunk.id, Chunk.text)
         if args.tenant:
-            tenant = db.query(Tenant).filter(Tenant.name == args.tenant).first()
+            tenant = get_tenant_row_by_name(args.tenant)
             if tenant is None:
                 raise SystemExit(f"Tenant not found: {args.tenant}")
             q = q.filter(Chunk.tenant_id == tenant.id)

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import get_db
-from app.models import Chunk, Conversation, Query, User
+from app.models import Chunk, Conversation, Query
 from app.services.identity import IdentityUser, current_user
 
 router = APIRouter()

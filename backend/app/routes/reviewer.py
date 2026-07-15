@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Amendment, AuthoritativeAnswer, Chunk, Document, Lexicon, Query, Tenant, User
+from app.models import Amendment, AuthoritativeAnswer, Chunk, Document, Lexicon, Query
 from app.services.identity import IdentityUser, current_user
 
 log = structlog.get_logger()

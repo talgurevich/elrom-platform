@@ -28,7 +28,8 @@ import time
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import SessionLocal
-from app.models import Chunk, Tenant
+from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
+from app.models import Chunk
 from app.services.chunking import build_contextual_input
 from app.services.embedding import embed_texts
 
@@ -100,13 +101,13 @@ def main() -> None:
     db: Session = SessionLocal()
     try:
         if args.tenant:
-            t = db.query(Tenant).filter(Tenant.name == args.tenant).first()
+            t = get_tenant_row_by_name(args.tenant)
             if t is None:
                 print(f"✗ Tenant {args.tenant!r} not found", file=sys.stderr)
                 sys.exit(2)
             tenants = [t]
         else:
-            tenants = db.query(Tenant).order_by(Tenant.created_at).all()
+            tenants = list_tenants_as_rows()
             if not tenants:
                 print("No tenants in DB. Nothing to do.")
                 return

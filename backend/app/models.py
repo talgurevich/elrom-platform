@@ -16,58 +16,16 @@ from app.db import Base
 EMBED_DIM = 1024
 
 
-class Tenant(Base):
-    __tablename__ = "tenants"
-    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    segment: Mapped[str] = mapped_column(String, nullable=False)  # kibbutz_shitufi | kibbutz_mitchadesh | moshav
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    # Free-text block injected into the answerer's system prompt. Editable via
-    # the super-admin panel. When NULL, the answerer falls through to a
-    # generic template (identity + hierarchy fallback + no-fabrication rules).
-    # See app/services/llm.py for the injection point.
-    system_context: Mapped[str | None] = mapped_column(Text)
-
-
-class User(Base):
-    __tablename__ = "users"
-    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"))
-    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    display_name: Mapped[str | None] = mapped_column(String)
-    role: Mapped[str] = mapped_column(String, nullable=False)  # admin | reviewer | secretary
-    # Cross-tenant read-only inspector. Set via CLI only (scripts.grant_super_admin).
-    # When set + session.viewing_tenant_id present, current_user swaps tenant_id
-    # in memory for the request and the middleware enforces read-only.
-    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    # Bcrypt hash — NULL until the user completes email/password registration
-    # (or sets a password via the reset flow). Google sign-in never touches
-    # this column; a user may have both a password and Google as valid
-    # sign-in methods for the same account.
-    password_hash: Mapped[str | None] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class AuthToken(Base):
-    """Single-use, expiring token backing invite-registration and
-    password-reset links. The raw token is only ever sent to the user by
-    email — we store a sha256 hash of it here so a DB leak alone can't be
-    used to complete a registration or reset."""
-
-    __tablename__ = "auth_tokens"
-    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
-    purpose: Mapped[str] = mapped_column(String, nullable=False)  # registration | password_reset
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+# Users, tenants, and auth_tokens live in the klaser-identity service
+# (extracted 2026-07-14, tables dropped 2026-07-15). Read/write via
+# services/identity.py. The tenant_id and user_id columns elsewhere in
+# this schema are plain UUIDs — no cross-DB foreign key enforcement.
 
 
 class Document(Base):
     __tablename__ = "documents"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     doc_type: Mapped[str | None] = mapped_column(String)  # bylaw | sub_bylaw | minutes | decision | other
     effective_date: Mapped[Date | None] = mapped_column(Date)
@@ -98,7 +56,7 @@ class Chunk(Base):
     __tablename__ = "chunks"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     document_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("documents.id"))
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
     position: Mapped[int] = mapped_column(Integer)
     section_path: Mapped[str | None] = mapped_column(String)
     text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -140,7 +98,7 @@ class Amendment(Base):
 
     __tablename__ = "amendments"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
     amendment_doc_id: Mapped[UUID] = mapped_column(
         SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
     )
@@ -173,8 +131,8 @@ class Conversation(Base):
 
     __tablename__ = "conversations"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
-    user_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    user_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True),)
     title: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -185,8 +143,8 @@ class Conversation(Base):
 class Query(Base):
     __tablename__ = "queries"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
-    user_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    user_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True),)
     conversation_id: Mapped[UUID | None] = mapped_column(
         SQLUUID(as_uuid=True), ForeignKey("conversations.id")
     )
@@ -210,12 +168,12 @@ class Query(Base):
 class AuthoritativeAnswer(Base):
     __tablename__ = "authoritative_answers"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
     canonical_question: Mapped[str] = mapped_column(Text, nullable=False)
     canonical_question_embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     source_chunk_ids: Mapped[list[UUID] | None] = mapped_column(ARRAY(SQLUUID(as_uuid=True)))
-    approved_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
+    approved_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True),)
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     internal_note: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String, default="active")  # active | retired
@@ -225,7 +183,7 @@ class AuthoritativeAnswer(Base):
 class GoldenQuestion(Base):
     __tablename__ = "golden_questions"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     expected_doc_filenames: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     expected_keywords: Mapped[list[str] | None] = mapped_column(ARRAY(String))
@@ -243,7 +201,7 @@ class GoldenQuestion(Base):
 class Lexicon(Base):
     __tablename__ = "lexicon"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
     term: Mapped[str] = mapped_column(Text, nullable=False)
     expansion: Mapped[str] = mapped_column(Text, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -258,7 +216,7 @@ class Lexicon(Base):
     learned_from_query_id: Mapped[UUID | None] = mapped_column(
         SQLUUID(as_uuid=True), ForeignKey("queries.id")
     )
-    updated_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("users.id"))
+    updated_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True),)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

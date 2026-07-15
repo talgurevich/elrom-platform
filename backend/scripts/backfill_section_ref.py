@@ -20,12 +20,13 @@ import sys
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Amendment, Chunk, Tenant
+from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
+from app.models import Amendment, Chunk
 from app.services.amendment_extractor import _apply_supersession
 from app.services.chunking import canonical_section_ref
 
 
-def _backfill_tenant(db: Session, tenant: Tenant, *, dry_run: bool) -> dict:
+def _backfill_tenant(db: Session, tenant: TenantRow, *, dry_run: bool) -> dict:
     print(f"\n[{tenant.name}]")
     chunks = (
         db.query(Chunk)
@@ -76,9 +77,9 @@ def main() -> int:
 
     db: Session = SessionLocal()
     try:
-        q = db.query(Tenant)
+        q = list_tenants_as_rows() # was: db.query(Tenant)
         if args.tenant:
-            q = q.filter(Tenant.name == args.tenant)
+            q = [t for t in q if t.name == args.tenant]
         tenants = q.all()
         if not tenants:
             print(f"No tenants matched (filter={args.tenant!r})", file=sys.stderr)

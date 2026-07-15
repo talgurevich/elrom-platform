@@ -1,11 +1,10 @@
 """Seed tenant.system_context for the אל-רום tenant with the historical
 hardcoded prompt block.
 
-Idempotent — only writes if the column is currently NULL or empty. Runs
-automatically on deploy via start.sh so a fresh Render deploy doesn't
-regress the אל-רום answer quality (they'd otherwise get the generic
-template, which has no §5 precision rules, no framing rule, no §44
-amendment example).
+Post-identity-cutover: tenants live in klaser-identity, so this script
+now calls identity's PATCH /api/service/tenants/{id}/system-context via
+the SDK instead of writing to a local Tenant row. Behavior otherwise
+unchanged — idempotent, only writes when the column is empty.
 
 Manual invocation:
     cd backend
@@ -13,32 +12,33 @@ Manual invocation:
 """
 import sys
 
-from sqlalchemy.orm import Session
-
-from app.db import SessionLocal
-from app.models import Tenant
+from app.services.identity import (
+    identity_service,
+    list_tenants_as_rows,
+)
 from app.services.llm import ELROM_SEED_CONTEXT
 
 
 def main() -> None:
-    db: Session = SessionLocal()
-    try:
-        tenants = db.query(Tenant).filter(Tenant.name.like("%אל-רום%")).all()
-        if not tenants:
-            print("No אל-רום tenant found. Nothing to seed.")
-            return
-        seeded = 0
-        for t in tenants:
-            if t.system_context and t.system_context.strip():
-                print(f"✓ {t.name} already has system_context ({len(t.system_context)} chars) — skipping")
-                continue
-            t.system_context = ELROM_SEED_CONTEXT
-            seeded += 1
-            print(f"✓ Seeded {t.name} with ELROM_SEED_CONTEXT ({len(ELROM_SEED_CONTEXT)} chars)")
-        db.commit()
-        print(f"done. seeded {seeded} tenant(s).")
-    finally:
-        db.close()
+    tenants = [t for t in list_tenants_as_rows() if "אל-רום" in t.name]
+    if not tenants:
+        print("No אל-רום tenant found. Nothing to seed.")
+        return
+    seeded = 0
+    for t in tenants:
+        if t.system_context and t.system_context.strip():
+            print(
+                f"✓ {t.name} already has system_context "
+                f"({len(t.system_context)} chars) — skipping"
+            )
+            continue
+        identity_service.update_tenant_system_context(str(t.id), ELROM_SEED_CONTEXT)
+        seeded += 1
+        print(
+            f"✓ Seeded {t.name} with ELROM_SEED_CONTEXT "
+            f"({len(ELROM_SEED_CONTEXT)} chars)"
+        )
+    print(f"done. seeded {seeded} tenant(s).")
 
 
 if __name__ == "__main__":

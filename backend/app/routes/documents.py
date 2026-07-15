@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Chunk, Document, Tenant, User
+from app.models import Chunk, Document
 from app.services.identity import IdentityUser, current_user
 from app.services.storage import guess_content_type, resolve_stored_file
 

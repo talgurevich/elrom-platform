@@ -22,7 +22,8 @@ import time
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Document, Tenant
+from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
+from app.models import Document
 from app.services.amendment_extractor import extract_amendments
 
 
@@ -30,7 +31,7 @@ def _short(s: str, n: int = 40) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def backfill_for_tenant(db: Session, tenant: Tenant, *, dry_run: bool, limit: int | None) -> dict:
+def backfill_for_tenant(db: Session, tenant: TenantRow, *, dry_run: bool, limit: int | None) -> dict:
     docs = (
         db.query(Document)
         .filter(Document.tenant_id == tenant.id)
@@ -97,9 +98,9 @@ def main() -> int:
 
     db: Session = SessionLocal()
     try:
-        q = db.query(Tenant)
+        q = list_tenants_as_rows() # was: db.query(Tenant)
         if args.tenant:
-            q = q.filter(Tenant.name == args.tenant)
+            q = [t for t in q if t.name == args.tenant]
         tenants = q.all()
         if not tenants:
             print(f"No tenants matched (filter={args.tenant!r})", file=sys.stderr)

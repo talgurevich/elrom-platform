@@ -35,7 +35,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Chunk, Document, Query, Tenant, User
+from app.models import Chunk, Document, Query
 from app.services.identity import (
     IdentityUser,
     current_user,
@@ -261,20 +261,6 @@ class UpdateUserRequest(BaseModel):
     display_name: str | None = None
     is_super_admin: bool | None = None
     tenant_id: str | None = None
-
-
-def _user_to_item(u: User, tenant_name: str | None) -> UserItem:
-    return UserItem(
-        id=str(u.id),
-        email=u.email,
-        display_name=u.display_name,
-        role=u.role,
-        is_super_admin=bool(u.is_super_admin),
-        tenant_id=str(u.tenant_id),
-        tenant_name=tenant_name,
-        has_password=u.password_hash is not None,
-        created_at=u.created_at.isoformat() if u.created_at else "",
-    )
 
 
 @router.get("/users", response_model=list[UserItem])
@@ -508,7 +494,13 @@ def debug_queue(
         q = q.filter(Query.tenant_id == tid)
     rows = q.order_by(Query.created_at.desc()).limit(limit).all()
 
-    tenants = {t.id: t.name for t in db.query(Tenant).all()}
+    # Tenant names come from identity now. If identity is unreachable
+    # the queue still renders — tenant column just shows the raw UUID.
+    try:
+        tenants = {t["id"]: t["name"] for t in identity_service.list_tenants()}
+    except Exception as e:  # noqa: BLE001
+        log.warning("admin.debug_queue_tenants_lookup_failed", error=str(e))
+        tenants = {}
 
     all_chunk_ids: set[UUID] = set()
     for r in rows:
@@ -548,7 +540,7 @@ def debug_queue(
             DebugQueueItem(
                 query_id=str(r.id),
                 tenant_id=str(r.tenant_id),
-                tenant_name=tenants.get(r.tenant_id),
+                tenant_name=tenants.get(str(r.tenant_id)),
                 question=r.question,
                 answer=r.answer,
                 confidence=r.confidence,

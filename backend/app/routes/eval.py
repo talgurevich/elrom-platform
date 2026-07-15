@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import GoldenQuestion, Query, Tenant, User
+from app.models import GoldenQuestion, Query
 from app.services.identity import IdentityUser, current_user
 from app.services.embedding import embed_texts
 from app.services.lexicon import find_relevant_terms, format_lexicon_block

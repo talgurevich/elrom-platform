@@ -18,7 +18,12 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Lexicon, Tenant, User
+from app.models import Lexicon
+from app.services.identity import (
+    identity_service,
+    list_super_admin_emails,
+    list_tenants_as_rows,
+)
 from app.services.mail import LexiconEntrySnapshot, send_lexicon_digest
 
 log = structlog.get_logger()
@@ -68,9 +73,15 @@ def main(days: int = 7) -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     db: Session = SessionLocal()
     try:
-        super_admins = (
-            db.query(User).filter(User.is_super_admin.is_(True)).all()
-        )
+        # Users and tenants live in klaser-identity now — pull super-admin
+        # emails (with display_names) via the service client, and tenant
+        # names via list_tenants_as_rows so we can label the digest sections.
+        try:
+            all_users = identity_service.list_users()
+        except Exception as e:  # noqa: BLE001
+            log.warning("digest.list_users_failed", error=str(e))
+            return
+        super_admins = [u for u in all_users if u.get("is_super_admin")]
         if not super_admins:
             log.info("digest.no_super_admins")
             return
@@ -80,9 +91,7 @@ def main(days: int = 7) -> None:
             log.info("digest.no_activity", days=days)
             return
 
-        tenant_names = {
-            t.id: t.name for t in db.query(Tenant).all() if t.id in activity
-        }
+        tenant_names = {t.id: t.name for t in list_tenants_as_rows() if t.id in activity}
         # Build the sections list once — same content goes to every super-admin.
         sections = []
         for tid, buckets in activity.items():
@@ -99,13 +108,13 @@ def main(days: int = 7) -> None:
         for admin in super_admins:
             log.info(
                 "digest.send",
-                to=admin.email,
+                to=admin["email"],
                 tenants=len(sections),
                 total=sum(sum(len(x) for x in s[1:]) for s in sections),
             )
             send_lexicon_digest(
-                to_email=admin.email,
-                admin_display_name=admin.display_name,
+                to_email=admin["email"],
+                admin_display_name=admin.get("display_name"),
                 tenant_sections=sections,
             )
             sent += 1

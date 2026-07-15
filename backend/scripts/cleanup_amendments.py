@@ -21,11 +21,12 @@ import sys
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Amendment, Tenant
+from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
+from app.models import Amendment
 from app.services.amendment_extractor import break_circular_parents, looks_like_real_section_ref
 
 
-def _cleanup_tenant(db: Session, tenant: Tenant, *, dry_run: bool) -> dict:
+def _cleanup_tenant(db: Session, tenant: TenantRow, *, dry_run: bool) -> dict:
     print(f"\n[{tenant.name}]")
 
     # 1. Bad section refs.
@@ -63,9 +64,9 @@ def main() -> int:
 
     db: Session = SessionLocal()
     try:
-        q = db.query(Tenant)
+        q = list_tenants_as_rows() # was: db.query(Tenant)
         if args.tenant:
-            q = q.filter(Tenant.name == args.tenant)
+            q = [t for t in q if t.name == args.tenant]
         tenants = q.all()
         if not tenants:
             print(f"No tenants matched (filter={args.tenant!r})", file=sys.stderr)

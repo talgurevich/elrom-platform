@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Chunk, Document, Tenant, User
+from app.models import Chunk, Document
 from app.services.identity import IdentityUser, current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
