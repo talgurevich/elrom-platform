@@ -1049,11 +1049,11 @@
         </div>
       </div>
 
-      <div class="cl-item">
+      <div class="cl-item done">
         <div class="check"></div>
         <div class="cl-body">
           <span class="cl-title">Golden-set baseline for אל-רום corpus</span> <a class="cl-ref" href="#t1">§1 cross-cutting</a>
-          <div class="cl-desc">Real questions with binary pass/fail. Precondition for measuring any of the above.</div>
+          <div class="cl-desc">30 questions across 5 buckets (single-hop bylaw, decision lookup, multi-hop, procedural, guardrail refusal) seeded from <code>docs/eval/golden-baseline.md</code>. Grading is human-in-the-loop, not structural: press <strong>▶ הרץ בצ'אט</strong> on a golden → the chat auto-runs the question tagging its <code>Query.golden_id</code> → 👍/👎 on the answer rolls into a per-golden pass-rate report. Inline grading directly on the eval page for past runs. Refused answers now support "✓ צדקת שסירבת" so guardrail bucket can be scored positively.</div>
         </div>
       </div>
     </div>
@@ -1217,10 +1217,11 @@
   </div>
 
   <div class="subtrack">
-    <h4>Cross-cutting: golden-set evaluation</h4>
+    <h4>Cross-cutting: golden-set evaluation <span style="color:#059669;">✓ Shipped 2026-07-15</span></h4>
     <ul>
-      <li>Expand golden-set coverage: single-hop lookup, multi-hop amendment trace, ambiguous / off-topic (guardrail tests).</li>
-      <li>Binary pass/fail per question; re-run after every change.</li>
+      <li>30 goldens covering all five buckets (single-hop bylaw lookup ×10, decision lookup ×6, multi-hop amendment trace ×5, procedural ×5, guardrail refusal ×4).</li>
+      <li>Human 👍/👎 per question, aggregated into a per-golden pass-rate report. Structural auto-scorer kept as a CLI endpoint (<code>POST /api/eval/run</code>) but removed from the UI — the human grade is the one that matters while expected filenames are still being tuned.</li>
+      <li>Inline grading of past chat runs directly on the eval page (no need to re-run). Editable "הערות פסיקה" per golden for grading rationale that persists.</li>
     </ul>
     <p class="deprio"><strong>Deprioritized:</strong> A/B testing (too much overhead for team size); recall as headline metric (vanity).</p>
   </div>
@@ -1841,7 +1842,7 @@
         <div class="tl-window">July 2026 — Takanon shipped ✓ · Meetings kickoff</div>
         <h4>Takanon in production (design partner: אל-רום) · Meetings unblocked</h4>
         <ul>
-          <li><span class="tl-owner tal">Tal</span><strong>Shipped 2026-07-14</strong> — password auth (PR #3 by Gil), identity extraction (Track 9), Takanon cut over to <code>auth.klaser.co.il</code>. Only remaining P0 is the golden-set baseline (docs/eval/).</li>
+          <li><span class="tl-owner tal">Tal</span><strong>Shipped 2026-07-14 – 2026-07-15</strong> — password auth (PR #3 by Gil), identity extraction (Track 9), Takanon cut over to <code>auth.klaser.co.il</code>, and the אל-רום golden-set baseline (30 questions, human-graded 👍/👎 with per-golden pass-rate report). All P0s now closed.</li>
           <li><span class="tl-owner talia">Talia</span>Onboards; audits Takanon UX; ships the first polish targets from the P1 list (welcome + tour, "no confident answer" state).</li>
           <li><span class="tl-owner gil">Gil</span>Unblocked — starts <code>klaser-meetings</code> repo against the live identity service.</li>
         </ul>
