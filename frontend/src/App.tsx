@@ -523,7 +523,7 @@ export default function App() {
           {tab === "authoritative" && <Authoritative />}
           {tab === "lexicon" && <Lexicon />}
           {tab === "amendments" && <Amendments />}
-          {tab === "eval" && <Eval />}
+          {tab === "eval" && <Eval onRunInChat={() => setTab("search")} />}
           {tab === "admin" && <Admin currentUserId={user.id} />}
         </main>
       </div>

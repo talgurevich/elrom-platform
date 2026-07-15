@@ -222,6 +222,29 @@ export type EvalSummary = {
   results: EvalRunResult[];
 };
 
+export type GoldenReportRow = {
+  golden_id: string;
+  question: string;
+  total_runs: number;
+  positive: number;
+  negative: number;
+  unmarked: number;
+  pass_rate: number | null;
+  last_run_at: string | null;
+  last_feedback: string | null;
+};
+
+export type GoldenReport = {
+  total_goldens: number;
+  goldens_with_runs: number;
+  goldens_with_feedback: number;
+  total_runs: number;
+  total_positive: number;
+  total_negative: number;
+  overall_pass_rate: number | null;
+  rows: GoldenReportRow[];
+};
+
 export type QueryListItem = {
   id: string;
   question: string;
@@ -501,10 +524,14 @@ export const api = {
   exitSwitch: () =>
     authRequest<CurrentUser>("/api/auth/exit-switch", { method: "POST" }),
 
-  search: (question: string, conversationId?: string | null) =>
+  search: (question: string, conversationId?: string | null, goldenId?: string | null) =>
     request<SearchResponse>("/api/search", {
       method: "POST",
-      body: JSON.stringify({ question, conversation_id: conversationId || null }),
+      body: JSON.stringify({
+        question,
+        conversation_id: conversationId || null,
+        golden_id: goldenId || null,
+      }),
     }),
 
   recentQuestions: (limit = 8) =>
@@ -520,13 +547,18 @@ export const api = {
   searchStream: async (
     question: string,
     onEvent: (ev: SearchStreamEvent) => void,
-    conversationId?: string | null
+    conversationId?: string | null,
+    goldenId?: string | null
   ): Promise<SearchResponse> => {
     const r = await fetch(`${BASE}/api/search/stream`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ question, conversation_id: conversationId || null }),
+      body: JSON.stringify({
+        question,
+        conversation_id: conversationId || null,
+        golden_id: goldenId || null,
+      }),
     });
     if (!r.ok || !r.body) {
       const body = await r.text().catch(() => "");
@@ -611,6 +643,9 @@ export const api = {
   deleteGolden: (id: string) =>
     request<{ status: string }>(`/api/eval/goldens/${id}`, { method: "DELETE" }),
   runEval: () => request<EvalSummary>("/api/eval/run", { method: "POST" }),
+  runSingleGolden: (goldenId: string) =>
+    request<EvalRunResult>(`/api/eval/run/${goldenId}`, { method: "POST" }),
+  goldenReport: () => request<GoldenReport>("/api/eval/report"),
 
   // Reviewer queue
   listQueries: (params?: { needs_review?: boolean; feedback_only?: boolean }) => {

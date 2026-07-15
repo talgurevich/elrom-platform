@@ -55,6 +55,10 @@ class SearchRequest(BaseModel):
     # conversation is created behind the scenes so every query is still
     # addressable as part of a thread.
     conversation_id: UUID | None = None
+    # When the caller is running this question as a test of a specific
+    # golden (e.g. the "run golden" panel), pass the golden's id so that
+    # 👍/👎 on the answer aggregates into the per-golden pass-rate report.
+    golden_id: UUID | None = None
 
 
 class SourceCitation(BaseModel):
@@ -209,6 +213,7 @@ async def search_pipeline(
     question: str,
     top_k: int,
     conversation_id: UUID | None = None,
+    golden_id: UUID | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """The single search pipeline, expressed as an async generator that yields
     progress events as it runs. Both the JSON endpoint and the SSE endpoint
@@ -297,6 +302,7 @@ async def search_pipeline(
                 answer=clar_message,
                 confidence="clarifying",
                 llm_used=True,
+                golden_id=golden_id,
                 retrieval_debug={
                     "triage_reason": triage.reason,
                     "canonical_query_guess": triage.canonical_query,
@@ -357,6 +363,7 @@ async def search_pipeline(
                 confidence="confident",
                 llm_used=False,
                 authoritative_answer_id=cached.id,
+                golden_id=golden_id,
                 retrieval_debug={"canonical_query": retrieval_query} if retrieval_query != question else None,
             )
             db.add(query_log)
@@ -401,6 +408,7 @@ async def search_pipeline(
                 answer="לא נמצאו מסמכים רלוונטיים במאגר.",
                 confidence="refused",
                 llm_used=False,
+                golden_id=golden_id,
                 retrieval_debug=debug_dict,
             )
             db.add(query_log)
@@ -468,6 +476,7 @@ async def search_pipeline(
                 answer=clar_message,
                 confidence="clarifying",
                 llm_used=True,
+                golden_id=golden_id,
                 retrieval_debug={**debug_dict, "self_clarification": True},
             )
             db.add(query_log)
@@ -531,6 +540,7 @@ async def search_pipeline(
             source_chunk_ids=[c.id for c in retrieved],
             confidence=llm_result.confidence,
             llm_used=True,
+            golden_id=golden_id,
             retrieval_debug=debug_dict,
         )
         db.add(query_log)
@@ -585,6 +595,7 @@ async def search(
         question=req.question,
         top_k=req.top_k,
         conversation_id=req.conversation_id,
+        golden_id=req.golden_id,
     ):
         if ev["type"] in ("done", "error"):
             last_event = ev
@@ -617,6 +628,7 @@ async def search_stream(
                 question=req.question,
                 top_k=req.top_k,
                 conversation_id=req.conversation_id,
+                golden_id=req.golden_id,
             ):
                 payload = json.dumps(ev, ensure_ascii=False)
                 yield f"data: {payload}\n\n".encode("utf-8")

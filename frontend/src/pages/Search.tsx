@@ -78,6 +78,10 @@ export default function Search() {
   const [stage, setStage] = useState<SearchPipelineStage | null>(null);
   const [stageDetail, setStageDetail] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  // When the user opened this page from the Eval panel with ?golden=&q=,
+  // we tag the *first* auto-run with that golden_id so 👍/👎 rolls into the
+  // per-golden pass-rate report. Follow-up free-form turns don't inherit it.
+  const pendingGoldenIdRef = useRef<string | null>(null);
 
   // Hydrate from ?c=<id> in the URL on mount, so refreshes preserve the thread.
   useEffect(() => {
@@ -129,6 +133,25 @@ export default function Search() {
     };
   }, []);
 
+  // Deep-link from Eval panel: ?golden=<id>&q=<question> — auto-run the
+  // question once, tagging the resulting Query with golden_id so 👍/👎
+  // aggregates into the golden-report. We strip both params from the URL
+  // after firing so a refresh doesn't re-run.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const goldenId = params.get("golden");
+    const q = params.get("q");
+    if (!goldenId || !q) return;
+    pendingGoldenIdRef.current = goldenId;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("golden");
+    url.searchParams.delete("q");
+    window.history.replaceState({}, "", url.toString());
+    void runSearch(q);
+    // Intentionally run-once on mount. runSearch reads latest refs/state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Mirror the conversation id into the URL (replaceState — don't pollute
   // history with a separate entry per turn).
   useEffect(() => {
@@ -153,6 +176,10 @@ export default function Search() {
     setStage(null);
     setStageDetail(null);
     setQuestion("");
+    // Consume the pending golden_id (if any) so it's only attached to the
+    // first run after landing on ?golden=. Follow-up turns run untagged.
+    const goldenId = pendingGoldenIdRef.current;
+    pendingGoldenIdRef.current = null;
     try {
       const fresh = await api.searchStream(
         q,
@@ -160,7 +187,8 @@ export default function Search() {
           if (ev.type === "stage") setStage(ev.stage);
           else if (ev.type === "detail") setStageDetail(ev.text);
         },
-        conversationId
+        conversationId,
+        goldenId
       );
       if (!conversationId) setConversationId(fresh.conversation_id);
       setTurns((prev) => [...prev, responseToTurn(fresh)]);

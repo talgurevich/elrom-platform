@@ -16,6 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func
+
 from app.db import get_db
 from app.models import GoldenQuestion, Query
 from app.services.identity import IdentityUser, current_user
@@ -257,11 +259,170 @@ def delete_golden(
     return {"status": "ok"}
 
 
+# ─── Manual pass-rate report ──────────────────────────────────────────
+#
+# Distinct from POST /run (the automated regression scorer). This endpoint
+# aggregates the human 👍/👎 signals on Query rows that were dispatched with
+# a golden_id — i.e. when a user runs a golden through the live chat and
+# marks the answer good/bad, that judgement flows into per-golden counts
+# and an overall pass rate.
+
+
+class GoldenReportRow(BaseModel):
+    golden_id: UUID
+    question: str
+    total_runs: int
+    positive: int
+    negative: int
+    unmarked: int
+    pass_rate: float | None  # positive / (positive + negative); None if never marked
+    last_run_at: datetime | None
+    last_feedback: str | None  # positive | negative | None
+
+
+class GoldenReport(BaseModel):
+    total_goldens: int
+    goldens_with_runs: int
+    goldens_with_feedback: int
+    total_runs: int
+    total_positive: int
+    total_negative: int
+    overall_pass_rate: float | None  # across all marked runs
+    rows: list[GoldenReportRow]
+
+
+@router.get("/report", response_model=GoldenReport)
+def golden_report(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> GoldenReport:
+    """Per-golden pass-rate from human 👍/👎 marks on live-chat runs.
+
+    A run counts only if the Query was issued with a golden_id (i.e. via
+    the "run golden" flow). Unmarked runs are shown but excluded from
+    pass_rate — no signal means no verdict, not a failure.
+    """
+    tenant_id = user.tenant_id
+
+    goldens = (
+        db.query(GoldenQuestion)
+        .filter(GoldenQuestion.tenant_id == tenant_id)
+        .order_by(GoldenQuestion.created_at.desc())
+        .all()
+    )
+
+    # One grouped query — (golden_id, feedback) → count + latest run.
+    agg_rows = (
+        db.query(
+            Query.golden_id,
+            Query.feedback,
+            func.count(Query.id).label("cnt"),
+            func.max(Query.created_at).label("last_at"),
+        )
+        .filter(Query.tenant_id == tenant_id, Query.golden_id.isnot(None))
+        .group_by(Query.golden_id, Query.feedback)
+        .all()
+    )
+
+    # golden_id → {"positive": n, "negative": n, "unmarked": n, "last_at": ts, "last_feedback": str|None}
+    per_golden: dict[UUID, dict] = {}
+    for r in agg_rows:
+        entry = per_golden.setdefault(
+            r.golden_id,
+            {"positive": 0, "negative": 0, "unmarked": 0, "last_at": None, "last_feedback": None},
+        )
+        bucket = r.feedback if r.feedback in ("positive", "negative") else "unmarked"
+        entry[bucket] += r.cnt
+        if entry["last_at"] is None or r.last_at > entry["last_at"]:
+            entry["last_at"] = r.last_at
+            entry["last_feedback"] = r.feedback  # may be None for the newest run
+
+    rows: list[GoldenReportRow] = []
+    total_positive = 0
+    total_negative = 0
+    total_runs = 0
+    goldens_with_runs = 0
+    goldens_with_feedback = 0
+    for g in goldens:
+        e = per_golden.get(g.id)
+        if e is None:
+            rows.append(
+                GoldenReportRow(
+                    golden_id=g.id,
+                    question=g.question,
+                    total_runs=0,
+                    positive=0,
+                    negative=0,
+                    unmarked=0,
+                    pass_rate=None,
+                    last_run_at=None,
+                    last_feedback=None,
+                )
+            )
+            continue
+        pos, neg, unm = e["positive"], e["negative"], e["unmarked"]
+        marked = pos + neg
+        total = pos + neg + unm
+        goldens_with_runs += 1
+        if marked:
+            goldens_with_feedback += 1
+        total_positive += pos
+        total_negative += neg
+        total_runs += total
+        rows.append(
+            GoldenReportRow(
+                golden_id=g.id,
+                question=g.question,
+                total_runs=total,
+                positive=pos,
+                negative=neg,
+                unmarked=unm,
+                pass_rate=(pos / marked) if marked else None,
+                last_run_at=e["last_at"],
+                last_feedback=e["last_feedback"],
+            )
+        )
+
+    overall_marked = total_positive + total_negative
+    overall_pass_rate = (total_positive / overall_marked) if overall_marked else None
+
+    return GoldenReport(
+        total_goldens=len(goldens),
+        goldens_with_runs=goldens_with_runs,
+        goldens_with_feedback=goldens_with_feedback,
+        total_runs=total_runs,
+        total_positive=total_positive,
+        total_negative=total_negative,
+        overall_pass_rate=overall_pass_rate,
+        rows=rows,
+    )
+
+
+@router.post("/run/{golden_id}", response_model=EvalRunResult)
+def run_single_golden(
+    golden_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> EvalRunResult:
+    """Score one golden. The frontend loops through the set calling this
+    once per golden, which keeps each request short enough to survive
+    Render's proxy timeout (the batch /run endpoint below dies on ~10+
+    goldens once each LLM call is added up)."""
+    g = db.get(GoldenQuestion, golden_id)
+    if g is None or g.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Golden not found")
+    result = _score_golden(db, user.tenant_id, g)
+    db.commit()
+    return result
+
+
 @router.post("/run", response_model=EvalRunSummary)
 def run_eval(
     db: Session = Depends(get_db),
     user: IdentityUser = Depends(current_user),
 ) -> EvalRunSummary:
+    """Batch runner. Kept for CLI/scripts, but the UI now uses /run/{id}
+    per-golden to avoid the proxy timeout on large golden sets."""
     tenant_id = user.tenant_id
     goldens = (
         db.query(GoldenQuestion)

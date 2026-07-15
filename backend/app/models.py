@@ -158,6 +158,11 @@ class Query(Base):
     authoritative_answer_id: Mapped[UUID | None] = mapped_column(
         SQLUUID(as_uuid=True), ForeignKey("authoritative_answers.id")
     )
+    # Set when this query was issued as a test-run of a specific golden question,
+    # so 👍/👎 on the answer can be aggregated per-golden for pass-rate reporting.
+    golden_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("golden_questions.id"), index=True
+    )
     feedback: Mapped[str | None] = mapped_column(String)  # positive | negative — from secretary 👍/👎
     reviewer_action: Mapped[str | None] = mapped_column(String)  # approved | edited | rejected
     failure_mode: Mapped[str | None] = mapped_column(String)  # retrieval_miss | wrong_generation | other

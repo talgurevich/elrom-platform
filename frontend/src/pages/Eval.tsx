@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type EvalSummary, type Golden, type GoldenInput } from "../lib/api";
+import {
+  api,
+  type EvalRunResult,
+  type EvalSummary,
+  type Golden,
+  type GoldenInput,
+  type GoldenReport,
+} from "../lib/api";
 
 function pct(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
@@ -130,12 +137,43 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-export default function Eval() {
+export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {}) {
   const [goldens, setGoldens] = useState<Golden[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<EvalSummary | null>(null);
+  const [runProgress, setRunProgress] = useState<{ done: number; total: number } | null>(null);
+  const [report, setReport] = useState<GoldenReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const loadReport = useCallback(async () => {
+    setReportLoading(true);
+    try {
+      setReport(await api.goldenReport());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReportLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadReport();
+  }, [loadReport]);
+
+  const runInChat = (g: Golden) => {
+    // Write ?golden=&q= to the URL and switch to the search tab. Search.tsx
+    // mounts, reads those params, auto-runs the question with golden_id, and
+    // strips both params so a refresh doesn't re-fire.
+    const url = new URL(window.location.href);
+    url.searchParams.set("golden", g.id);
+    url.searchParams.set("q", g.question);
+    // Clear any lingering conversation id so the run starts fresh.
+    url.searchParams.delete("c");
+    window.history.replaceState({}, "", url.toString());
+    onRunInChat?.();
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,14 +194,60 @@ export default function Eval() {
   const run = async () => {
     setRunning(true);
     setError(null);
+    setSummary(null);
+    // Per-golden loop: the batch /run endpoint dies on Render's proxy
+    // timeout once you have ~10+ goldens (each does embed + retrieve + LLM).
+    // Iterating client-side keeps each request short and gives real progress.
+    const results: EvalRunResult[] = [];
+    setRunProgress({ done: 0, total: goldens.length });
     try {
-      const result = await api.runEval();
-      setSummary(result);
+      for (let i = 0; i < goldens.length; i++) {
+        const g = goldens[i];
+        try {
+          const r = await api.runSingleGolden(g.id);
+          results.push(r);
+        } catch (err) {
+          setError(
+            `נכשל בשאלה "${g.question.slice(0, 60)}...": ${
+              err instanceof Error ? err.message : String(err)
+            }. הפעלה נעצרת.`
+          );
+          break;
+        }
+        setRunProgress({ done: i + 1, total: goldens.length });
+      }
+
+      if (results.length > 0) {
+        // Aggregate exactly like the backend batch endpoint used to.
+        const avg_score = results.reduce((a, r) => a + r.score, 0) / results.length;
+        const retScores = results
+          .map((r) => r.retrieval_score)
+          .filter((s): s is number => s !== null);
+        const kwScores = results
+          .map((r) => r.keyword_score)
+          .filter((s): s is number => s !== null);
+        const confCounts: Record<string, number> = {};
+        for (const r of results) {
+          confCounts[r.confidence] = (confCounts[r.confidence] || 0) + 1;
+        }
+        setSummary({
+          total: results.length,
+          avg_score,
+          avg_retrieval: retScores.length
+            ? retScores.reduce((a, b) => a + b, 0) / retScores.length
+            : null,
+          avg_keyword: kwScores.length
+            ? kwScores.reduce((a, b) => a + b, 0) / kwScores.length
+            : null,
+          confidence_counts: confCounts,
+          results,
+        });
+      }
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      await loadReport();
     } finally {
       setRunning(false);
+      setRunProgress(null);
     }
   };
 
@@ -193,7 +277,11 @@ export default function Eval() {
           disabled={running || goldens.length === 0}
           className="px-6 py-3 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition"
         >
-          {running ? "מריץ..." : `הרץ הערכה (${goldens.length})`}
+          {running
+            ? runProgress
+              ? `מריץ ${runProgress.done}/${runProgress.total}...`
+              : "מריץ..."
+            : `הרץ הערכה (${goldens.length})`}
         </button>
       </header>
 
@@ -237,6 +325,96 @@ export default function Eval() {
           </div>
         </div>
       )}
+
+      <div className="mb-8 p-5 bg-white border border-line">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs tracking-wider uppercase text-accent font-bold">
+            דוח פסיקות אנושי (👍/👎)
+          </div>
+          <button
+            onClick={loadReport}
+            disabled={reportLoading}
+            className="text-[11px] text-ink-soft hover:text-accent underline underline-offset-4"
+          >
+            {reportLoading ? "טוען..." : "רענן"}
+          </button>
+        </div>
+        {report === null ? (
+          <div className="text-ink-soft text-sm">טוען דוח...</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <div>
+                <div className={`text-3xl font-bold ${scoreColor(report.overall_pass_rate)}`}>
+                  {pct(report.overall_pass_rate)}
+                </div>
+                <div className="text-xs text-ink-soft">ציון פסיקה כולל</div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-ink">{report.total_runs}</div>
+                <div className="text-xs text-ink-soft">
+                  הרצות ({report.goldens_with_runs}/{report.total_goldens} שאלות)
+                </div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-emerald-700">
+                  {report.total_positive}
+                </div>
+                <div className="text-xs text-ink-soft">👍 נכון</div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-red-700">
+                  {report.total_negative}
+                </div>
+                <div className="text-xs text-ink-soft">👎 שגוי</div>
+              </div>
+            </div>
+            {report.rows.some((r) => r.total_runs > 0) && (
+              <div className="border-t border-line pt-3">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-ink-soft text-right">
+                      <th className="py-1 pl-2 font-semibold">שאלה</th>
+                      <th className="py-1 font-semibold">הרצות</th>
+                      <th className="py-1 font-semibold">👍</th>
+                      <th className="py-1 font-semibold">👎</th>
+                      <th className="py-1 font-semibold">ללא סימון</th>
+                      <th className="py-1 pr-2 font-semibold">ציון</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.rows
+                      .filter((r) => r.total_runs > 0)
+                      .map((r) => (
+                        <tr key={r.golden_id} className="border-t border-line/50">
+                          <td className="py-2 pl-2 text-ink truncate max-w-md">
+                            {r.question}
+                          </td>
+                          <td className="py-2 text-ink-soft">{r.total_runs}</td>
+                          <td className="py-2 text-emerald-700 font-semibold">
+                            {r.positive}
+                          </td>
+                          <td className="py-2 text-red-700 font-semibold">
+                            {r.negative}
+                          </td>
+                          <td className="py-2 text-ink-soft">{r.unmarked}</td>
+                          <td className={`py-2 pr-2 font-semibold ${scoreColor(r.pass_rate)}`}>
+                            {pct(r.pass_rate)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {report.total_runs === 0 && (
+              <div className="text-xs text-ink-soft">
+                עדיין לא רצו שאלות זהב בצ'אט. לחץ "▶ הרץ בצ'אט" על אחת מהשאלות למטה.
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <div className="mb-6">
         <NewGoldenForm onCreated={load} />
@@ -288,6 +466,13 @@ export default function Eval() {
                   ) : (
                     <div className="text-xs text-ink-soft">לא הורץ</div>
                   )}
+                  <button
+                    onClick={() => runInChat(g)}
+                    className="mt-2 block text-[11px] px-2 py-1 bg-accent/10 hover:bg-accent/20 text-accent font-semibold rounded"
+                    title="הרץ בצ'אט ותאסוף 👍/👎 לדוח"
+                  >
+                    ▶ הרץ בצ'אט
+                  </button>
                   <button
                     onClick={() => remove(g.id)}
                     className="mt-2 text-[10px] text-red-600 hover:text-red-700"
