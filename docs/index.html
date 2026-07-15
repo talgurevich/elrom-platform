@@ -897,7 +897,7 @@
   <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
   <div class="meta">
     <span>Owner<strong>Tal Gurevich</strong></span>
-    <span>Updated<strong>2026-07-14</strong></span>
+    <span>Updated<strong>2026-07-15</strong></span>
     <span>Status<strong>Draft for discussion</strong></span>
   </div>
 </section>
@@ -1777,15 +1777,17 @@
   </div>
 
   <div class="subtrack">
-    <h3><span class="sub-num">9.6</span> Migration order</h3>
+    <h3><span class="sub-num">9.6</span> Migration order — <span style="color:#059669;">✓ Shipped 2026-07-14</span></h3>
     <ol>
-      <li><strong>Stand up <code>klaser-identity</code></strong> — port auth routes, users/tenants tables from Takanon backend. Same schema, new home. ~1 week Tal.</li>
-      <li><strong>One-shot data migration</strong> — dump users + tenants + auth_tokens from Takanon DB into identity DB.</li>
-      <li><strong>Point Takanon backend at identity</strong> — swap local auth code for HTTP calls; keep the same session cookie so nobody gets logged out.</li>
-      <li><strong>Widen cookie scope to <code>.klaser.co.il</code></strong>.</li>
-      <li><strong>Gil starts <code>klaser-meetings</code></strong> against the live identity service. No temporary local auth — ever.</li>
+      <li><strong>✓ Stood up <code>klaser-identity</code></strong> — new repo, new Render project, own Postgres, live at <code>auth.klaser.co.il</code>. Auth routes ported from Takanon.</li>
+      <li><strong>✓ One-shot data migration</strong> — copied tenants + users from Takanon DB into identity DB with UUIDs preserved. Cookie renamed from <code>elrom_session</code> to <code>klaser_session</code>.</li>
+      <li><strong>✓ Pointed Takanon backend at identity</strong> — every request now flows through <code>/api/introspect</code>. Local auth routes deleted (<code>routes/auth.py</code>, <code>services/security.py</code>, <code>services/tokens.py</code>).</li>
+      <li><strong>✓ Widened cookie scope to <code>.klaser.co.il</code></strong> — spans <code>auth</code>, <code>api</code>, and <code>www</code> subdomains.</li>
+      <li><strong>Custom domain for Takanon backend</strong> — <code>api.klaser.co.il</code> live, CNAME'd to Render. Cookie flows because it's on a klaser.co.il subdomain.</li>
+      <li><strong>Six admin service endpoints added</strong> on identity — list/get/invite/patch/delete/resend for users, list/get/create for tenants. Admin panel reads + writes now flow through identity end-to-end.</li>
+      <li><strong>Gil unblocked to start <code>klaser-meetings</code></strong> against the live identity service.</li>
     </ol>
-    <div class="benefit"><strong>Rollback.</strong> Every step above is reversible until step 2 completes. Once data is migrated, identity DB is authoritative.</div>
+    <div class="benefit"><strong>What still exists but doesn't matter.</strong> Takanon DB still has copies of <code>users</code>, <code>tenants</code>, <code>auth_tokens</code> from the migration. Nothing reads from them anymore. A follow-up alembic migration will drop them once we've had a few days of clean identity operation.</div>
   </div>
 
   <div class="subtrack">
@@ -1836,12 +1838,12 @@
 
       <div class="tl-phase" data-phase="now">
         <span class="tl-tag">Now</span>
-        <div class="tl-window">July 2026 — Takanon go-live</div>
-        <h4>Ship Takanon to production (design partner: אל-רום)</h4>
+        <div class="tl-window">July 2026 — Takanon shipped ✓ · Meetings kickoff</div>
+        <h4>Takanon in production (design partner: אל-רום) · Meetings unblocked</h4>
         <ul>
-          <li><span class="tl-owner tal">Tal</span>Close remaining P0s — email/password auth, golden-set baseline. Takanon live end of July.</li>
-          <li><span class="tl-owner talia">Talia</span>Onboards fast; audits Takanon UX; ships the first polish targets from the P1 list (welcome + tour, "no confident answer" state) alongside launch.</li>
-          <li><span class="tl-owner gil">Gil</span>Onboards; scopes and starts Klaser Meetings v1 (audio → draft protocol) in parallel.</li>
+          <li><span class="tl-owner tal">Tal</span><strong>Shipped 2026-07-14</strong> — password auth (PR #3 by Gil), identity extraction (Track 9), Takanon cut over to <code>auth.klaser.co.il</code>. Only remaining P0 is the golden-set baseline (docs/eval/).</li>
+          <li><span class="tl-owner talia">Talia</span>Onboards; audits Takanon UX; ships the first polish targets from the P1 list (welcome + tour, "no confident answer" state).</li>
+          <li><span class="tl-owner gil">Gil</span>Unblocked — starts <code>klaser-meetings</code> repo against the live identity service.</li>
         </ul>
       </div>
 
