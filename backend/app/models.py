@@ -35,6 +35,12 @@ class Document(Base):
     # superseded_by_id says "this doc has been wholly replaced by another".
     parent_doc_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True), ForeignKey("documents.id"))
     source_uri: Mapped[str | None] = mapped_column(String)
+    # SHA-256 hex of the raw uploaded bytes. Set at ingest; used to reject
+    # duplicate uploads of the same file (even under a different filename)
+    # within a tenant. Nullable because pre-2026-07-15 rows have no hash
+    # until the backfill script fills them in — those keep working, they
+    # just can't participate in the dedup check.
+    content_sha256: Mapped[str | None] = mapped_column(String(64))
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
     extractor: Mapped[str | None] = mapped_column(String)

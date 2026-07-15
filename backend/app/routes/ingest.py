@@ -1,5 +1,6 @@
 """Ingest endpoints — text body or file upload, both share the same indexing path."""
 import asyncio
+import hashlib
 import tempfile
 from pathlib import Path
 from uuid import UUID
@@ -178,9 +179,33 @@ async def ingest_upload(
 
     resolved_tenant = user.tenant_id
 
+    # Read the raw upload bytes once — we need them for the dedup hash check
+    # BEFORE spending 30-60s on extraction, and again later to persist the
+    # original file to disk via save_original().
+    contents = await file.read()
+
+    # Duplicate-upload guard. Same tenant + same content hash = same file
+    # uploaded again (typically under a different display name). Refuse
+    # with 409 pointing at the existing document rather than silently
+    # creating a second row with fresh chunks + embeddings.
+    content_sha256 = hashlib.sha256(contents).hexdigest()
+    existing = (
+        db.query(Document)
+        .filter(
+            Document.tenant_id == resolved_tenant,
+            Document.content_sha256 == content_sha256,
+        )
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(
+            409,
+            f"קובץ עם תוכן זהה כבר קיים במאגר: {existing.filename!r} "
+            f"(מזהה {existing.id}). לא בוצעה קליטה כפולה.",
+        )
+
     # Save to a temp file so the existing extraction service can use Path-based APIs
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        contents = await file.read()
         tmp.write(contents)
         tmp_path = Path(tmp.name)
 
@@ -231,6 +256,7 @@ async def ingest_upload(
         chars_extracted=len(extraction.text),
         extraction_partial=extraction.partial,
         extraction_note=extraction.note,
+        content_sha256=content_sha256,
     )
     db.add(doc)
     db.flush()
