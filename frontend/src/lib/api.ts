@@ -643,6 +643,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body || {}),
     }),
+  updateGolden: (id: string, body: { notes?: string | null }) =>
+    request<Golden>(`/api/eval/goldens/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   deleteGolden: (id: string) =>
     request<{ status: string }>(`/api/eval/goldens/${id}`, { method: "DELETE" }),
   runEval: () => request<EvalSummary>("/api/eval/run", { method: "POST" }),

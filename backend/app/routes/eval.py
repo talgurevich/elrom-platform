@@ -245,6 +245,32 @@ def promote_query_to_golden(
     return _to_out(g)
 
 
+class GoldenPatch(BaseModel):
+    """Only the fields we currently expose for editing. `notes` is the
+    user-owned scratch space for grading rationale after running the
+    question — the seed populates it initially with a bucket tag, but
+    the user can overwrite freely."""
+
+    notes: str | None = None
+
+
+@router.patch("/goldens/{golden_id}", response_model=GoldenOut)
+def update_golden(
+    golden_id: UUID,
+    body: GoldenPatch,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> GoldenOut:
+    g = db.get(GoldenQuestion, golden_id)
+    if g is None or g.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Golden not found")
+    if body.notes is not None:
+        g.notes = body.notes.strip() or None
+    db.commit()
+    db.refresh(g)
+    return _to_out(g)
+
+
 @router.delete("/goldens/{golden_id}")
 def delete_golden(
     golden_id: UUID,

@@ -18,6 +18,63 @@ function scoreColor(n: number | null): string {
   return "text-red-700";
 }
 
+function NotesEditor({
+  goldenId,
+  initial,
+  onSaved,
+}: {
+  goldenId: string;
+  initial: string | null;
+  onSaved: (next: string | null) => void;
+}) {
+  const [value, setValue] = useState(initial ?? "");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValue(initial ?? "");
+  }, [initial]);
+
+  const save = async () => {
+    if (value === (initial ?? "")) return;
+    setStatus("saving");
+    setErrorMsg(null);
+    try {
+      const updated = await api.updateGolden(goldenId, { notes: value });
+      onSaved(updated.notes);
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 1200);
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-2 mb-1">
+        <label className="text-[10px] tracking-wider uppercase text-ink-soft font-bold">
+          הערות פסיקה
+        </label>
+        <span className="text-[10px] text-ink-soft">
+          {status === "saving" && "שומר..."}
+          {status === "saved" && "✓ נשמר"}
+          {status === "error" && `⚠ ${errorMsg}`}
+        </span>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        rows={2}
+        placeholder="הערות משלך אחרי בדיקת התשובה — למה עברה/נכשלה, מה לתקן, קונטקסט לפעם הבאה..."
+        className="w-full px-2 py-1.5 border border-line-strong hover:border-line-strong focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none text-xs text-ink leading-relaxed rounded resize-y bg-white"
+      />
+    </div>
+  );
+}
+
+
 function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<GoldenInput>({ question: "" });
@@ -339,9 +396,6 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-base font-semibold text-ink">{g.question}</div>
-                  {g.notes && (
-                    <div className="text-xs text-ink-soft mt-1">{g.notes}</div>
-                  )}
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-soft">
                     {g.expected_doc_filenames && g.expected_doc_filenames.length > 0 && (
                       <span>
@@ -352,6 +406,15 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
                       <span>🔑 {g.expected_keywords.join(", ")}</span>
                     )}
                   </div>
+                  <NotesEditor
+                    goldenId={g.id}
+                    initial={g.notes}
+                    onSaved={(next) =>
+                      setGoldens((prev) =>
+                        prev.map((x) => (x.id === g.id ? { ...x, notes: next } : x))
+                      )
+                    }
+                  />
                   {needsGrading && reportRow && (
                     <div className="mt-3 p-3 border border-amber-300 bg-amber-50/60 rounded">
                       <div className="text-[10px] tracking-wider uppercase text-amber-800 font-bold mb-1">
