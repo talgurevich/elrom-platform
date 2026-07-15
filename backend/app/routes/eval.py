@@ -278,6 +278,11 @@ class GoldenReportRow(BaseModel):
     pass_rate: float | None  # positive / (positive + negative); None if never marked
     last_run_at: datetime | None
     last_feedback: str | None  # positive | negative | None
+    # Latest run's full details, so the eval UI can render inline 👍/👎 on
+    # goldens that were already run in chat but never marked.
+    latest_query_id: UUID | None = None
+    latest_answer: str | None = None
+    latest_confidence: str | None = None
 
 
 class GoldenReport(BaseModel):
@@ -324,6 +329,23 @@ def golden_report(
         .all()
     )
 
+    # Fetch the latest Query row per golden (full row, not just aggregate) so
+    # the UI can render inline 👍/👎 grading for runs that were done in chat
+    # but not marked at the time. Uses DISTINCT ON — Postgres-specific but
+    # this file already assumes Postgres via pgvector etc.
+    from sqlalchemy import desc
+    latest_query_rows = (
+        db.query(Query.id, Query.golden_id, Query.answer, Query.confidence, Query.created_at)
+        .filter(Query.tenant_id == tenant_id, Query.golden_id.isnot(None))
+        .order_by(Query.golden_id, desc(Query.created_at))
+        .distinct(Query.golden_id)
+        .all()
+    )
+    latest_by_golden = {
+        r.golden_id: {"id": r.id, "answer": r.answer, "confidence": r.confidence}
+        for r in latest_query_rows
+    }
+
     # golden_id → {"positive": n, "negative": n, "unmarked": n, "last_at": ts, "last_feedback": str|None}
     per_golden: dict[UUID, dict] = {}
     for r in agg_rows:
@@ -369,6 +391,7 @@ def golden_report(
         total_positive += pos
         total_negative += neg
         total_runs += total
+        latest = latest_by_golden.get(g.id)
         rows.append(
             GoldenReportRow(
                 golden_id=g.id,
@@ -380,6 +403,9 @@ def golden_report(
                 pass_rate=(pos / marked) if marked else None,
                 last_run_at=e["last_at"],
                 last_feedback=e["last_feedback"],
+                latest_query_id=latest["id"] if latest else None,
+                latest_answer=latest["answer"] if latest else None,
+                latest_confidence=latest["confidence"] if latest else None,
             )
         )
 

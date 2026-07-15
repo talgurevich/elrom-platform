@@ -232,6 +232,9 @@ export type GoldenReportRow = {
   pass_rate: number | null;
   last_run_at: string | null;
   last_feedback: string | null;
+  latest_query_id: string | null;
+  latest_answer: string | null;
+  latest_confidence: string | null;
 };
 
 export type GoldenReport = {

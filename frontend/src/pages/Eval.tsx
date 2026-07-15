@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   api,
-  type EvalRunResult,
-  type EvalSummary,
   type Golden,
   type GoldenInput,
   type GoldenReport,
@@ -140,10 +138,7 @@ function NewGoldenForm({ onCreated }: { onCreated: () => void }) {
 export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {}) {
   const [goldens, setGoldens] = useState<Golden[]>([]);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<EvalSummary | null>(null);
-  const [runProgress, setRunProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<GoldenReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
@@ -161,6 +156,15 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
   useEffect(() => {
     void loadReport();
   }, [loadReport]);
+
+  const gradeRun = async (queryId: string, feedback: "positive" | "negative") => {
+    try {
+      await api.feedback(queryId, feedback);
+      await loadReport();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const runInChat = (g: Golden) => {
     // Write ?golden=&q= to the URL and switch to the search tab. Search.tsx
@@ -191,66 +195,6 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
     load();
   }, [load]);
 
-  const run = async () => {
-    setRunning(true);
-    setError(null);
-    setSummary(null);
-    // Per-golden loop: the batch /run endpoint dies on Render's proxy
-    // timeout once you have ~10+ goldens (each does embed + retrieve + LLM).
-    // Iterating client-side keeps each request short and gives real progress.
-    const results: EvalRunResult[] = [];
-    setRunProgress({ done: 0, total: goldens.length });
-    try {
-      for (let i = 0; i < goldens.length; i++) {
-        const g = goldens[i];
-        try {
-          const r = await api.runSingleGolden(g.id);
-          results.push(r);
-        } catch (err) {
-          setError(
-            `נכשל בשאלה "${g.question.slice(0, 60)}...": ${
-              err instanceof Error ? err.message : String(err)
-            }. הפעלה נעצרת.`
-          );
-          break;
-        }
-        setRunProgress({ done: i + 1, total: goldens.length });
-      }
-
-      if (results.length > 0) {
-        // Aggregate exactly like the backend batch endpoint used to.
-        const avg_score = results.reduce((a, r) => a + r.score, 0) / results.length;
-        const retScores = results
-          .map((r) => r.retrieval_score)
-          .filter((s): s is number => s !== null);
-        const kwScores = results
-          .map((r) => r.keyword_score)
-          .filter((s): s is number => s !== null);
-        const confCounts: Record<string, number> = {};
-        for (const r of results) {
-          confCounts[r.confidence] = (confCounts[r.confidence] || 0) + 1;
-        }
-        setSummary({
-          total: results.length,
-          avg_score,
-          avg_retrieval: retScores.length
-            ? retScores.reduce((a, b) => a + b, 0) / retScores.length
-            : null,
-          avg_keyword: kwScores.length
-            ? kwScores.reduce((a, b) => a + b, 0) / kwScores.length
-            : null,
-          confidence_counts: confCounts,
-          results,
-        });
-      }
-      await load();
-      await loadReport();
-    } finally {
-      setRunning(false);
-      setRunProgress(null);
-    }
-  };
-
   const remove = async (id: string) => {
     if (!confirm("למחוק שאלת זהב?")) return;
     await api.deleteGolden(id);
@@ -259,30 +203,17 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
 
   return (
     <>
-      <header className="mb-10 flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
-            הערכה
-          </div>
-          <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
-            שאלות זהב
-          </h1>
-          <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
-            מאגר שאלות מבחן להרצה חוזרת. מודד דיוק שליפה וניסוח אחרי כל
-            שינוי במערכת.
-          </p>
+      <header className="mb-10">
+        <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+          הערכה
         </div>
-        <button
-          onClick={run}
-          disabled={running || goldens.length === 0}
-          className="px-6 py-3 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition"
-        >
-          {running
-            ? runProgress
-              ? `מריץ ${runProgress.done}/${runProgress.total}...`
-              : "מריץ..."
-            : `הרץ הערכה (${goldens.length})`}
-        </button>
+        <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+          שאלות זהב
+        </h1>
+        <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+          מאגר שאלות מבחן. לחץ "▶ הרץ בצ'אט" על שאלה, סמן 👍/👎 על התשובה,
+          ודוח הפסיקות למטה יתעדכן. כך מודדים איכות אחרי שינוי במערכת.
+        </p>
       </header>
 
       {error && (
@@ -291,40 +222,6 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
         </div>
       )}
 
-      {summary && (
-        <div className="mb-8 p-5 bg-white border border-line  animate-fade-up">
-          <div className="text-xs tracking-wider uppercase text-accent font-bold mb-3">
-            תוצאות אחרונות
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <div className="text-3xl font-bold text-ink">{pct(summary.avg_score)}</div>
-              <div className="text-xs text-ink-soft">ציון כללי</div>
-            </div>
-            <div>
-              <div className={`text-3xl font-bold ${scoreColor(summary.avg_retrieval)}`}>
-                {pct(summary.avg_retrieval)}
-              </div>
-              <div className="text-xs text-ink-soft">שליפה</div>
-            </div>
-            <div>
-              <div className={`text-3xl font-bold ${scoreColor(summary.avg_keyword)}`}>
-                {pct(summary.avg_keyword)}
-              </div>
-              <div className="text-xs text-ink-soft">מילות מפתח</div>
-            </div>
-            <div>
-              <div className="text-sm text-ink-soft flex flex-wrap gap-x-3 gap-y-1 pt-2">
-                {Object.entries(summary.confidence_counts).map(([k, v]) => (
-                  <span key={k}>
-                    <span className="font-semibold text-ink">{v}</span> {k}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="mb-8 p-5 bg-white border border-line">
         <div className="flex items-center justify-between mb-3">
@@ -428,7 +325,13 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
         </div>
       ) : (
         <div className="space-y-3">
-          {goldens.map((g) => (
+          {goldens.map((g) => {
+            const reportRow = report?.rows.find((r) => r.golden_id === g.id);
+            const needsGrading =
+              reportRow?.latest_query_id &&
+              reportRow?.last_feedback === null &&
+              reportRow?.latest_answer;
+            return (
             <div
               key={g.id}
               className="p-4 bg-white border border-line "
@@ -449,23 +352,55 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
                       <span>🔑 {g.expected_keywords.join(", ")}</span>
                     )}
                   </div>
+                  {needsGrading && reportRow && (
+                    <div className="mt-3 p-3 border border-amber-300 bg-amber-50/60 rounded">
+                      <div className="text-[10px] tracking-wider uppercase text-amber-800 font-bold mb-1">
+                        הרצה אחרונה — ממתינה לפסיקה ({reportRow.latest_confidence})
+                      </div>
+                      <div className="text-xs text-ink whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                        {reportRow.latest_answer}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            reportRow.latest_query_id &&
+                            gradeRun(reportRow.latest_query_id, "positive")
+                          }
+                          className="px-3 py-1 text-xs font-semibold border-2 border-ink bg-surface hover:bg-ink hover:text-surface transition"
+                        >
+                          👍 נכון
+                        </button>
+                        <button
+                          onClick={() =>
+                            reportRow.latest_query_id &&
+                            gradeRun(reportRow.latest_query_id, "negative")
+                          }
+                          className="px-3 py-1 text-xs font-semibold border-2 border-accent text-accent bg-surface hover:bg-accent hover:text-surface transition"
+                        >
+                          👎 שגוי
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right shrink-0">
-                  {g.last_run_at ? (
-                    <>
-                      <div className={`text-2xl font-bold ${scoreColor(g.last_score)}`}>
-                        {pct(g.last_score)}
-                      </div>
-                      <div className="text-[10px] text-ink-soft">
-                        שליפה {pct(g.last_retrieval_score)} · מילים {pct(g.last_keyword_score)}
-                      </div>
-                      <div className="text-[10px] text-ink-soft">
-                        {g.last_confidence}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-xs text-ink-soft">לא הורץ</div>
-                  )}
+                  {(() => {
+                    const row = report?.rows.find((r) => r.golden_id === g.id);
+                    if (!row || row.total_runs === 0) {
+                      return <div className="text-xs text-ink-soft">לא הורץ</div>;
+                    }
+                    return (
+                      <>
+                        <div className={`text-2xl font-bold ${scoreColor(row.pass_rate)}`}>
+                          {pct(row.pass_rate)}
+                        </div>
+                        <div className="text-[10px] text-ink-soft">
+                          👍 {row.positive} · 👎 {row.negative}
+                          {row.unmarked > 0 ? ` · ${row.unmarked} ללא סימון` : ""}
+                        </div>
+                      </>
+                    );
+                  })()}
                   <button
                     onClick={() => runInChat(g)}
                     className="mt-2 block text-[11px] px-2 py-1 bg-accent/10 hover:bg-accent/20 text-accent font-semibold rounded"
@@ -482,7 +417,8 @@ export default function Eval({ onRunInChat }: { onRunInChat?: () => void } = {})
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

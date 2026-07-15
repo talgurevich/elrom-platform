@@ -498,16 +498,30 @@ function TurnView({
               </p>
               <p className="mt-5 text-sm text-ink-soft leading-relaxed">
                 המערכת מעדיפה להודות שאין לה תשובה מבוססת על פני לענות בניחוש.
-                אם הנושא באמת אמור להיות במסמכי הארגון —{" "}
-                <button
-                  onClick={() => onFeedback("negative")}
-                  disabled={turn.feedback !== null}
-                  className="underline underline-offset-4 hover:text-accent disabled:opacity-60 disabled:pointer-events-none"
-                >
-                  דווחו למנהל
-                </button>{" "}
-                כדי שיבדוק את השליפה.
               </p>
+              {turn.feedback === null && !turn.retrying && (
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => onFeedback("positive")}
+                    className="px-4 py-2 text-sm font-semibold border-2 border-ink bg-surface hover:bg-ink hover:text-surface transition"
+                    title="הסירוב היה נכון — הנושא באמת מחוץ למאגר"
+                  >
+                    ✓ צדקת שסירבת
+                  </button>
+                  <button
+                    onClick={() => onFeedback("negative")}
+                    className="px-4 py-2 text-sm font-semibold border-2 border-accent text-accent bg-surface hover:bg-accent hover:text-surface transition"
+                    title="הקורפוס יודע את התשובה — המערכת פשוט לא מצאה. יופיע בתור הבאגים של המנהל."
+                  >
+                    ✗ התשובה קיימת במסמכים — דווח למנהל
+                  </button>
+                </div>
+              )}
+              {turn.feedback === "positive" && (
+                <div className="mt-4 px-3 py-2 bg-surface border-r-4 border-ink text-sm text-ink">
+                  ✓ סומן — סירוב נכון.
+                </div>
+              )}
               {turn.feedback === "negative" && (
                 <div className="mt-4 px-3 py-2 bg-line/40 border-r-4 border-accent text-sm text-ink">
                   ✗ דווח למנהל. המערכת תיבחן ותעודכן.
