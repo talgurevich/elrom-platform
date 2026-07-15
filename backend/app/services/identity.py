@@ -256,6 +256,7 @@ class IdentityServiceClient:
         role: str,
         display_name: str | None = None,
         invited_by: str | None = None,
+        is_super_admin: bool = False,
     ) -> dict:
         r = httpx.post(
             f"{self.base_url}/api/service/users",
@@ -266,6 +267,7 @@ class IdentityServiceClient:
                 "role": role,
                 "display_name": display_name,
                 "invited_by": invited_by,
+                "is_super_admin": is_super_admin,
             },
             timeout=10.0,
         )

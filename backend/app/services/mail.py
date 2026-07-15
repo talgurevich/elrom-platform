@@ -1,17 +1,21 @@
 """Transactional email via Resend.
 
-Callers today:
-  - Admin panel → create user → welcome / invite email
-  - Search → mark-broken → alert to all super-admins
-  - Weekly cron → lexicon digest to every super-admin
+Callers today (all Takanon-side domain email):
+  - Search → mark-broken → alert to all super-admins.
+  - Landing page contact form → send_contact_message.
+  - Weekly cron → lexicon digest to every super-admin.
 
-Public entry points: ``send_registration_invite``, ``send_welcome_email``,
-``send_password_reset_email``, ``send_broken_answer_alert``,
-``send_lexicon_digest``. All are safe to call from a FastAPI BackgroundTask
-(or a cron) — they never raise, so a mail outage never breaks the caller.
+Auth email (invite, welcome, password reset) moved to the identity
+service on 2026-07-14 — those helpers now live in
+`klaser-identity/app/services/mail.py`, not here.
 
-If ``RESEND_API_KEY`` is empty (local dev without keys), we log the payload
-and return without hitting the network.
+Public entry points: ``send_broken_answer_alert``,
+``send_contact_message``, ``send_lexicon_digest``. All are safe to call
+from a FastAPI BackgroundTask (or a cron) — they never raise, so a
+mail outage never breaks the caller.
+
+If ``RESEND_API_KEY`` is empty (local dev without keys), we log the
+payload and return without hitting the network.
 """
 from __future__ import annotations
 
@@ -112,160 +116,6 @@ def _wrap_html(body: str) -> str:
   </div>
 </body>
 </html>"""
-
-
-# ─── Invite / registration ──────────────────────────────────────────────
-
-
-def send_registration_invite(
-    *,
-    to_email: str,
-    display_name: str | None,
-    tenant_name: str,
-    role: str,
-    invited_by: str | None,
-    registration_url: str,
-    ttl_days: int,
-) -> None:
-    """Sent when the super-admin adds a new user to a tenant. Carries a
-    single-use, expiring link to set a password; Google sign-in with the
-    same email also works without registering (unchanged behavior)."""
-    role_labels = {"admin": "מנהל", "reviewer": "בודק", "secretary": "מזכיר/ה"}
-    role_he = role_labels.get(role, role)
-
-    greeting_name = (display_name or "").strip() or to_email.split("@")[0]
-
-    html_body = _wrap_html(
-        f"""
-        <div class="tag">ברוכים הבאים ל-Klaser</div>
-        <h1>שלום {html.escape(greeting_name)}</h1>
-        <p>הוספת חשבון בארגון <strong>{html.escape(tenant_name)}</strong> ב-Klaser
-        {"על ידי " + html.escape(invited_by) if invited_by else ""}.</p>
-        <p>התפקיד שלך במערכת: <strong>{role_he}</strong>.</p>
-        <p>Klaser הוא כלי לזיכרון ארגוני — שאלה בעברית, תשובה מבוססת מקור מתוך
-        המסמכים המחייבים של הארגון (תקנון, פרוטוקולים, החלטות).</p>
-
-        <p style="margin: 32px 0;">
-          <a href="{html.escape(registration_url)}" class="btn">הגדרת חשבון וסיסמה ←</a>
-        </p>
-
-        <p class="muted">
-          הקישור תקף ל-{ttl_days} ימים ומיועד לכתובת <strong>{html.escape(to_email)}</strong> בלבד.
-          אפשר גם להתחבר ישירות עם חשבון Google של אותה כתובת, בלי להגדיר סיסמה.
-        </p>
-        """
-    )
-
-    text_body = (
-        f"שלום {greeting_name},\n\n"
-        f"נוספת לארגון {tenant_name} ב-Klaser"
-        + (f" על ידי {invited_by}" if invited_by else "")
-        + f".\nהתפקיד שלך: {role_he}.\n\n"
-        f"הגדרת חשבון וסיסמה: {registration_url}\n"
-        f"(הקישור תקף ל-{ttl_days} ימים ומיועד לכתובת {to_email} בלבד)\n\n"
-        f"אפשר גם להתחבר ישירות עם חשבון Google של אותה כתובת, בלי להגדיר סיסמה.\n\n"
-        f"— Klaser"
-    )
-
-    _send(
-        Message(
-            to=to_email,
-            subject=f"ברוכים הבאים ל-Klaser · {tenant_name}",
-            html_body=html_body,
-            text_body=text_body,
-        )
-    )
-
-
-def send_welcome_email(
-    *,
-    to_email: str,
-    display_name: str | None,
-    tenant_name: str,
-) -> None:
-    """Sent right after a user completes email/password registration."""
-    greeting_name = (display_name or "").strip() or to_email.split("@")[0]
-    app_url = settings.klaser_app_url
-
-    html_body = _wrap_html(
-        f"""
-        <div class="tag">Klaser</div>
-        <h1>ברוך הבא, {html.escape(greeting_name)}</h1>
-        <p>החשבון שלך בארגון <strong>{html.escape(tenant_name)}</strong> מוכן —
-        אפשר להתחיל לשאול שאלות.</p>
-
-        <p style="margin: 32px 0;">
-          <a href="{html.escape(app_url)}" class="btn">כניסה ל-Klaser ←</a>
-        </p>
-        """
-    )
-
-    text_body = (
-        f"ברוך הבא, {greeting_name}\n\n"
-        f"החשבון שלך בארגון {tenant_name} מוכן — אפשר להתחיל לשאול שאלות.\n\n"
-        f"כניסה ל-Klaser: {app_url}\n\n"
-        f"— Klaser"
-    )
-
-    _send(
-        Message(
-            to=to_email,
-            subject=f"ברוך הבא ל-Klaser · {tenant_name}",
-            html_body=html_body,
-            text_body=text_body,
-        )
-    )
-
-
-def send_password_reset_email(
-    *,
-    to_email: str,
-    display_name: str | None,
-    reset_url: str,
-    ttl_hours: int,
-) -> None:
-    """Sent when a user (or anyone claiming their inbox) requests a
-    password reset. Caller is responsible for only calling this when the
-    email actually belongs to an existing user — the endpoint itself
-    returns a generic response either way to avoid leaking account
-    existence."""
-    greeting_name = (display_name or "").strip() or to_email.split("@")[0]
-
-    html_body = _wrap_html(
-        f"""
-        <div class="tag">Klaser</div>
-        <h1>איפוס סיסמה</h1>
-        <p>שלום {html.escape(greeting_name)}, קיבלנו בקשה לאיפוס הסיסמה
-        לחשבון שלך ב-Klaser.</p>
-
-        <p style="margin: 32px 0;">
-          <a href="{html.escape(reset_url)}" class="btn">בחירת סיסמה חדשה ←</a>
-        </p>
-
-        <p class="muted">
-          הקישור תקף לשעה הקרובה. אם לא ביקשת איפוס סיסמה, אפשר להתעלם
-          מהמייל הזה — הסיסמה שלך לא תשתנה.
-        </p>
-        """
-    )
-
-    text_body = (
-        f"שלום {greeting_name},\n\n"
-        f"קיבלנו בקשה לאיפוס הסיסמה לחשבון שלך ב-Klaser.\n\n"
-        f"בחירת סיסמה חדשה: {reset_url}\n"
-        f"(הקישור תקף ל-{ttl_hours} שעות)\n\n"
-        f"אם לא ביקשת איפוס סיסמה, אפשר להתעלם מהמייל הזה.\n\n"
-        f"— Klaser"
-    )
-
-    _send(
-        Message(
-            to=to_email,
-            subject="איפוס סיסמה · Klaser",
-            html_body=html_body,
-            text_body=text_body,
-        )
-    )
 
 
 # ─── Broken-answer alert ────────────────────────────────────────────────

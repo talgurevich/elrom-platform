@@ -312,8 +312,8 @@ def list_users(
             is_super_admin=bool(u.get("is_super_admin", False)),
             tenant_id=u["tenant_id"],
             tenant_name=tenant_names.get(u["tenant_id"]),
-            has_password=False,
-            created_at="",
+            has_password=bool(u.get("has_password", False)),
+            created_at=(u.get("created_at") or ""),
         )
         for u in users
     ]
@@ -332,14 +332,6 @@ def add_user(
     once /admin/users is rewired to read from identity)."""
     if req.role not in VALID_ROLES:
         raise HTTPException(400, f"Invalid role. Allowed: {sorted(VALID_ROLES)}")
-    # is_super_admin isn't supported on invite yet — identity handles it
-    # via a separate `PATCH` we haven't wired here. Fail loudly rather
-    # than silently drop the flag.
-    if req.is_super_admin:
-        raise HTTPException(
-            400,
-            "הרשאת super-admin לא נתמכת בהזמנה — יש להעניק ידנית לאחר יצירה.",
-        )
     try:
         UUID(req.tenant_id)
     except (ValueError, TypeError) as e:
@@ -356,6 +348,7 @@ def add_user(
             role=req.role,
             display_name=req.display_name,
             invited_by=me.display_name or me.email,
+            is_super_admin=req.is_super_admin,
         )
     except Exception as e:
         # Bubble up identity's error to the admin panel so they see why
@@ -382,8 +375,8 @@ def add_user(
         is_super_admin=bool(created.get("is_super_admin", False)),
         tenant_id=created["tenant_id"],
         tenant_name=None,  # identity's invite response doesn't include tenant name
-        has_password=False,  # newly invited — no password yet
-        created_at="",  # identity's invite response doesn't include created_at
+        has_password=bool(created.get("has_password", False)),
+        created_at=(created.get("created_at") or ""),
     )
 
 
@@ -456,8 +449,8 @@ def update_user(
         is_super_admin=bool(updated.get("is_super_admin", False)),
         tenant_id=updated["tenant_id"],
         tenant_name=None,
-        has_password=False,  # identity doesn't return this — leave conservative
-        created_at="",
+        has_password=bool(updated.get("has_password", False)),
+        created_at=(updated.get("created_at") or ""),
     )
 
 

@@ -31,20 +31,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_embed_model: str = "text-embedding-3-large"
 
-    # Auth
-    session_secret: str = "dev-secret-change-me"
-    google_client_id: str = ""
-    # Email/password auth — lifetimes for invite-registration and
-    # password-reset links. Tokens are stored hashed and single-use; these
-    # only bound how long an unused link stays valid.
-    registration_token_ttl_days: int = 7
-    password_reset_token_ttl_hours: int = 1
-    bcrypt_rounds: int = 12
-
     # Identity service — the shared klaser-identity backend that owns
     # users, tenants, sessions, and per-product subscriptions. This
-    # backend calls /api/introspect to validate the session cookie once
-    # the cutover from local auth is complete. See services/identity.py.
+    # backend calls /api/introspect to validate the session cookie on
+    # every request; see services/identity.py.
     #
     # `identity_url` — where identity lives (auth.klaser.co.il in prod).
     # `identity_service_token` — bearer token for /api/service/* calls
@@ -52,6 +42,10 @@ class Settings(BaseSettings):
     # token per product; rotate via SERVICE_TOKENS on the identity side.
     identity_url: str = "https://auth.klaser.co.il"
     identity_service_token: str = ""
+
+    # Kept for backward compatibility with existing Render env vars —
+    # unused after the identity cutover (no local SessionMiddleware).
+    google_client_id: str = ""
 
     # Mail — Resend. Until the sender domain (klaser.co.il) verifies in the
     # Resend dashboard, use the shared onboarding sandbox address. Once
