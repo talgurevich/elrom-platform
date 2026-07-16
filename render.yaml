@@ -128,6 +128,14 @@ services:
         value: claude-haiku-4-5-20251001
       - key: SESSION_SECRET
         value: cron-job-no-session-needed
+      # Identity SDK — cron has no browser session, must call identity
+      # via the service-token endpoints (list_tenants, list_users) that
+      # scripts/learn_lexicon.py uses. Set the token in Render UI after
+      # first apply; sync:false vars don't share across services.
+      - key: IDENTITY_URL
+        value: https://auth.klaser.co.il
+      - key: IDENTITY_SERVICE_TOKEN
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: COHERE_API_KEY
@@ -175,6 +183,12 @@ services:
       - key: KLASER_APP_URL
         value: https://www.klaser.co.il
       - key: RESEND_API_KEY
+        sync: false
+      # Identity SDK — scripts/send_weekly_digests.py calls
+      # list_super_admin_emails via the service-token endpoint.
+      - key: IDENTITY_URL
+        value: https://auth.klaser.co.il
+      - key: IDENTITY_SERVICE_TOKEN
         sync: false
 
   - type: web
