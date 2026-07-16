@@ -103,7 +103,7 @@ export default function Landing({ onLogin }: Props) {
               Klaser
             </span>
             <span className="hidden sm:inline text-[10px] tracking-[0.25em] uppercase text-ink-soft border-r border-line-strong pr-3">
-              קלאסר · זיכרון ארגוני
+              קלסר · זיכרון ארגוני
             </span>
           </div>
 
@@ -140,14 +140,14 @@ export default function Landing({ onLogin }: Props) {
               Klaser · הפלטפורמה שהופכת מסמכים לזיכרון פעיל
             </div>
             <h1 className="font-display font-black leading-[0.95] text-5xl md:text-7xl text-ink">
-              קלאסר.
+              קלסר.
               <br />
               הזיכרון של הארגון,
               <br />
               <span className="text-accent">במרחק שאלה.</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-ink-soft max-w-2xl leading-relaxed">
-              קלאסר בונה כלים לארגונים שמנהלים ידע מסמכי — תקנונים, פרוטוקולים,
+              קלסר בונה כלים לארגונים שמנהלים ידע מסמכי — תקנונים, פרוטוקולים,
               נהלים ותקדימים. במקום לחפש שעות בקבצים, שואלים שאלה ומקבלים תשובה
               מבוססת מקור.
             </p>
@@ -243,7 +243,7 @@ export default function Landing({ onLogin }: Props) {
       <section id="benefits" className="border-b border-ink">
         <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
           <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
-            למה קלאסר
+            למה קלסר
           </div>
           <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight max-w-3xl">
             מהיר יותר. מדויק יותר. עם מקור.
@@ -373,7 +373,7 @@ export default function Landing({ onLogin }: Props) {
           </div>
           <div className="md:col-span-7 text-lg text-ink-soft leading-relaxed space-y-6">
             <p>
-              קלאסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים שבהם
+              קלסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים שבהם
               המסמכים המחייבים — התקנון, הפרוטוקולים, ההחלטות — הם ליבת
               ההתנהלות היומיומית.
             </p>
@@ -514,7 +514,7 @@ export default function Landing({ onLogin }: Props) {
           <div className="md:col-span-2">
             <div className="font-display font-black text-2xl text-ink">Klaser</div>
             <p className="mt-3 text-sm text-ink-soft max-w-sm leading-relaxed">
-              קלאסר בונה זיכרון ארגוני חכם לארגונים מבוססי-מסמכים. מוצר הדגל
+              קלסר בונה זיכרון ארגוני חכם לארגונים מבוססי-מסמכים. מוצר הדגל
               שלנו — תקנון — כבר משרת קיבוצים ומושבים.
             </p>
           </div>
