@@ -897,7 +897,7 @@
   <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
   <div class="meta">
     <span>Owner<strong>Tal Gurevich</strong></span>
-    <span>Updated<strong>2026-07-15</strong></span>
+    <span>Updated<strong>2026-07-16</strong></span>
     <span>Status<strong>Draft for discussion</strong></span>
   </div>
 </section>
@@ -954,6 +954,131 @@
 
   <div class="budget-note">
     <strong>Budget.</strong> Being worked on offline first. Headcount cost, model/infra spend (Anthropic, OpenAI, Resend, Render, transcription), and per-tenant unit economics tracked separately. A summary lands in this section once the offline pass is settled.
+  </div>
+</section>
+
+<section id="track-status">
+  <div class="section-head">
+    <h2>Track status at a glance</h2>
+    <div class="section-sub">One-line status per track. Update the pill as things move — the sections below have the detail.</div>
+  </div>
+
+  <style>
+    .ts-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
+    .ts-row {
+      display: grid;
+      grid-template-columns: 40px 1fr auto;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 14px;
+      background: var(--surface, #fff);
+      border: 1px solid var(--line, #e5e7eb);
+      border-radius: 6px;
+    }
+    .ts-num { font-weight: 700; color: var(--muted); font-size: 13px; }
+    .ts-body { min-width: 0; }
+    .ts-title { font-weight: 600; color: var(--ink); }
+    .ts-title a { color: inherit; text-decoration: none; border-bottom: 1px dashed transparent; }
+    .ts-title a:hover { border-bottom-color: currentColor; }
+    .ts-desc { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+    .ts-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .ts-pill.shipped { background: #d1fae5; color: #065f46; }
+    .ts-pill.progress { background: #dbeafe; color: #1e40af; }
+    .ts-pill.partial { background: #fef3c7; color: #92400e; }
+    .ts-pill.notstarted { background: #f3f4f6; color: #4b5563; }
+    .ts-pill.planned { background: #ede9fe; color: #5b21b6; }
+  </style>
+
+  <div class="ts-grid">
+    <div class="ts-row">
+      <div class="ts-num">T1</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t1">Core engine — hierarchy, context, tooling</a></div>
+        <div class="ts-desc">Retrieval primitive + hybrid search live. Hierarchy, tool-wrapped retrieval, and agentic loop still ahead. Golden-set now in place to measure improvements.</div>
+      </div>
+      <span class="ts-pill progress">In progress</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T2</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t2">User experience</a></div>
+        <div class="ts-desc">Chat surface + citations shipped. Onboarding, empty states, and self-serve diagnostics still open.</div>
+      </div>
+      <span class="ts-pill progress">In progress</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T3</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t3">Document management &amp; archival integration</a></div>
+        <div class="ts-desc">Upload, extraction, AI classification, folder taxonomy, faceted browse, dup-detection shipped. Bulk Google Drive import still open.</div>
+      </div>
+      <span class="ts-pill partial">Partial</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T4</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t4">Meeting capture &amp; minute-taking</a></div>
+        <div class="ts-desc">Owned by Gil. Separate <code>klaser-meetings</code> service. Kickoff after Takanon go-live.</div>
+      </div>
+      <span class="ts-pill notstarted">Not started</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T5</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t5">Observability</a></div>
+        <div class="ts-desc">Debug queue + query logging shipped. P50/P95 latency alerts and ingest-failure alerts still open.</div>
+      </div>
+      <span class="ts-pill partial">Partial</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T6</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t6">Mailer service</a></div>
+        <div class="ts-desc">Transactional mail via Resend (broken-answer alerts, admin notifications). Weekly digest job wired. Templates + suppression list next.</div>
+      </div>
+      <span class="ts-pill partial">Partial</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T7</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t7">Sales CRM</a></div>
+        <div class="ts-desc">Two-week internal tool. Owner TBD. Slated for August–September once Takanon + Klaser Meetings are live.</div>
+      </div>
+      <span class="ts-pill planned">Planned</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T8</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t8">Marketing site — klaser.co.il</a></div>
+        <div class="ts-desc">Landing page, hero Q&amp;A carousel, contact form → email shipped. Content iteration ongoing.</div>
+      </div>
+      <span class="ts-pill shipped">Shipped</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T9</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t9">Shared infrastructure — Klaser identity</a></div>
+        <div class="ts-desc">Identity service live at <code>auth.klaser.co.il</code>. Takanon fully cut over 2026-07-14. Auth tables dropped from Takanon DB. Meetings will consume the same SDK.</div>
+      </div>
+      <span class="ts-pill shipped">Shipped</span>
+    </div>
   </div>
 </section>
 
