@@ -385,6 +385,31 @@ class IdentityServiceClient:
         r.raise_for_status()
         return r.json()
 
+    def grant_subscription(
+        self,
+        tenant_id: str,
+        *,
+        product: str,
+        plan: str = "default",
+        expires_at: str | None = None,
+    ) -> dict:
+        r = httpx.post(
+            f"{self.base_url}/api/service/tenants/{tenant_id}/subscriptions",
+            headers=self._headers(),
+            json={"product": product, "plan": plan, "expires_at": expires_at},
+            timeout=5.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def revoke_subscription(self, subscription_id: str) -> None:
+        r = httpx.delete(
+            f"{self.base_url}/api/service/subscriptions/{subscription_id}",
+            headers=self._headers(),
+            timeout=5.0,
+        )
+        r.raise_for_status()
+
 
 identity_service = IdentityServiceClient()
 

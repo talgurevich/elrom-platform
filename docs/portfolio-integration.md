@@ -40,6 +40,15 @@ Identity's `/api/auth/me` (and `/api/introspect` for backends) returns a `entitl
 - **Frontend:** `user.entitlements` drives what shows in the switcher.
 - **Backend:** every route depends on `require_entitlement("<product-id>")` (see `services/identity.py` in Takanon; Meetings has the same helper). A user without the entitlement gets 403, not 404, so the switcher can still route them home.
 
+### Granting / revoking (super-admin)
+
+Managed via the **Takanon Admin panel → per-tenant "מוצרים" section** (interim home — will move into an identity admin surface eventually). Under the hood:
+
+- `POST /api/service/tenants/{id}/subscriptions` on identity, idempotent — reactivates an existing row rather than duplicating.
+- `DELETE /api/service/subscriptions/{id}` on identity — hard-delete.
+
+Effect is immediate on the *next* request; identity is not cached at the entitlement level. The user needs to reload for the frontend switcher to update.
+
 ---
 
 ## Product switcher — UX contract

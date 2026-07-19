@@ -56,6 +56,11 @@ def _require_super_admin(user: IdentityUser = Depends(current_user)) -> Identity
     return user
 
 
+# Products the super-admin UI can grant. Kept in sync with identity's
+# VALID_PRODUCTS — mismatch surfaces as a 400 from identity, not silent.
+VALID_PRODUCTS = {"takanon", "meetings"}
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Tenants
 # ─────────────────────────────────────────────────────────────────────────
@@ -229,6 +234,98 @@ def create_tenant(
         document_count=0,
         created_at="",
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Subscriptions — per-tenant product entitlements. Thin passthrough to
+# identity; the source of truth is identity's `subscriptions` table.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class SubscriptionItem(BaseModel):
+    id: str
+    product: str
+    plan: str
+    active: bool
+    expires_at: str | None = None
+    created_at: str | None = None
+
+
+class GrantSubscriptionRequest(BaseModel):
+    product: str
+
+
+@router.get("/tenants/{tenant_id}/subscriptions", response_model=list[SubscriptionItem])
+def list_subscriptions(
+    tenant_id: str,
+    _: IdentityUser = Depends(_require_super_admin),
+) -> list[SubscriptionItem]:
+    try:
+        UUID(tenant_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid tenant_id") from e
+    try:
+        rows = identity_service.list_subscriptions(tenant_id)
+    except Exception as e:
+        log.warning("admin.list_subscriptions_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשליפת המוצרים מול שירות הזהויות: {e}",
+        ) from e
+    return [SubscriptionItem(**r) for r in rows]
+
+
+@router.post(
+    "/tenants/{tenant_id}/subscriptions",
+    response_model=SubscriptionItem,
+    status_code=201,
+)
+def grant_subscription(
+    tenant_id: str,
+    req: GrantSubscriptionRequest,
+    _: IdentityUser = Depends(_require_super_admin),
+) -> SubscriptionItem:
+    try:
+        UUID(tenant_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid tenant_id") from e
+    product = req.product.strip().lower()
+    if product not in VALID_PRODUCTS:
+        raise HTTPException(
+            400, f"Unknown product {product!r}. Allowed: {sorted(VALID_PRODUCTS)}"
+        )
+    try:
+        created = identity_service.grant_subscription(tenant_id, product=product)
+    except Exception as e:
+        log.warning("admin.grant_subscription_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בהוספת מוצר מול שירות הזהויות: {e}",
+        ) from e
+    log.info(
+        "admin.subscription_granted", tenant_id=tenant_id, product=product
+    )
+    return SubscriptionItem(**created)
+
+
+@router.delete("/subscriptions/{subscription_id}", status_code=204)
+def revoke_subscription(
+    subscription_id: str,
+    _: IdentityUser = Depends(_require_super_admin),
+) -> None:
+    try:
+        UUID(subscription_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid subscription_id") from e
+    try:
+        identity_service.revoke_subscription(subscription_id)
+    except Exception as e:
+        log.warning("admin.revoke_subscription_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בהסרת מוצר מול שירות הזהויות: {e}",
+        ) from e
+    log.info("admin.subscription_revoked", subscription_id=subscription_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────

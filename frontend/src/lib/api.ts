@@ -838,6 +838,32 @@ export const api = {
         body: JSON.stringify({ system_context: systemContext }),
       }
     ),
+
+  // Per-tenant product entitlements. Thin passthrough to identity's
+  // subscriptions table. See docs/portfolio-integration.md.
+  adminListSubscriptions: (tenantId: string) =>
+    request<AdminSubscription[]>(`/api/admin/tenants/${tenantId}/subscriptions`),
+  adminGrantSubscription: (tenantId: string, product: string) =>
+    request<AdminSubscription>(
+      `/api/admin/tenants/${tenantId}/subscriptions`,
+      {
+        method: "POST",
+        body: JSON.stringify({ product }),
+      }
+    ),
+  adminRevokeSubscription: (subscriptionId: string) =>
+    request<void>(`/api/admin/subscriptions/${subscriptionId}`, {
+      method: "DELETE",
+    }),
+};
+
+export type AdminSubscription = {
+  id: string;
+  product: string;
+  plan: string;
+  active: boolean;
+  expires_at: string | null;
+  created_at: string | null;
 };
 
 export type DebugChunk = {

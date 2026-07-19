@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   api,
+  type AdminSubscription,
   type AdminTenant,
   type AdminUser,
   type CreateUserPayload,
@@ -9,6 +10,14 @@ import {
   type TenantContext,
   type TenantSegment,
 } from "../lib/api";
+
+// Products the super-admin panel can grant. Labels are what the human
+// sees; ids match identity's product tokens. Keep in sync with
+// frontend/src/lib/products.ts and backend VALID_PRODUCTS.
+const PRODUCT_CATALOG: { id: string; label: string }[] = [
+  { id: "takanon", label: "תקנון" },
+  { id: "meetings", label: "ישיבות" },
+];
 
 const SEGMENT_LABELS: Record<TenantSegment, string> = {
   kibbutz_shitufi: "קיבוץ שיתופי",
@@ -152,6 +161,17 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
             tenants.find((t) => t.id === selectedTenantId)?.name || "—"
           }
           onSaved={flashOk}
+          onError={flashError}
+        />
+      )}
+
+      {selectedTenantId && (
+        <SubscriptionsSection
+          tenantId={selectedTenantId}
+          tenantName={
+            tenants.find((t) => t.id === selectedTenantId)?.name || "—"
+          }
+          onChanged={flashOk}
           onError={flashError}
         />
       )}
@@ -771,6 +791,143 @@ function TenantContextSection({
               </div>
             </div>
           </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ─── Per-tenant product entitlements ──────────────────────────────── */
+
+function SubscriptionsSection({
+  tenantId,
+  tenantName,
+  onChanged,
+  onError,
+}: {
+  tenantId: string;
+  tenantName: string;
+  onChanged: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [subs, setSubs] = useState<AdminSubscription[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyProduct, setBusyProduct] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await api.adminListSubscriptions(tenantId);
+      setSubs(rows);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId, onError]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const byProduct = useMemo(() => {
+    const m: Record<string, AdminSubscription | undefined> = {};
+    subs.forEach((s) => {
+      m[s.product] = s;
+    });
+    return m;
+  }, [subs]);
+
+  const grant = async (product: string, label: string) => {
+    setBusyProduct(product);
+    try {
+      await api.adminGrantSubscription(tenantId, product);
+      onChanged(`המוצר "${label}" הופעל עבור ${tenantName}`);
+      await reload();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyProduct(null);
+    }
+  };
+
+  const revoke = async (sub: AdminSubscription, label: string) => {
+    if (
+      !confirm(
+        `להסיר את המוצר "${label}" מ-${tenantName}? המשתמשים יאבדו גישה מהבקשה הבאה.`
+      )
+    )
+      return;
+    setBusyProduct(sub.product);
+    try {
+      await api.adminRevokeSubscription(sub.id);
+      onChanged(`המוצר "${label}" הוסר מ-${tenantName}`);
+      await reload();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyProduct(null);
+    }
+  };
+
+  return (
+    <section>
+      <SectionHeader
+        title="מוצרים"
+        subtitle={`אילו מוצרי קלסר ${tenantName} משתמש בהם. שינוי כאן משפיע על ה-switcher במסך של המשתמש ועל הרשאות הגישה בבקשות הבאות.`}
+      />
+
+      <div className="mt-4 border-2 border-ink bg-surface p-4">
+        {loading ? (
+          <div className="p-4 text-center text-ink-soft text-sm animate-pulse">
+            טוען…
+          </div>
+        ) : (
+          <ul className="divide-y divide-line">
+            {PRODUCT_CATALOG.map(({ id, label }) => {
+              const sub = byProduct[id];
+              const active = !!(sub && sub.active);
+              const busy = busyProduct === id;
+              return (
+                <li
+                  key={id}
+                  className="flex items-center justify-between py-3 gap-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-ink">
+                      {label}
+                    </span>
+                    {active ? (
+                      <span className="text-[10px] tracking-[0.2em] uppercase text-accent font-bold">
+                        פעיל
+                      </span>
+                    ) : (
+                      <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft">
+                        לא פעיל
+                      </span>
+                    )}
+                  </div>
+                  {active && sub ? (
+                    <button
+                      onClick={() => revoke(sub, label)}
+                      disabled={busy}
+                      className="text-xs text-accent hover:underline underline-offset-4 disabled:opacity-50"
+                    >
+                      {busy ? "מסיר…" : "הסר"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => grant(id, label)}
+                      disabled={busy}
+                      className="text-xs font-semibold border border-ink px-3 py-1 hover:bg-ink hover:text-surface transition disabled:opacity-50"
+                    >
+                      {busy ? "מפעיל…" : "הפעל"}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </section>
