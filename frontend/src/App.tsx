@@ -13,6 +13,7 @@ import Search from "./pages/Search";
 import Upload from "./pages/Upload";
 import { useAuth } from "./lib/auth";
 import { api, type TenantItem } from "./lib/api";
+import { PRODUCTS, CURRENT_PRODUCT_ID } from "./lib/products";
 
 type Tab =
   | "search"
@@ -434,9 +435,45 @@ export default function App() {
                       {user.role}
                     </div>
                   </div>
+                  {/* Portfolio switcher. Rendered only when the user is
+                      entitled to more than one Klaser product. Full-page
+                      navigation across subdomains — shared cookie carries
+                      the session. See docs/portfolio-integration.md. */}
+                  {(() => {
+                    const entitled = PRODUCTS.filter((p) =>
+                      (user.entitlements || []).includes(p.id)
+                    );
+                    if (entitled.length < 2) return null;
+                    return (
+                      <div className="border-t border-line">
+                        <div className="px-4 pt-3 pb-1 text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold">
+                          מעבר בין מוצרים
+                        </div>
+                        {entitled.map((p) =>
+                          p.id === CURRENT_PRODUCT_ID ? (
+                            <div
+                              key={p.id}
+                              className="px-4 py-2 text-sm text-ink flex items-center justify-between"
+                            >
+                              <span>{p.label}</span>
+                              <span className="text-accent text-xs">• פעיל</span>
+                            </div>
+                          ) : (
+                            <a
+                              key={p.id}
+                              href={p.url}
+                              className="block px-4 py-2 text-sm text-ink-soft hover:bg-line/40 hover:text-ink"
+                            >
+                              {p.label}
+                            </a>
+                          )
+                        )}
+                      </div>
+                    );
+                  })()}
                   <button
                     onClick={signOut}
-                    className="w-full text-right px-4 py-2.5 text-sm text-ink-soft hover:bg-line/40 hover:text-ink"
+                    className="w-full text-right px-4 py-2.5 text-sm text-ink-soft hover:bg-line/40 hover:text-ink border-t border-line"
                   >
                     התנתקות
                   </button>

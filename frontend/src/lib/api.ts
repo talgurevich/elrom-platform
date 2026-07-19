@@ -395,6 +395,9 @@ export type CurrentUser = {
   home_tenant_id?: string | null;
   home_tenant_name?: string | null;
   viewing_other_tenant?: boolean;
+  // Product IDs the tenant is entitled to — drives the portfolio switcher
+  // in the user menu. See docs/portfolio-integration.md.
+  entitlements?: string[];
 };
 
 export type TenantItem = {
