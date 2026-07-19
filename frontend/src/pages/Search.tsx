@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   api,
   documentFileUrl,
+  type AnswerAnnotation,
   type ConversationSummary,
   type FailureMode,
   type RetrievalDebug,
@@ -28,6 +29,7 @@ type ChatTurn = {
   candidate_docs: string[];
   clarifying_message: string | null;
   served_from: string;
+  answer_annotations: AnswerAnnotation[];
   // Per-turn mutable UI state
   feedback: "positive" | "negative" | null;
   failure_mode: FailureMode | null;
@@ -59,6 +61,7 @@ function responseToTurn(r: SearchResponse): ChatTurn {
     candidate_docs: r.candidate_docs || [],
     clarifying_message: r.clarifying_message,
     served_from: r.served_from,
+    answer_annotations: r.answer_annotations || [],
     feedback: null,
     failure_mode: null,
     promoted: false,
@@ -113,6 +116,7 @@ export default function Search() {
           candidate_docs: [],
           clarifying_message: t.mode === "clarify" ? t.answer : null,
           served_from: t.mode === "clarify" ? "clarify" : "llm",
+          answer_annotations: [],
           feedback: t.feedback === "positive" || t.feedback === "negative" ? t.feedback : null,
           failure_mode: null,
           promoted: false,
@@ -396,6 +400,7 @@ async function hydrateAndLoad(
       candidate_docs: [],
       clarifying_message: t.mode === "clarify" ? t.answer : null,
       served_from: t.mode === "clarify" ? "clarify" : "llm",
+      answer_annotations: [],
       feedback: t.feedback === "positive" || t.feedback === "negative" ? t.feedback : null,
       failure_mode: null,
       promoted: false,
@@ -407,6 +412,73 @@ async function hydrateAndLoad(
   } catch {
     // If the conversation can't be loaded, silently no-op — the user can
     // still start a fresh one from the composer.
+  }
+}
+
+// ─── Annotated answer ──────────────────────────────────────────────────
+
+function AnnotatedAnswer({
+  text,
+  annotations,
+  onAddCandidate,
+}: {
+  text: string;
+  annotations: AnswerAnnotation[];
+  onAddCandidate: (term: string) => void;
+}) {
+  if (!annotations || annotations.length === 0) {
+    return <>{text}</>;
+  }
+  // Non-overlapping, sorted by start (backend guarantees this, but be defensive).
+  const sorted = [...annotations]
+    .filter((a) => a.start >= 0 && a.end <= text.length && a.end > a.start)
+    .sort((a, b) => a.start - b.start);
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  sorted.forEach((a, i) => {
+    if (a.start < cursor) return; // overlap safety
+    if (a.start > cursor) parts.push(text.slice(cursor, a.start));
+    const segment = text.slice(a.start, a.end);
+    if (a.kind === "known") {
+      parts.push(
+        <span
+          key={`k-${i}`}
+          title={a.expansion || undefined}
+          className="underline decoration-dotted decoration-accent underline-offset-4 cursor-help"
+        >
+          {segment}
+        </span>
+      );
+    } else {
+      parts.push(
+        <button
+          key={`c-${i}`}
+          type="button"
+          onClick={() => onAddCandidate(a.text)}
+          title="הוסף למילון"
+          className="text-red-700 underline decoration-red-700 decoration-dashed underline-offset-4 hover:bg-red-50 rounded px-0.5"
+        >
+          {segment}
+        </button>
+      );
+    }
+    cursor = a.end;
+  });
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
+}
+
+async function promptAddToLexicon(term: string) {
+  const expansion = window.prompt(
+    `הוספה למילון: "${term}"\n\nמה ההסבר / ההרחבה של המונח?`,
+    ""
+  );
+  if (!expansion || !expansion.trim()) return;
+  try {
+    await api.createLexicon({ term, expansion: expansion.trim() });
+    window.alert(`"${term}" נוסף למילון.`);
+  } catch (e) {
+    window.alert(`שגיאה בהוספה למילון: ${(e as Error).message}`);
   }
 }
 
@@ -479,7 +551,11 @@ function TurnView({
                     ? "font-display text-lg md:text-xl"
                     : "font-display text-xl md:text-2xl"
                 }`}>
-                  {turn.answer}
+                  <AnnotatedAnswer
+                    text={turn.answer}
+                    annotations={turn.answer_annotations}
+                    onAddCandidate={promptAddToLexicon}
+                  />
                 </p>
               </div>
             </article>

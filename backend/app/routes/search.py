@@ -37,6 +37,7 @@ from app.services.mail import send_broken_answer_alert
 from app.services.chat_triage import triage_turn
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
+from app.services.answer_annotations import annotate_answer
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
 from app.services.query_rewriter import PriorTurn
@@ -86,6 +87,17 @@ class NearMiss(BaseModel):
     similarity: float
 
 
+class AnswerAnnotation(BaseModel):
+    """Character span over the answer text, marking a lexicon term (known) or
+    a term worth adding to the lexicon (candidate)."""
+    start: int
+    end: int
+    text: str
+    kind: str  # "known" | "candidate"
+    lexicon_id: UUID | None = None
+    expansion: str | None = None
+
+
 class SearchResponse(BaseModel):
     query_id: UUID
     conversation_id: UUID
@@ -108,6 +120,7 @@ class SearchResponse(BaseModel):
     served_from: str  # "hitl_cache" | "llm" | "no_documents" | "clarify"
     retrieval_debug: dict | None = None
     near_misses: list[NearMiss] = []
+    answer_annotations: list[AnswerAnnotation] = []
 
 
 # Phrases that show up when the answerer LLM realizes mid-generation that it
@@ -369,6 +382,10 @@ async def search_pipeline(
             db.add(query_log)
             db.commit()
             db.refresh(query_log)
+            cached_annotations = [
+                AnswerAnnotation(**s.__dict__)
+                for s in annotate_answer(db, tenant_id=tenant_id, answer=cached.answer)
+            ]
             response = SearchResponse(
                 query_id=query_log.id,
                 conversation_id=conv.id,
@@ -380,6 +397,7 @@ async def search_pipeline(
                 sources=sources,
                 llm_used=False,
                 served_from="hitl_cache",
+                answer_annotations=cached_annotations,
             )
             yield {"type": "done", "response": response.model_dump(mode="json")}
             return
@@ -557,6 +575,10 @@ async def search_pipeline(
             for r in llm_result.references
         ]
 
+        answer_annotations = [
+            AnswerAnnotation(**s.__dict__)
+            for s in annotate_answer(db, tenant_id=tenant_id, answer=llm_result.answer)
+        ]
         response = SearchResponse(
             query_id=query_log.id,
             conversation_id=conv.id,
@@ -571,6 +593,7 @@ async def search_pipeline(
             served_from="llm",
             retrieval_debug=debug_dict,
             near_misses=near_misses,
+            answer_annotations=answer_annotations,
         )
         yield {"type": "done", "response": response.model_dump(mode="json")}
     except Exception as e:

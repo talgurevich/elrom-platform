@@ -94,6 +94,15 @@ export type NearMiss = {
 
 export type TurnMode = "answer" | "clarify";
 
+export type AnswerAnnotation = {
+  start: number;
+  end: number;
+  text: string;
+  kind: "known" | "candidate";
+  lexicon_id: string | null;
+  expansion: string | null;
+};
+
 export type SearchResponse = {
   query_id: string;
   conversation_id: string;
@@ -117,6 +126,7 @@ export type SearchResponse = {
   served_from: "hitl_cache" | "llm" | "no_documents" | "clarify";
   retrieval_debug: RetrievalDebug | null;
   near_misses: NearMiss[];
+  answer_annotations: AnswerAnnotation[];
 };
 
 export type ConversationSummary = {
