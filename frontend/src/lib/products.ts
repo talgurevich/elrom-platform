@@ -13,7 +13,7 @@ export type Product = {
 };
 
 export const PRODUCTS: Product[] = [
-  { id: "takanon", label: "תקנון", url: "https://www.klaser.co.il" },
+  { id: "takanon", label: "תקנון", url: "https://takanon.klaser.co.il" },
   { id: "meetings", label: "ישיבות", url: "https://meetings.klaser.co.il" },
 ];
 

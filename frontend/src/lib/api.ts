@@ -852,7 +852,7 @@ export const api = {
       }
     ),
   adminRevokeSubscription: (subscriptionId: string) =>
-    request<void>(`/api/admin/subscriptions/${subscriptionId}`, {
+    request<{ status: string }>(`/api/admin/subscriptions/${subscriptionId}`, {
       method: "DELETE",
     }),
 };

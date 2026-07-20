@@ -14,7 +14,7 @@ Related:
 | Product | ID (entitlement) | Frontend host | Backend host | Owner |
 |---|---|---|---|---|
 | Identity | *n/a — the identity service itself* | `auth.klaser.co.il` | same host, `/api/*` | Tal |
-| Takanon | `takanon` | `www.klaser.co.il` *(target: `takanon.klaser.co.il`)* | `*.onrender.com` | Tal |
+| Takanon | `takanon` | `takanon.klaser.co.il` (also served on `www.klaser.co.il` during migration) | `*.onrender.com` | Tal |
 | Meetings | `meetings` | *not set yet — target: `meetings.klaser.co.il`* | `*.onrender.com` | Gil |
 
 When adding a new product, add it here first, then in `frontend/src/lib/products.ts` in every product that renders the switcher.
@@ -24,21 +24,21 @@ When adding a new product, add it here first, then in `frontend/src/lib/products
 ## Cookie contract
 
 - **Name:** `klaser_session`
-- **Domain:** `.klaser.co.il` (leading dot — shared across every subdomain)
-- **HttpOnly, Secure, SameSite=Lax**
+- **Domain:** `.klaser.co.il` (leading dot — shared across every subdomain) ✅ verified 2026-07-19
+- **HttpOnly, Secure, SameSite=None** (Secure=true makes SameSite=None valid; Lax would also work but current setting is None)
 - **Set by:** identity service only. No product ever writes this cookie.
 - **Read by:** every product's backend, forwarded to `identity/api/introspect`.
 
-If the cookie isn't visible on your product's subdomain in DevTools after login, the switcher won't work. That's the first thing to verify.
+Gil doesn't need to re-verify — the cookie was confirmed cross-subdomain-shared on 2026-07-19. If it ever stops working on a new subdomain, DevTools → Application → Cookies is the first place to look.
 
 ---
 
 ## Entitlements contract
 
-Identity's `/api/auth/me` (and `/api/introspect` for backends) returns a `entitlements: string[]` field — e.g. `["takanon", "meetings"]`. Product IDs are the same tokens listed in the registry above.
+Identity's `/api/auth/me` (and `/api/introspect` for backends) returns an `entitlements: string[]` field — e.g. `["takanon", "meetings"]`. Product IDs are the same tokens listed in the registry above. ✅ verified 2026-07-19.
 
-- **Frontend:** `user.entitlements` drives what shows in the switcher.
-- **Backend:** every route depends on `require_entitlement("<product-id>")` (see `services/identity.py` in Takanon; Meetings has the same helper). A user without the entitlement gets 403, not 404, so the switcher can still route them home.
+- **Frontend:** `user.entitlements` drives what shows in the switcher. Your `CurrentUser` type needs `entitlements?: string[]`.
+- **Backend:** every route depends on `require_entitlement("<product-id>")` (see `services/identity.py` in Takanon; Meetings already has the same helper). A user without the entitlement gets 403, not 404, so the switcher can still route them home.
 
 ### Granting / revoking (super-admin)
 
@@ -59,11 +59,16 @@ Rules:
 1. Read `user.entitlements` from the auth context.
 2. Iterate the products registry (`frontend/src/lib/products.ts`).
 3. Render one row per entitled product.
-4. Current product renders as a **disabled label with a "•" marker**, not a link.
+4. Current product renders as a **plain label with a "• פעיל" marker**, not a link.
 5. Other products render as `<a href="https://<host>/">`. Full-page navigation is correct — no SPA routing across subdomains.
-6. If the user has only one entitlement, don't render the switcher section at all (avoid empty ceremony).
+6. If the user is entitled to fewer than two products, don't render the switcher section at all (avoid empty ceremony).
 
-Reference implementation lives in Takanon at `frontend/src/App.tsx` (user menu) + `frontend/src/lib/products.ts`. Copy it into Meetings verbatim; the only change per product is which `id` you pass as `currentProductId`.
+**Reference implementation** in Takanon:
+- `frontend/src/lib/products.ts` — the registry + `CURRENT_PRODUCT_ID`. Copy this file verbatim into Meetings; change `CURRENT_PRODUCT_ID` to `"meetings"`.
+- `frontend/src/App.tsx` — the switcher block inside the user dropdown (search for `מעבר בין מוצרים`). Copy the JSX; adjust to match Meetings' auth context shape.
+- `frontend/src/lib/api.ts` — add `entitlements?: string[]` to `CurrentUser`.
+
+To see the switcher render locally during development, grant your test tenant a second product via the Takanon Admin panel → tenant → "מוצרים" section.
 
 ---
 
@@ -93,8 +98,19 @@ Each product backend must include the peer product frontends in its CORS `allow_
 
 ## What Meetings needs to add (checklist for Gil)
 
-1. Custom domain `meetings.klaser.co.il` on the frontend static site (steps above).
-2. `KLASER_APP_URL=https://meetings.klaser.co.il` on the Meetings backend.
-3. Verify the `klaser_session` cookie is present on `meetings.klaser.co.il` after login. If it isn't, identity's cookie is scoped too narrowly — flag to Tal.
-4. Copy `frontend/src/lib/products.ts` from Takanon; set `currentProductId = "meetings"` when rendering the switcher.
-5. Render the switcher in the user dropdown, above logout — same slot, same visual weight as Takanon.
+Prereqs already handled by Tal — you don't need to redo them:
+- Identity cookie is `.klaser.co.il`-scoped ✅
+- Identity `/api/auth/me` returns `entitlements` ✅
+- Identity has `POST/DELETE` service endpoints for subscriptions ✅
+- Takanon Admin can grant `meetings` to any tenant ✅
+
+Your side:
+1. **Deploy Meetings on Render** if you haven't yet (backend web service + frontend static site + Postgres). Model `render.yaml` on Takanon's if useful — happy to prep one against your repo, just ask.
+2. **Custom domain** `meetings.klaser.co.il` on the frontend static site — Render → Settings → Custom Domains → Add. Paste the CNAME target back to Tal, who'll add the DNS record at My Names.
+3. **Backend env vars**: set `KLASER_APP_URL=https://meetings.klaser.co.il` (for RSVP + invite emails).
+4. **Frontend types**: add `entitlements?: string[]` to your `CurrentUser` type.
+5. **Copy** `frontend/src/lib/products.ts` from Takanon **verbatim**, then set `CURRENT_PRODUCT_ID = "meetings"`.
+6. **Render the switcher** in the user dropdown, above logout — copy the JSX block from Takanon's `frontend/src/App.tsx` (search "מעבר בין מוצרים"). Filter `PRODUCTS` by `user.entitlements`.
+7. **Verify** end-to-end: log in on `meetings.klaser.co.il`, grant your test tenant both `takanon` and `meetings` via the Takanon Admin panel, reload, open the user menu → you should see both products with "ישיבות" marked as active.
+
+**Debug**: if entitlements is missing from your `/me` response, you may be hitting the wrong host — `authRequest` should target `IDENTITY_BASE` (`https://auth.klaser.co.il`), not your product backend. See Takanon's `frontend/src/lib/api.ts` for the split between `request()` and `authRequest()`.

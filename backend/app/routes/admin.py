@@ -308,11 +308,11 @@ def grant_subscription(
     return SubscriptionItem(**created)
 
 
-@router.delete("/subscriptions/{subscription_id}", status_code=204)
+@router.delete("/subscriptions/{subscription_id}")
 def revoke_subscription(
     subscription_id: str,
     _: IdentityUser = Depends(_require_super_admin),
-) -> None:
+) -> dict[str, str]:
     try:
         UUID(subscription_id)
     except (ValueError, TypeError) as e:
@@ -326,6 +326,7 @@ def revoke_subscription(
             detail=f"שגיאה בהסרת מוצר מול שירות הזהויות: {e}",
         ) from e
     log.info("admin.subscription_revoked", subscription_id=subscription_id)
+    return {"status": "revoked"}
 
 
 # ─────────────────────────────────────────────────────────────────────────
