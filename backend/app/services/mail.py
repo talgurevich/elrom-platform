@@ -246,6 +246,122 @@ def send_contact_message(
     )
 
 
+# ─── In-app support request ─────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SupportTurnSnapshot:
+    """One turn in the conversation as it should render in the email.
+    Detached from SQLAlchemy so the mailer never holds a session."""
+    role: str  # "user" | "assistant"
+    text: str
+
+
+def send_support_request(
+    *,
+    tenant_name: str,
+    user_email: str,
+    user_display_name: str | None,
+    note: str,
+    question: str,
+    conversation_id: str,
+    conversation_deep_link: str,
+    query_id: str,
+    turns: list[SupportTurnSnapshot],
+) -> None:
+    """User-initiated "report an issue" from the search UI → Tal's inbox.
+
+    Recipient is hardcoded — this is the platform's own support channel,
+    not tenant-configurable. Everything user-supplied is escaped before
+    templating.
+    """
+    recipient = "tal.gurevich@elrom.tv"
+
+    safe_tenant = html.escape(tenant_name or "—")
+    safe_user = html.escape(user_display_name or user_email)
+    safe_email = html.escape(user_email)
+    safe_note = html.escape(note.strip()).replace("\n", "<br>") or "—"
+    safe_question = html.escape(question).replace("\n", "<br>")
+    safe_link = html.escape(conversation_deep_link)
+
+    transcript_html = ""
+    for t in turns:
+        role_label = "משתמש" if t.role == "user" else "מערכת"
+        role_color = "#171717" if t.role == "user" else "#b8412b"
+        safe_text = html.escape(t.text or "").replace("\n", "<br>")
+        transcript_html += (
+            f'<div style="margin: 10px 0; padding: 10px 14px; '
+            f'border-right: 3px solid {role_color}; background: #f2f0ee;">'
+            f'<div style="font-size:11px; letter-spacing:0.2em; text-transform:uppercase; '
+            f'color:{role_color}; font-weight:700; margin-bottom:6px;">{role_label}</div>'
+            f'<div style="font-size:14px; line-height:1.6;">{safe_text}</div>'
+            f"</div>"
+        )
+
+    html_body = _wrap_html(
+        f"""
+        <div class="tag">Klaser · דיווח מהמערכת</div>
+        <h1>דיווח בעיה משיחה</h1>
+        <p>משתמש דיווח על בעיה בשיחה. הפרטים למטה — פתח את השיחה בעזרת הקישור בסוף.</p>
+
+        <h2>ארגון</h2>
+        <blockquote>{safe_tenant}</blockquote>
+
+        <h2>משתמש</h2>
+        <blockquote>{safe_user} · <a href="mailto:{safe_email}">{safe_email}</a></blockquote>
+
+        <h2>הערת המשתמש</h2>
+        <blockquote>{safe_note}</blockquote>
+
+        <h2>השאלה שהופנתה לתשובה שדווחה</h2>
+        <blockquote>{safe_question}</blockquote>
+
+        <h2>מזהי ניפוי</h2>
+        <p class="muted">
+          conversation_id: <code>{html.escape(conversation_id)}</code><br>
+          query_id: <code>{html.escape(query_id)}</code>
+        </p>
+
+        <h2>שיחה מלאה</h2>
+        {transcript_html or '<p class="muted">אין תורות נוספים.</p>'}
+
+        <p style="margin-top:24px;">
+          <a class="btn" href="{safe_link}">פתח את השיחה</a>
+        </p>
+        """
+    )
+
+    text_lines = [
+        "דיווח בעיה משיחה",
+        "",
+        f"ארגון: {tenant_name}",
+        f"משתמש: {user_display_name or user_email} <{user_email}>",
+        "",
+        f"הערת המשתמש: {note.strip() or '—'}",
+        "",
+        f"שאלה שדווחה: {question}",
+        "",
+        f"conversation_id: {conversation_id}",
+        f"query_id: {query_id}",
+        f"link: {conversation_deep_link}",
+        "",
+        "שיחה מלאה:",
+    ]
+    for t in turns:
+        role_label = "משתמש" if t.role == "user" else "מערכת"
+        text_lines.append(f"[{role_label}] {t.text}")
+    text_body = "\n".join(text_lines)
+
+    _send(
+        Message(
+            to=recipient,
+            subject=f"[Klaser] דיווח בעיה — {tenant_name}",
+            html_body=html_body,
+            text_body=text_body,
+        )
+    )
+
+
 # ─── Weekly lexicon digest ──────────────────────────────────────────────
 
 

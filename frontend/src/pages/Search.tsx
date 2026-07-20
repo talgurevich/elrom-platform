@@ -482,6 +482,48 @@ async function promptAddToLexicon(term: string) {
   }
 }
 
+// ─── Report a support issue ────────────────────────────────────────────
+// Free-form note from the user → email to Tal with full session context.
+// Server-side lookup means the client only needs to send the query_id.
+
+function ReportSupportButton({ queryId }: { queryId: string }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const send = async () => {
+    const note = window.prompt(
+      "מה קרה? כתוב בקצרה את הבעיה — התשובה, השאלה וקישור לשיחה יישלחו יחד עם ההודעה.",
+      ""
+    );
+    if (note === null) return; // user cancelled
+    setSending(true);
+    try {
+      await api.reportSupport(queryId, note);
+      setSent(true);
+    } catch (e) {
+      window.alert(`שליחת הדיווח נכשלה: ${(e as Error).message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+  if (sent) {
+    return (
+      <span className="px-3 py-2 text-xs text-ink-soft">
+        ✓ הדיווח נשלח
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={send}
+      disabled={sending}
+      title="שולח מייל לצוות עם השאלה, התשובה, וקישור לשיחה"
+      className="px-4 py-2 text-sm font-semibold border-2 border-line-strong text-ink-soft bg-surface hover:border-ink hover:text-ink transition disabled:opacity-50"
+    >
+      {sending ? "שולח…" : "🚩 דווח בעיה"}
+    </button>
+  );
+}
+
 // ─── Turn view ─────────────────────────────────────────────────────────
 
 function TurnView({
@@ -591,6 +633,7 @@ function TurnView({
                   >
                     ✗ התשובה קיימת במסמכים — דווח למנהל
                   </button>
+                  <ReportSupportButton queryId={turn.query_id} />
                 </div>
               )}
               {turn.feedback === "positive" && (
@@ -647,6 +690,7 @@ function TurnView({
                   >
                     ✗ התשובה שגויה — הקורפוס יודע
                   </button>
+                  <ReportSupportButton queryId={turn.query_id} />
                 </div>
               )}
               {turn.feedback === "positive" && (

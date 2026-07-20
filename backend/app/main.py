@@ -26,6 +26,7 @@ from app.routes import (
     ingest,
     reviewer,
     search,
+    support,
 )
 
 log = structlog.get_logger()
@@ -56,6 +57,7 @@ app.include_router(documents.router, prefix="/api/documents", tags=["documents"]
 app.include_router(eval_routes.router, prefix="/api/eval", tags=["eval"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(contact.router, prefix="/api", tags=["contact"])
+app.include_router(support.router, prefix="/api/support", tags=["support"])
 
 
 @app.on_event("startup")

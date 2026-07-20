@@ -828,6 +828,14 @@ export const api = {
       { method: "POST" }
     ),
 
+  // User-initiated "report an issue" from a search turn. Fire-and-forget
+  // email to Tal — session context is looked up server-side from query_id.
+  reportSupport: (queryId: string, note: string) =>
+    request<{ status: string }>("/api/support/report", {
+      method: "POST",
+      body: JSON.stringify({ query_id: queryId, note }),
+    }),
+
   adminGetTenant: (tenantId: string) =>
     request<TenantContext>(`/api/admin/tenants/${tenantId}`),
   adminUpdateTenantContext: (tenantId: string, systemContext: string | null) =>
