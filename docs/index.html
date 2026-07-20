@@ -864,8 +864,211 @@
     border-top: 1px dashed var(--line);
   }
 </style>
+<style>
+  /* Interactive grid canvas — fixed behind everything so the wave/repel
+     stays alive across the entire page as you scroll. Pointer-events off
+     so links and buttons remain fully clickable. */
+  #grid-bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.55;
+  }
+  body > * { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { #grid-bg { display: none; } }
+</style>
 </head>
 <body>
+<canvas id="grid-bg" aria-hidden="true"></canvas>
+<script>
+/* Interactive grid: mouse repel + scroll-driven ripple.
+   Nodes displace away from the cursor with distance falloff, and a
+   sine wave phase-shifts based on scrollY so scrolling literally sends
+   waves through the mesh. Cheap enough for 60fps on a laptop. */
+(function() {
+  var canvas = document.getElementById('grid-bg');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d', { alpha: true });
+  var dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  var W = 0, H = 0;
+  var SPACING = 44;                   // grid cell size in CSS px
+  var REPEL_RADIUS = 160;             // cursor influence radius
+  var REPEL_STRENGTH = 55;            // max node displacement (px) from cursor
+  var WAVE_AMPLITUDE = 7;             // scroll-driven wave amplitude (px)
+  var WAVE_WAVELENGTH = 260;          // px per wave cycle
+  var COLOR = 'rgba(15, 23, 41, 0.55)';       // ink
+  var ACCENT = 'rgba(13, 148, 136, 0.9)';     // teal accent for near-cursor
+  var DOT_R = 1.1;
+
+  var mouse = { x: -9999, y: -9999, active: false };
+  var scrollY = window.scrollY || 0;
+  // Grid is straight by default. The wave is driven by scroll *velocity*
+  // — energy spikes when you scroll and decays back to 0 when you stop.
+  var lastScrollY = scrollY;
+  var waveEnergy = 0; // 0 = flat, 1 = full amplitude
+
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize, { passive: true });
+
+  window.addEventListener('mousemove', function(e) {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    mouse.active = true;
+  }, { passive: true });
+  window.addEventListener('mouseleave', function() { mouse.active = false; }, { passive: true });
+  window.addEventListener('scroll', function() {
+    var y = window.scrollY || 0;
+    var delta = Math.abs(y - lastScrollY);
+    lastScrollY = y;
+    scrollY = y;
+    // Pump wave energy proportional to scroll speed. Clamp so a
+    // wheel-flick doesn't over-shoot into visual noise.
+    waveEnergy = Math.min(1, waveEnergy + delta * 0.02);
+  }, { passive: true });
+
+  // Precompute base grid positions — recomputed on resize implicitly by
+  // the render loop using W/H, so no cached array to invalidate.
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    var cols = Math.ceil(W / SPACING) + 2;
+    var rows = Math.ceil(H / SPACING) + 2;
+    var offsetX = -SPACING; // start one column off-screen so no visible edge
+    var offsetY = -SPACING;
+
+    // Wave phase — advances with scroll position, but the wave is only
+    // visible when waveEnergy > 0 (i.e. actively scrolling). Grid sits
+    // perfectly straight at rest.
+    var phase = scrollY * 0.008;
+    var amp = WAVE_AMPLITUDE * waveEnergy;
+    // Decay the wave energy each frame — 0.94 gives a soft ~1s settle.
+    waveEnergy *= 0.94;
+    if (waveEnergy < 0.001) waveEnergy = 0;
+
+    // Two-pass render: lines first (so dots sit on top), computing each
+    // node's distorted position on demand. Cache column by column to
+    // avoid computing each node twice per frame.
+    var prev = new Array(cols);
+    var cur = new Array(cols);
+
+    function nodeAt(cx, cy) {
+      var bx = offsetX + cx * SPACING;
+      var by = offsetY + cy * SPACING;
+
+      // Scroll-driven ripple — sine wave across the page, phase-shifted
+      // by scrollY. Uses distance from center to produce a radial feel.
+      var wave = amp === 0 ? 0
+        : Math.sin((bx + by) / WAVE_WAVELENGTH * Math.PI * 2 + phase) * amp;
+
+      var x = bx + wave * 0.6;
+      var y = by + wave;
+
+      // Mouse repel — push node away from cursor, magnitude falls off
+      // smoothly to zero at REPEL_RADIUS.
+      if (mouse.active) {
+        var dx = x - mouse.x;
+        var dy = y - mouse.y;
+        var d2 = dx * dx + dy * dy;
+        var r2 = REPEL_RADIUS * REPEL_RADIUS;
+        if (d2 < r2 && d2 > 0.01) {
+          var d = Math.sqrt(d2);
+          var falloff = 1 - d / REPEL_RADIUS;
+          var push = REPEL_STRENGTH * falloff * falloff; // quadratic falloff = softer edge
+          x += (dx / d) * push;
+          y += (dy / d) * push;
+        }
+      }
+      return { x: x, y: y };
+    }
+
+    // First column
+    for (var r = 0; r < rows; r++) prev[r] = nodeAt(0, r);
+
+    for (var c = 1; c < cols; c++) {
+      for (var r2 = 0; r2 < rows; r2++) cur[r2] = nodeAt(c, r2);
+
+      // Lines: horizontal (prev-col row r → cur-col row r) and
+      // vertical (cur-col row r-1 → cur-col row r).
+      for (var r3 = 0; r3 < rows; r3++) {
+        var a = prev[r3];
+        var b = cur[r3];
+
+        // Color near cursor bleeds toward accent
+        var midx = (a.x + b.x) * 0.5;
+        var midy = (a.y + b.y) * 0.5;
+        var stroke = COLOR;
+        if (mouse.active) {
+          var mdx = midx - mouse.x;
+          var mdy = midy - mouse.y;
+          var md2 = mdx * mdx + mdy * mdy;
+          if (md2 < REPEL_RADIUS * REPEL_RADIUS) {
+            var t = 1 - Math.sqrt(md2) / REPEL_RADIUS;
+            stroke = t > 0.5 ? ACCENT : COLOR;
+          }
+        }
+
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        if (r3 > 0) {
+          var top = cur[r3 - 1];
+          ctx.beginPath();
+          ctx.moveTo(top.x, top.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+
+      // swap prev/cur for next column
+      var tmp = prev; prev = cur; cur = tmp;
+    }
+
+    // Second pass: dots at the intersections (last-column state is in
+    // `prev` after the swap). Redraw all so dots are crisp on top of
+    // lines. Cheaper than tracking every position — we recompute.
+    ctx.fillStyle = COLOR;
+    for (var cc = 0; cc < cols; cc++) {
+      for (var rr = 0; rr < rows; rr++) {
+        var n = nodeAt(cc, rr);
+        var fillStyle = COLOR;
+        if (mouse.active) {
+          var ndx = n.x - mouse.x;
+          var ndy = n.y - mouse.y;
+          var nd2 = ndx * ndx + ndy * ndy;
+          if (nd2 < REPEL_RADIUS * REPEL_RADIUS) {
+            var nt = 1 - Math.sqrt(nd2) / REPEL_RADIUS;
+            if (nt > 0.4) fillStyle = ACCENT;
+          }
+        }
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, DOT_R, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+})();
+</script>
 
 <div class="layout">
 

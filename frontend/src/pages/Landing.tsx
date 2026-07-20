@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 
 type Props = {
@@ -559,7 +559,21 @@ export default function Landing({ onLogin }: Props) {
         <div className="border-t border-line">
           <div className="max-w-6xl mx-auto px-6 py-5 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-soft">
             <span>© {new Date().getFullYear()} Klaser · כל הזכויות שמורות</span>
-            <span>klaser.co.il</span>
+            <span className="flex items-center gap-3">
+              <span>klaser.co.il</span>
+              <span className="text-ink-soft/60">·</span>
+              <span>
+                Built by{" "}
+                <a
+                  href="https://errn.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-accent transition"
+                >
+                  errn.io
+                </a>
+              </span>
+            </span>
           </div>
         </div>
       </footer>
@@ -585,25 +599,182 @@ const BENEFITS = [
   },
 ];
 
+/* Interactive grid: mouse repel + scroll-velocity-driven ripple.
+   Straight at rest — the wave only appears while the user is actively
+   scrolling and decays back to flat. Mouse repel is always on when the
+   cursor is inside the hero. Vanilla canvas, single rAF loop, honors
+   prefers-reduced-motion. */
 function BackgroundMesh() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const SPACING = 44;
+    const REPEL_RADIUS = 160;
+    const REPEL_STRENGTH = 55;
+    const WAVE_AMPLITUDE = 7;
+    const WAVE_WAVELENGTH = 260;
+    const COLOR = "rgba(23, 23, 23, 0.35)";
+    const ACCENT = "rgba(184, 65, 43, 0.85)";
+    const DOT_R = 1.1;
+
+    let W = 0;
+    let H = 0;
+    const mouse = { x: -9999, y: -9999, active: false };
+    let scrollY = window.scrollY || 0;
+    let lastScrollY = scrollY;
+    let waveEnergy = 0;
+    let raf = 0;
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      W = rect.width;
+      H = rect.height;
+      canvas.width = Math.floor(W * dpr);
+      canvas.height = Math.floor(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+
+    const onMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+        mouse.x = x;
+        mouse.y = y;
+        mouse.active = true;
+      } else {
+        mouse.active = false;
+      }
+    };
+    const onLeave = () => {
+      mouse.active = false;
+    };
+    const onScroll = () => {
+      const y = window.scrollY || 0;
+      const delta = Math.abs(y - lastScrollY);
+      lastScrollY = y;
+      scrollY = y;
+      waveEnergy = Math.min(1, waveEnergy + delta * 0.02);
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("mouseleave", onLeave, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    const nodeAt = (cx: number, cy: number, phase: number, amp: number) => {
+      const bx = -SPACING + cx * SPACING;
+      const by = -SPACING + cy * SPACING;
+      const wave =
+        amp === 0
+          ? 0
+          : Math.sin(((bx + by) / WAVE_WAVELENGTH) * Math.PI * 2 + phase) * amp;
+      let x = bx + wave * 0.6;
+      let y = by + wave;
+      if (mouse.active) {
+        const dx = x - mouse.x;
+        const dy = y - mouse.y;
+        const d2 = dx * dx + dy * dy;
+        const r2 = REPEL_RADIUS * REPEL_RADIUS;
+        if (d2 < r2 && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const falloff = 1 - d / REPEL_RADIUS;
+          const push = REPEL_STRENGTH * falloff * falloff;
+          x += (dx / d) * push;
+          y += (dy / d) * push;
+        }
+      }
+      return { x, y };
+    };
+
+    const strokeNear = (mx: number, my: number) => {
+      if (!mouse.active) return COLOR;
+      const dx = mx - mouse.x;
+      const dy = my - mouse.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < REPEL_RADIUS * REPEL_RADIUS) {
+        const t = 1 - Math.sqrt(d2) / REPEL_RADIUS;
+        if (t > 0.5) return ACCENT;
+      }
+      return COLOR;
+    };
+
+    const render = () => {
+      ctx.clearRect(0, 0, W, H);
+      const cols = Math.ceil(W / SPACING) + 2;
+      const rows = Math.ceil(H / SPACING) + 2;
+      const phase = scrollY * 0.008;
+      const amp = WAVE_AMPLITUDE * waveEnergy;
+      waveEnergy *= 0.94;
+      if (waveEnergy < 0.001) waveEnergy = 0;
+
+      let prev: { x: number; y: number }[] = new Array(rows);
+      let cur: { x: number; y: number }[] = new Array(rows);
+      for (let r = 0; r < rows; r++) prev[r] = nodeAt(0, r, phase, amp);
+
+      ctx.lineWidth = 1;
+      for (let c = 1; c < cols; c++) {
+        for (let r = 0; r < rows; r++) cur[r] = nodeAt(c, r, phase, amp);
+        for (let r = 0; r < rows; r++) {
+          const a = prev[r];
+          const b = cur[r];
+          ctx.strokeStyle = strokeNear((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+          if (r > 0) {
+            const top = cur[r - 1];
+            ctx.strokeStyle = strokeNear((top.x + b.x) * 0.5, (top.y + b.y) * 0.5);
+            ctx.beginPath();
+            ctx.moveTo(top.x, top.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+        const tmp = prev;
+        prev = cur;
+        cur = tmp;
+      }
+
+      for (let cc = 0; cc < cols; cc++) {
+        for (let rr = 0; rr < rows; rr++) {
+          const n = nodeAt(cc, rr, phase, amp);
+          ctx.fillStyle = strokeNear(n.x, n.y);
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, DOT_R, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      raf = requestAnimationFrame(render);
+    };
+    raf = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+
   return (
-    <svg
-      className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none"
-      viewBox="0 0 1200 800"
-      preserveAspectRatio="xMidYMid slice"
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full opacity-40 pointer-events-none"
       aria-hidden="true"
-    >
-      <defs>
-        <pattern
-          id="landing-grid"
-          width="40"
-          height="40"
-          patternUnits="userSpaceOnUse"
-        >
-          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#171717" strokeWidth="1" />
-        </pattern>
-      </defs>
-      <rect width="1200" height="800" fill="url(#landing-grid)" />
-    </svg>
+    />
   );
 }
