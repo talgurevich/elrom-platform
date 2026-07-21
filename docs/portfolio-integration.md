@@ -15,7 +15,7 @@ Related:
 |---|---|---|---|---|
 | Identity | *n/a — the identity service itself* | `auth.klaser.co.il` | same host, `/api/*` | Tal |
 | Takanon | `takanon` | `takanon.klaser.co.il` (also served on `www.klaser.co.il` during migration) | `*.onrender.com` | Tal |
-| Meetings | `meetings` | *not set yet — target: `meetings.klaser.co.il`* | `*.onrender.com` | Gil |
+| Meetings | `meetings` | `meetings.klaser.co.il` (live) | `api.meetings.klaser.co.il` | Gil |
 
 When adding a new product, add it here first, then in `frontend/src/lib/products.ts` in every product that renders the switcher.
 
@@ -74,7 +74,7 @@ To see the switcher render locally during development, grant your test tenant a 
 
 ## Adding a subdomain (Render + DNS)
 
-Do this once per product frontend. Backends can stay on `*.onrender.com` — users never see them.
+Do this once per product frontend **and once per product backend**. Backends **cannot** stay on `*.onrender.com`: the `klaser_session` cookie is scoped to `.klaser.co.il`, and the browser never attaches it to a request host outside that domain (CORS `credentials: include` does not override this). A backend on a raw `*.onrender.com` URL silently 401s "Not authenticated". Every backend must therefore also get an `api.<product>.klaser.co.il` custom domain — add it the same way (Render → the *backend* web service → Custom Domains → Add).
 
 1. In Render → the frontend static site → **Settings → Custom Domains → Add**. Enter e.g. `meetings.klaser.co.il`.
 2. Render displays a **CNAME target** like `xyz.onrender.com` (and sometimes a TXT verification record).
@@ -83,9 +83,9 @@ Do this once per product frontend. Backends can stay on `*.onrender.com` — use
 5. Set env vars on the product's **backend**:
    - `KLASER_APP_URL=https://<new-host>` (used for magic-link and RSVP emails, etc.)
    - Add `https://<new-host>` to the CORS allowlist.
-6. Set env var on the product's **frontend** (if applicable):
-   - `VITE_API_URL` unchanged (still the Render backend host)
-   - Rebuild + redeploy.
+6. Set env var on the product's **frontend**:
+   - Point the API base env var at the backend's `api.<product>.klaser.co.il` host — **not** its raw `*.onrender.com` URL (see cookie note above). In Meetings this var is `VITE_API_BASE_URL`.
+   - Rebuild + redeploy — Vite bakes env vars in at build time, so a restart alone won't pick up the change.
 7. Verify in DevTools that the `klaser_session` cookie is visible on the new host after login.
 
 ---
@@ -106,8 +106,9 @@ Prereqs already handled by Tal — you don't need to redo them:
 
 Your side:
 1. **Deploy Meetings on Render** if you haven't yet (backend web service + frontend static site + Postgres). Model `render.yaml` on Takanon's if useful — happy to prep one against your repo, just ask.
-2. **Custom domain** `meetings.klaser.co.il` on the frontend static site — Render → Settings → Custom Domains → Add. Paste the CNAME target back to Tal, who'll add the DNS record at My Names.
+2. **Custom domains** — add *both*: `meetings.klaser.co.il` on the frontend static site **and** `api.meetings.klaser.co.il` on the backend web service (the backend domain is mandatory — the session cookie won't attach to a raw `*.onrender.com` host). Render → Settings → Custom Domains → Add on each. Paste the CNAME targets back to Tal, who'll add the DNS records at My Names.
 3. **Backend env vars**: set `KLASER_APP_URL=https://meetings.klaser.co.il` (for RSVP + invite emails).
+   Then point the frontend's `VITE_API_BASE_URL` at `https://api.meetings.klaser.co.il` and redeploy (Vite bakes env at build time).
 4. **Frontend types**: add `entitlements?: string[]` to your `CurrentUser` type.
 5. **Copy** `frontend/src/lib/products.ts` from Takanon **verbatim**, then set `CURRENT_PRODUCT_ID = "meetings"`.
 6. **Render the switcher** in the user dropdown, above logout — copy the JSX block from Takanon's `frontend/src/App.tsx` (search "מעבר בין מוצרים"). Filter `PRODUCTS` by `user.entitlements`.
