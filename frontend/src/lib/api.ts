@@ -822,9 +822,9 @@ export const api = {
     const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
     return request<DebugQueueItem[]>(`/api/admin/debug-queue${qs}`);
   },
-  adminDismissDebug: (queryId: string) =>
-    request<{ status: string }>(
-      `/api/admin/debug-queue/${queryId}/dismiss`,
+  adminDismissDebug: (conversationId: string) =>
+    request<{ status: string; dismissed: number }>(
+      `/api/admin/debug-queue/conversation/${encodeURIComponent(conversationId)}/dismiss`,
       { method: "POST" }
     ),
 
@@ -882,15 +882,25 @@ export type DebugChunk = {
   text: string;
 };
 
-export type DebugQueueItem = {
+export type DebugTurn = {
   query_id: string;
-  tenant_id: string;
-  tenant_name: string | null;
+  turn_index: number | null;
   question: string;
   answer: string | null;
   confidence: string | null;
-  llm_used: boolean;
   created_at: string;
+  llm_used: boolean;
+  flagged: boolean;
+};
+
+export type DebugQueueItem = {
+  conversation_id: string;
+  tenant_id: string;
+  tenant_name: string | null;
+  latest_flagged_at: string;
+  flagged_count: number;
+  turn_count: number;
+  turns: DebugTurn[];
   retrieval_debug: RetrievalDebug | null;
   source_chunks: DebugChunk[];
 };

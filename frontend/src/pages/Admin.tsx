@@ -1001,9 +1001,12 @@ function DebugQueueSection({
     const md = buildDebugMarkdown(item);
     try {
       await navigator.clipboard.writeText(md);
-      setCopiedFor(item.query_id);
+      setCopiedFor(item.conversation_id);
       window.setTimeout(
-        () => setCopiedFor((prev) => (prev === item.query_id ? null : prev)),
+        () =>
+          setCopiedFor((prev) =>
+            prev === item.conversation_id ? null : prev
+          ),
         2000
       );
     } catch (err) {
@@ -1012,10 +1015,10 @@ function DebugQueueSection({
   };
 
   const dismiss = async (item: DebugQueueItem) => {
-    if (!confirm("להסיר מהתור?")) return;
+    if (!confirm("להסיר את השיחה כולה מהתור?")) return;
     try {
-      await api.adminDismissDebug(item.query_id);
-      onDismissed("הוסר מהתור");
+      await api.adminDismissDebug(item.conversation_id);
+      onDismissed("השיחה הוסרה מהתור");
       await reload();
     } catch (err) {
       onError(err instanceof ApiError ? err.message : String(err));
@@ -1063,31 +1066,39 @@ function DebugQueueSection({
           </div>
         ) : (
           items.map((item) => {
-            const open = expanded.has(item.query_id);
+            const open = expanded.has(item.conversation_id);
+            const latestFlagged =
+              [...item.turns].reverse().find((t) => t.flagged) ||
+              item.turns[item.turns.length - 1];
+            const headlineQ = latestFlagged?.question || "";
+            const headlineA = latestFlagged?.answer || "";
             return (
               <div
-                key={item.query_id}
+                key={item.conversation_id}
                 className="border-b border-line last:border-b-0"
               >
                 <button
-                  onClick={() => toggle(item.query_id)}
+                  onClick={() => toggle(item.conversation_id)}
                   className="w-full text-right px-4 py-3 grid grid-cols-12 gap-3 items-baseline hover:bg-line/40 transition"
                 >
                   <div className="col-span-6">
                     <div className="text-sm font-semibold text-ink truncate">
-                      {item.question}
+                      {headlineQ}
                     </div>
-                    {item.answer && (
+                    {headlineA && (
                       <div className="text-xs text-ink-soft mt-1 line-clamp-1">
-                        {item.answer.slice(0, 160)}
+                        {headlineA.slice(0, 160)}
                       </div>
                     )}
                   </div>
                   <div className="col-span-3 text-xs text-ink-soft truncate">
                     {item.tenant_name || item.tenant_id}
+                    <span className="mr-2 text-accent">
+                      · {item.flagged_count}/{item.turn_count} דיווחים
+                    </span>
                   </div>
                   <div className="col-span-2 text-xs text-ink-soft">
-                    {formatDate(item.created_at)}
+                    {formatDate(item.latest_flagged_at)}
                   </div>
                   <div className="col-span-1 text-left text-xs text-accent font-bold">
                     {open ? "−" : "+"}
@@ -1097,31 +1108,52 @@ function DebugQueueSection({
                 {open && (
                   <div className="border-t border-line bg-line/20 px-5 py-5 space-y-5">
                     <div>
-                      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-1">
-                        שאלה
+                      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-2">
+                        שיחה מלאה ({item.turn_count} תורות · {item.flagged_count} מסומנים)
                       </div>
-                      <p className="text-sm text-ink whitespace-pre-wrap">
-                        {item.question}
-                      </p>
-                    </div>
-
-                    <div>
-                      <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-1">
-                        תשובה שהוחזרה
-                        {item.confidence && (
-                          <span className="mr-2 text-accent">
-                            · {item.confidence}
-                          </span>
-                        )}
+                      <div className="space-y-3">
+                        {item.turns.map((t, i) => (
+                          <div
+                            key={t.query_id}
+                            className={
+                              "border-r-4 px-3 py-2 bg-surface " +
+                              (t.flagged
+                                ? "border-accent"
+                                : "border-line-strong")
+                            }
+                          >
+                            <div className="flex items-baseline gap-2 mb-1 text-[10px] tracking-[0.2em] uppercase font-bold">
+                              <span className="text-ink-soft">
+                                תור {t.turn_index ?? i + 1}
+                              </span>
+                              {t.flagged && (
+                                <span className="text-accent">🚩 סומן</span>
+                              )}
+                              {t.confidence && (
+                                <span className="text-ink-soft">
+                                  · {t.confidence}
+                                </span>
+                              )}
+                              <span className="text-ink-soft mr-auto">
+                                {formatDate(t.created_at)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-ink whitespace-pre-wrap font-semibold">
+                              {t.question}
+                            </p>
+                            {t.answer && (
+                              <p className="text-sm text-ink-soft whitespace-pre-wrap mt-1">
+                                {t.answer}
+                              </p>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-sm text-ink whitespace-pre-wrap bg-surface border-r-4 border-accent px-3 py-2">
-                        {item.answer || "(אין תשובה)"}
-                      </p>
                     </div>
 
                     <div>
                       <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-2">
-                        קטעי טקסט שנשלפו ({item.source_chunks.length})
+                        קטעי טקסט שנשלפו בתור המסומן האחרון ({item.source_chunks.length})
                       </div>
                       {item.source_chunks.length === 0 ? (
                         <p className="text-xs text-ink-soft">
@@ -1173,7 +1205,7 @@ function DebugQueueSection({
                         onClick={() => void copyMarkdown(item)}
                         className="bg-ink text-surface px-4 py-2 text-sm font-bold hover:bg-accent transition"
                       >
-                        {copiedFor === item.query_id
+                        {copiedFor === item.conversation_id
                           ? "✓ הועתק"
                           : "העתק דיווח Markdown"}
                       </button>
@@ -1181,7 +1213,7 @@ function DebugQueueSection({
                         onClick={() => void dismiss(item)}
                         className="border border-line-strong px-4 py-2 text-sm text-ink-soft hover:border-ink hover:text-ink transition"
                       >
-                        הסר מהתור
+                        הסר את השיחה מהתור
                       </button>
                     </div>
                   </div>
@@ -1197,26 +1229,36 @@ function DebugQueueSection({
 
 function buildDebugMarkdown(item: DebugQueueItem): string {
   const lines: string[] = [];
-  lines.push(`# Debug report — query ${item.query_id}`);
+  lines.push(`# Debug report — conversation ${item.conversation_id}`);
   lines.push("");
   lines.push(`- **Tenant**: ${item.tenant_name || item.tenant_id}`);
-  lines.push(`- **When**: ${item.created_at}`);
-  lines.push(`- **Confidence**: ${item.confidence || "—"}`);
-  lines.push(`- **LLM used**: ${item.llm_used ? "yes" : "no"}`);
+  lines.push(`- **Latest flagged**: ${item.latest_flagged_at}`);
+  lines.push(
+    `- **Flagged turns**: ${item.flagged_count} of ${item.turn_count}`
+  );
   lines.push("");
-  lines.push("## Question");
+  lines.push("## Conversation transcript");
   lines.push("");
-  lines.push("```");
-  lines.push(item.question);
-  lines.push("```");
-  lines.push("");
-  lines.push("## Answer returned to user");
-  lines.push("");
-  lines.push("```");
-  lines.push(item.answer || "(no answer)");
-  lines.push("```");
-  lines.push("");
-  lines.push(`## Retrieved chunks (${item.source_chunks.length})`);
+  item.turns.forEach((t, i) => {
+    const tag = t.flagged ? "🚩 FLAGGED" : "";
+    lines.push(`### Turn ${t.turn_index ?? i + 1} ${tag}`.trim());
+    lines.push(`- **When**: ${t.created_at}`);
+    if (t.confidence) lines.push(`- **Confidence**: ${t.confidence}`);
+    lines.push("");
+    lines.push("**Question:**");
+    lines.push("```");
+    lines.push(t.question);
+    lines.push("```");
+    lines.push("");
+    lines.push("**Answer:**");
+    lines.push("```");
+    lines.push(t.answer || "(no answer)");
+    lines.push("```");
+    lines.push("");
+  });
+  lines.push(
+    `## Retrieved chunks from last flagged turn (${item.source_chunks.length})`
+  );
   lines.push("");
   item.source_chunks.forEach((c, i) => {
     lines.push(
@@ -1231,7 +1273,7 @@ function buildDebugMarkdown(item: DebugQueueItem): string {
     lines.push("");
   });
   if (item.retrieval_debug) {
-    lines.push("## Retrieval trace");
+    lines.push("## Retrieval trace (last flagged turn)");
     lines.push("");
     lines.push("```json");
     lines.push(JSON.stringify(item.retrieval_debug, null, 2));

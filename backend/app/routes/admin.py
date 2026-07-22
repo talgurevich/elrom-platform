@@ -26,6 +26,7 @@ Everything here requires is_super_admin, enforced via the identity
 introspect response. The frontend refuses to open the admin panel while
 viewing another tenant.
 """
+from datetime import datetime
 from uuid import UUID
 
 import structlog
@@ -554,15 +555,35 @@ class DebugChunk(BaseModel):
     text: str
 
 
-class DebugQueueItem(BaseModel):
+class DebugTurn(BaseModel):
+    """One turn in a flagged conversation. Every turn of the chat is
+    included — flagged ones marked so the reviewer sees the arc, not just
+    the exact turn the user reported."""
     query_id: str
-    tenant_id: str
-    tenant_name: str | None
+    turn_index: int | None
     question: str
     answer: str | None
     confidence: str | None
-    llm_used: bool
     created_at: str
+    llm_used: bool
+    flagged: bool
+
+
+class DebugQueueItem(BaseModel):
+    """One entry in the debug queue = one conversation with at least one
+    flagged turn. Follow-ups are folded into the same item so the reviewer
+    sees the full context in one place."""
+    conversation_id: str
+    tenant_id: str
+    tenant_name: str | None
+    latest_flagged_at: str
+    flagged_count: int
+    turn_count: int
+    turns: list[DebugTurn]
+    # Retrieval trace + source chunks come from the *last* flagged turn
+    # (the freshest evidence). Earlier flagged turns in the same
+    # conversation may have different chunks, but a reviewer usually
+    # follows the last problem.
     retrieval_debug: dict | None
     source_chunks: list[DebugChunk]
 
@@ -574,13 +595,12 @@ def debug_queue(
     _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> list[DebugQueueItem]:
-    """Queries the end-user flagged as broken. Reads Query + Chunk +
-    Document from this backend's DB (all Takanon-owned domain data),
-    and enriches tenant names from the local tenant snapshot."""
+    """Conversations the end-user flagged as broken. Grouped so a
+    5-turn chat with 3 thumbs-downs appears as one row, not three."""
     if limit < 1 or limit > 200:
         raise HTTPException(400, "limit must be between 1 and 200")
 
-    q = db.query(Query).filter(
+    flagged_q = db.query(Query).filter(
         Query.feedback == "negative",
         Query.failure_mode == "retrieval_miss",
     )
@@ -589,8 +609,40 @@ def debug_queue(
             tid = UUID(tenant_id)
         except (ValueError, TypeError) as e:
             raise HTTPException(400, "Invalid tenant_id") from e
-        q = q.filter(Query.tenant_id == tid)
-    rows = q.order_by(Query.created_at.desc()).limit(limit).all()
+        flagged_q = flagged_q.filter(Query.tenant_id == tid)
+    flagged_rows = flagged_q.order_by(Query.created_at.desc()).all()
+
+    # Group flagged turns by conversation. Legacy Query rows without a
+    # conversation_id (pre-conversation era) collapse to a synthetic
+    # single-row group keyed off their own query_id.
+    grouped: dict[str, list[Query]] = {}
+    for r in flagged_rows:
+        key = str(r.conversation_id) if r.conversation_id is not None else f"q:{r.id}"
+        grouped.setdefault(key, []).append(r)
+
+    # Order conversations by their most-recent flagged turn.
+    ordered_keys = sorted(
+        grouped.keys(),
+        key=lambda k: max(
+            (r.created_at for r in grouped[k] if r.created_at is not None),
+            default=datetime.min,
+        ),
+        reverse=True,
+    )[:limit]
+
+    # Bulk-load every turn (flagged or not) in the selected conversations
+    # so we can render the full transcript per item.
+    real_conv_ids = [UUID(k) for k in ordered_keys if not k.startswith("q:")]
+    turns_by_conv: dict[UUID, list[Query]] = {}
+    if real_conv_ids:
+        all_turns = (
+            db.query(Query)
+            .filter(Query.conversation_id.in_(real_conv_ids))
+            .order_by(Query.turn_index.asc().nulls_last(), Query.created_at.asc())
+            .all()
+        )
+        for t in all_turns:
+            turns_by_conv.setdefault(t.conversation_id, []).append(t)
 
     # Tenant names come from identity now. If identity is unreachable
     # the queue still renders — tenant column just shows the raw UUID.
@@ -600,11 +652,15 @@ def debug_queue(
         log.warning("admin.debug_queue_tenants_lookup_failed", error=str(e))
         tenants = {}
 
+    # Chunk lookup for the "last flagged turn" of each conversation.
+    latest_flagged_by_key: dict[str, Query] = {
+        k: max(grouped[k], key=lambda r: r.created_at or datetime.min)
+        for k in ordered_keys
+    }
     all_chunk_ids: set[UUID] = set()
-    for r in rows:
+    for r in latest_flagged_by_key.values():
         for cid in r.source_chunk_ids or []:
             all_chunk_ids.add(cid)
-
     chunk_rows = (
         db.query(Chunk, Document)
         .join(Document, Document.id == Chunk.document_id)
@@ -618,14 +674,40 @@ def debug_queue(
     }
 
     result: list[DebugQueueItem] = []
-    for r in rows:
-        chunks: list[DebugChunk] = []
-        for cid in r.source_chunk_ids or []:
+    for key in ordered_keys:
+        flagged_group = grouped[key]
+        flagged_ids = {r.id for r in flagged_group}
+        latest_flagged = latest_flagged_by_key[key]
+
+        if key.startswith("q:"):
+            # Legacy: pre-conversation Query row, standalone.
+            turns_seq = flagged_group
+            conv_id_str = f"legacy:{latest_flagged.id}"
+        else:
+            turns_seq = turns_by_conv.get(UUID(key), flagged_group)
+            conv_id_str = key
+
+        turns_out = [
+            DebugTurn(
+                query_id=str(t.id),
+                turn_index=t.turn_index,
+                question=t.question,
+                answer=t.answer,
+                confidence=t.confidence,
+                created_at=t.created_at.isoformat() if t.created_at else "",
+                llm_used=bool(t.llm_used),
+                flagged=t.id in flagged_ids,
+            )
+            for t in turns_seq
+        ]
+
+        chunks_out: list[DebugChunk] = []
+        for cid in latest_flagged.source_chunk_ids or []:
             pair = chunk_lookup.get(cid)
             if pair is None:
                 continue
             c, d = pair
-            chunks.append(
+            chunks_out.append(
                 DebugChunk(
                     chunk_id=str(c.id),
                     document_id=str(d.id),
@@ -634,41 +716,68 @@ def debug_queue(
                     text=c.text,
                 )
             )
+
         result.append(
             DebugQueueItem(
-                query_id=str(r.id),
-                tenant_id=str(r.tenant_id),
-                tenant_name=tenants.get(str(r.tenant_id)),
-                question=r.question,
-                answer=r.answer,
-                confidence=r.confidence,
-                llm_used=bool(r.llm_used),
-                created_at=r.created_at.isoformat() if r.created_at else "",
-                retrieval_debug=r.retrieval_debug,
-                source_chunks=chunks,
+                conversation_id=conv_id_str,
+                tenant_id=str(latest_flagged.tenant_id),
+                tenant_name=tenants.get(str(latest_flagged.tenant_id)),
+                latest_flagged_at=latest_flagged.created_at.isoformat()
+                if latest_flagged.created_at
+                else "",
+                flagged_count=len(flagged_group),
+                turn_count=len(turns_seq),
+                turns=turns_out,
+                retrieval_debug=latest_flagged.retrieval_debug,
+                source_chunks=chunks_out,
             )
         )
     return result
 
 
-@router.post("/debug-queue/{query_id}/dismiss")
-def dismiss_debug_item(
-    query_id: str,
+@router.post("/debug-queue/conversation/{conversation_id}/dismiss")
+def dismiss_debug_conversation(
+    conversation_id: str,
     _: IdentityUser = Depends(_require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Remove a query from the debug queue after diagnosis."""
+    """Remove a whole conversation from the debug queue — clears the
+    failure_mode on every flagged turn inside it. Accepts either a real
+    conversation_id or a "legacy:<query_id>" key for pre-conversation
+    Query rows (surfaced by /debug-queue as standalone items)."""
+    if conversation_id.startswith("legacy:"):
+        try:
+            qid = UUID(conversation_id[len("legacy:") :])
+        except (ValueError, TypeError) as e:
+            raise HTTPException(400, "Invalid legacy query id") from e
+        q = db.get(Query, qid)
+        if q is None:
+            raise HTTPException(404, "Query not found")
+        q.failure_mode = None
+        q.reviewer_action = "rejected"
+        db.commit()
+        return {"status": "ok", "dismissed": 1}
+
     try:
-        qid = UUID(query_id)
+        conv_uuid = UUID(conversation_id)
     except (ValueError, TypeError) as e:
-        raise HTTPException(400, "Invalid query_id") from e
-    q = db.get(Query, qid)
-    if q is None:
-        raise HTTPException(404, "Query not found")
-    q.failure_mode = None
-    q.reviewer_action = "rejected"
+        raise HTTPException(400, "Invalid conversation_id") from e
+    flagged = (
+        db.query(Query)
+        .filter(
+            Query.conversation_id == conv_uuid,
+            Query.feedback == "negative",
+            Query.failure_mode == "retrieval_miss",
+        )
+        .all()
+    )
+    if not flagged:
+        raise HTTPException(404, "No flagged turns for this conversation")
+    for q in flagged:
+        q.failure_mode = None
+        q.reviewer_action = "rejected"
     db.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "dismissed": len(flagged)}
 
 
 @router.delete("/users/{user_id}")
