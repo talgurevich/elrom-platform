@@ -644,14 +644,16 @@ def get_document_file(
             "אין קובץ מקור שמור למסמך זה. יש להעלות מחדש כדי לצפות במקור.",
         )
 
+    # Content-Disposition: inline → browser renders the PDF in its built-in
+    # viewer instead of downloading it. Frontend opens in a new tab so the
+    # user can keep the answer in the original window. Delegate to Starlette
+    # for header construction so non-ASCII filenames (Hebrew) get RFC 5987
+    # UTF-8 encoding — a raw header would crash with a 500 on encode.
     return FileResponse(
         path=str(path),
         media_type=guess_content_type(path),
         filename=doc.filename,
-        # Content-Disposition: inline → browser renders the PDF in its
-        # built-in viewer instead of downloading it. Frontend opens in a
-        # new tab so the user can keep the answer in the original window.
-        headers={"Content-Disposition": f'inline; filename="{doc.filename}"'},
+        content_disposition_type="inline",
     )
 
 
