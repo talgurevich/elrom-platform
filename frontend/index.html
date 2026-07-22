@@ -10,12 +10,97 @@
       rel="stylesheet"
     />
     <title>אלרום — חיפוש בתקנונים</title>
-    <script type="text/javascript">
-        (function(c,l,a,r,i,t,y){
-            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-        })(window, document, "clarity", "script", "xorntm9r2a");
+    <script>
+      /* Cookie consent + gated Microsoft Clarity loader.
+         Runs before app boot so no analytics fires until the user answers.
+         Choice persisted in localStorage as klaser.cookieConsent =
+         "accepted" | "rejected". */
+      (function () {
+        var STORAGE_KEY = "klaser.cookieConsent";
+        var choice = null;
+        try { choice = window.localStorage.getItem(STORAGE_KEY); } catch (e) {}
+
+        function loadClarity() {
+          (function (c, l, a, r, i, t, y) {
+            c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
+            t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
+            y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
+          })(window, document, "clarity", "script", "xorntm9r2a");
+        }
+
+        function persist(value) {
+          try { window.localStorage.setItem(STORAGE_KEY, value); } catch (e) {}
+        }
+
+        function hideBanner() {
+          var el = document.getElementById("klaser-cookie-banner");
+          if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+
+        function renderBanner() {
+          if (document.getElementById("klaser-cookie-banner")) return;
+          var wrap = document.createElement("div");
+          wrap.id = "klaser-cookie-banner";
+          wrap.setAttribute("dir", "rtl");
+          wrap.setAttribute("role", "dialog");
+          wrap.setAttribute("aria-live", "polite");
+          wrap.innerHTML =
+            '<div class="kcb-body">' +
+              '<p class="kcb-text">' +
+                'האתר משתמש בקובצי Cookie חיוניים לצורך התחברות, וכן בכלי ניתוח שימוש (Microsoft Clarity) כדי לשפר את המוצר. ' +
+                'ההסכמה לניתוח היא אופציונלית — בהתחברות עצמה משתמשים בקובץ Cookie חיוני שאינו דורש הסכמה.' +
+              '</p>' +
+              '<div class="kcb-actions">' +
+                '<button type="button" class="kcb-btn kcb-btn-reject" id="kcb-reject">לא, תודה</button>' +
+                '<button type="button" class="kcb-btn kcb-btn-accept" id="kcb-accept">אישור</button>' +
+              '</div>' +
+            '</div>';
+
+          // Style is inlined so this banner is self-contained and can't be
+          // knocked off by the app's Tailwind reset before it mounts.
+          var style = document.createElement("style");
+          style.textContent =
+            '#klaser-cookie-banner{position:fixed;left:0;right:0;bottom:0;z-index:9999;' +
+              'background:#fafaf9;border-top:2px solid #171717;font-family:Assistant,Heebo,system-ui,sans-serif;' +
+              'color:#171717;direction:rtl;text-align:right;box-shadow:0 -8px 24px rgba(0,0,0,0.06);}' +
+            '#klaser-cookie-banner .kcb-body{max-width:1120px;margin:0 auto;padding:14px 20px;' +
+              'display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;}' +
+            '#klaser-cookie-banner .kcb-text{margin:0;font-size:13px;line-height:1.55;color:#333;max-width:720px;}' +
+            '#klaser-cookie-banner .kcb-actions{display:flex;gap:8px;flex-wrap:nowrap;}' +
+            '#klaser-cookie-banner .kcb-btn{font-family:inherit;font-size:13px;font-weight:700;' +
+              'padding:8px 16px;border:2px solid #171717;background:#fafaf9;color:#171717;cursor:pointer;transition:background .15s;}' +
+            '#klaser-cookie-banner .kcb-btn:hover{background:#171717;color:#fafaf9;}' +
+            '#klaser-cookie-banner .kcb-btn-accept{background:#171717;color:#fafaf9;}' +
+            '#klaser-cookie-banner .kcb-btn-accept:hover{background:#b8412b;border-color:#b8412b;}' +
+            '@media(max-width:640px){#klaser-cookie-banner .kcb-body{flex-direction:column;align-items:stretch;}' +
+              '#klaser-cookie-banner .kcb-actions{justify-content:flex-end;}}';
+          document.head.appendChild(style);
+          document.body.appendChild(wrap);
+
+          document.getElementById("kcb-accept").addEventListener("click", function () {
+            persist("accepted");
+            hideBanner();
+            loadClarity();
+          });
+          document.getElementById("kcb-reject").addEventListener("click", function () {
+            persist("rejected");
+            hideBanner();
+          });
+        }
+
+        if (choice === "accepted") {
+          loadClarity();
+        } else if (choice === "rejected") {
+          // do nothing
+        } else {
+          // Wait for body to exist before rendering.
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderBanner);
+          } else {
+            renderBanner();
+          }
+        }
+      })();
     </script>
   </head>
   <body>
