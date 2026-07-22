@@ -1,0 +1,2265 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Klaser Platform Roadmap</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --surface: #ffffff;
+    --ink: #0f1729;
+    --ink-soft: #334155;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #0d9488;
+    --accent-soft: #ccfbf1;
+    --coral: #ea580c;
+    --coral-soft: #fed7aa;
+    --violet: #7c3aed;
+    --violet-soft: #ede9fe;
+    --amber: #ca8a04;
+    --amber-soft: #fef3c7;
+    --rose: #be185d;
+    --rose-soft: #fce7f3;
+    --slate: #475569;
+    --slate-soft: #e2e8f0;
+    --ns-bg: #0f1729;
+    --ns-ink: #f8fafc;
+    --ns-accent: #5eead4;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.65;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    max-width: 1240px;
+    margin: 0 auto;
+    gap: 48px;
+    padding: 40px 32px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 24px; padding: 24px 16px; }
+    aside { position: static !important; }
+  }
+
+  /* SIDEBAR */
+  aside {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    height: fit-content;
+    font-size: 13px;
+  }
+  aside .brand {
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  aside .brand-sub {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+  }
+  aside nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-radius: 6px;
+    margin: 2px 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  aside nav a:hover { background: rgba(0,0,0,0.04); color: var(--ink); }
+  aside nav a .num {
+    font-family: 'Georgia', serif;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 14px;
+    width: 20px;
+  }
+  aside nav .divider { height: 1px; background: var(--line); margin: 16px 0; }
+
+  /* HERO */
+  .hero { margin-bottom: 48px; }
+  .hero h1 {
+    font-family: 'Georgia', serif;
+    font-size: 42px;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+  }
+  .hero .lede {
+    color: var(--muted);
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+  .hero .meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero .meta span strong { color: var(--ink); font-weight: 600; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+
+  /* OBJECTIVES */
+  .objectives {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 32px 0 56px;
+  }
+  .obj {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+  }
+  .obj .obj-num {
+    font-family: 'Georgia', serif;
+    font-size: 24px;
+    color: var(--accent);
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .obj .obj-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .obj .obj-desc { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+  /* TRACK CARDS */
+  .track {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .track::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--track-color, var(--accent));
+  }
+  .track[data-color="teal"] { --track-color: var(--accent); --track-tint: var(--accent-soft); }
+  .track[data-color="coral"] { --track-color: var(--coral); --track-tint: var(--coral-soft); }
+  .track[data-color="violet"] { --track-color: var(--violet); --track-tint: var(--violet-soft); }
+  .track[data-color="amber"] { --track-color: var(--amber); --track-tint: var(--amber-soft); }
+  .track[data-color="rose"] { --track-color: var(--rose); --track-tint: var(--rose-soft); }
+  .track[data-color="slate"] { --track-color: var(--slate); --track-tint: var(--slate-soft); }
+  .track[data-color="emerald"] { --track-color: #047857; --track-tint: #d1fae5; }
+  .track[data-color="indigo"] { --track-color: #4338ca; --track-tint: #e0e7ff; }
+  .track[data-color="sky"] { --track-color: #0284c7; --track-tint: #e0f2fe; }
+
+  .track-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .track-num {
+    font-family: 'Georgia', serif;
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--track-color);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    flex-shrink: 0;
+  }
+  .track-titles h2 {
+    font-family: 'Georgia', serif;
+    font-size: 26px;
+    margin: 4px 0 6px;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  .track-titles .track-tag {
+    display: inline-block;
+    background: var(--track-tint);
+    color: var(--track-color);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .focus {
+    background: var(--track-tint);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 16px 0 24px;
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .focus strong { color: var(--track-color); }
+
+  .subtrack {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .subtrack:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  .subtrack h3 {
+    font-size: 16px;
+    margin: 0 0 12px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .subtrack h3 .sub-num {
+    font-family: 'Georgia', serif;
+    font-weight: 700;
+    color: var(--track-color);
+    font-size: 15px;
+  }
+  .subtrack h4 {
+    font-size: 14px;
+    margin: 16px 0 8px;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .subtrack ol, .subtrack ul {
+    margin: 8px 0 12px;
+    padding-left: 22px;
+  }
+  .subtrack li { margin: 4px 0; color: var(--ink-soft); }
+  .subtrack ul ul, .subtrack ol ul { margin-top: 4px; }
+  .subtrack code {
+    background: rgba(0,0,0,0.04);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  .benefit {
+    background: rgba(0,0,0,0.02);
+    border-left: 3px solid var(--track-color);
+    padding: 10px 14px;
+    margin: 12px 0 4px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-radius: 0 6px 6px 0;
+  }
+  .benefit strong { color: var(--track-color); }
+
+  /* SEQUENCING TIMELINE */
+  .sequence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 16px 0 8px;
+    padding: 16px;
+    background: rgba(0,0,0,0.02);
+    border-radius: 10px;
+  }
+  .sequence .step {
+    background: var(--track-color);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    font-family: 'Georgia', serif;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+    min-width: 80px;
+  }
+  .sequence .step small {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 10px;
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 3px;
+  }
+  .sequence .arrow {
+    color: var(--track-color);
+    opacity: 0.4;
+    font-size: 18px;
+  }
+  .sequence-caption {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* PHASE STRIP for meeting capture */
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 16px 0 20px;
+  }
+  .phase {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    background: rgba(255,255,255,0.5);
+  }
+  .phase .phase-tag {
+    display: inline-block;
+    background: var(--track-color);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .phase .phase-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .phase .phase-desc { font-size: 12px; color: var(--muted); }
+
+  /* NORTH STAR SECTION */
+  .north-star {
+    background: var(--ns-bg);
+    color: var(--ns-ink);
+    border-radius: 14px;
+    padding: 40px 32px;
+    margin-top: 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .north-star::before {
+    content: "";
+    position: absolute;
+    top: -100px; right: -100px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(94,234,212,0.15), transparent 70%);
+    border-radius: 50%;
+  }
+  .north-star .ns-tag {
+    display: inline-block;
+    background: rgba(94,234,212,0.15);
+    color: var(--ns-accent);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .north-star h2 {
+    font-family: 'Georgia', serif;
+    font-size: 32px;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .north-star .ns-lede {
+    color: #cbd5e1;
+    font-size: 15px;
+    max-width: 640px;
+    margin-bottom: 32px;
+  }
+  .bets {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    position: relative;
+  }
+  .bet {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 20px;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .bet:hover { transform: translateY(-2px); border-color: rgba(94,234,212,0.3); }
+  .bet .bet-num {
+    font-family: 'Georgia', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ns-accent);
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+  .bet h3 {
+    font-size: 15px;
+    margin: 0 0 8px;
+    color: var(--ns-ink);
+  }
+  .bet p {
+    font-size: 13px;
+    color: #94a3b8;
+    margin: 0;
+    line-height: 1.55;
+  }
+  .bet.near-term { border-color: rgba(94,234,212,0.4); }
+  .bet.near-term::after {
+    content: "Near-term expansion";
+    display: block;
+    margin-top: 12px;
+    font-size: 10px;
+    color: var(--ns-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .bet.moat { border-color: rgba(94,234,212,0.4); }
+  .bet.moat::after {
+    content: "Long-term moat";
+    display: block;
+    margin-top: 12px;
+    font-size: 10px;
+    color: var(--ns-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .framing {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 13px;
+    color: #cbd5e1;
+    font-style: italic;
+  }
+  .framing strong { color: var(--ns-accent); font-style: normal; }
+
+  .deprio { color: var(--muted); font-size: 13px; }
+  .deprio strong { color: var(--ink-soft); }
+
+  /* MAPPING GRID */
+  .mapping-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 32px 0 20px;
+  }
+  .mapping-header h2 {
+    font-family: 'Georgia', serif;
+    font-size: 22px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .mapping-header .mapping-sub {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .mapping {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 56px;
+  }
+  .mapping-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .map-grid {
+    display: grid;
+    grid-template-columns: 1fr 200px 1fr;
+    gap: 0;
+    position: relative;
+    align-items: stretch;
+  }
+  .map-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .map-col.right { gap: 12px; }
+  .map-node {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--node-color, var(--muted));
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.3;
+    position: relative;
+    z-index: 2;
+  }
+  .map-node .node-num {
+    font-family: 'Georgia', serif;
+    font-weight: 700;
+    color: var(--node-color, var(--muted));
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+  }
+  .map-node .node-title { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .map-node .node-desc { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  .map-node[data-c="teal"] { --node-color: var(--accent); }
+  .map-node[data-c="coral"] { --node-color: var(--coral); }
+  .map-node[data-c="violet"] { --node-color: var(--violet); }
+  .map-node[data-c="amber"] { --node-color: var(--amber); }
+  .map-node[data-c="rose"] { --node-color: var(--rose); }
+  .map-node[data-c="slate"] { --node-color: var(--slate); }
+
+  .map-links {
+    position: relative;
+    height: 100%;
+  }
+  .map-links svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .map-links path {
+    fill: none;
+    stroke-width: 1.75;
+    opacity: 0.55;
+    transition: opacity 0.2s, stroke-width 0.2s;
+  }
+  .map-links path:hover { opacity: 1; stroke-width: 3; }
+
+  @media (max-width: 720px) {
+    .map-grid { grid-template-columns: 1fr; }
+    .map-links { display: none; }
+    .map-col.right { margin-top: 16px; }
+  }
+
+  /* GO-LIVE CHECKLIST */
+  .golive {
+    background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .golive::before {
+    content: "";
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(234,88,12,0.12), transparent 70%);
+    border-radius: 50%;
+  }
+  .golive-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+  .golive-tag {
+    display: inline-block;
+    background: var(--coral);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .golive-timeline { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .golive h2 {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    margin: 12px 0 8px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .golive-lede { color: var(--ink-soft); font-size: 14px; max-width: 640px; margin-bottom: 24px; }
+
+  .checklist {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    position: relative;
+  }
+  @media (max-width: 720px) { .checklist { grid-template-columns: 1fr; } }
+  .cl-column h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cl-column.p0 h3 { color: #b91c1c; }
+  .cl-column.p1 h3 { color: #92400e; }
+  .cl-badge {
+    display: inline-block;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+  .cl-column.p0 .cl-badge { background: #fecaca; color: #b91c1c; }
+  .cl-column.p1 .cl-badge { background: #fed7aa; color: #92400e; }
+
+  .cl-item {
+    background: rgba(255,255,255,0.6);
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .cl-item .check {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--muted);
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    background: white;
+  }
+  .cl-item .cl-body { flex: 1; color: var(--ink); }
+  .cl-item .cl-title { font-weight: 600; }
+  .cl-item .cl-ref {
+    color: var(--muted);
+    font-size: 11px;
+    text-decoration: none;
+    font-family: 'SF Mono', Monaco, monospace;
+    margin-left: 6px;
+  }
+  .cl-item .cl-ref:hover { color: var(--coral); }
+  .cl-item .cl-desc { color: var(--ink-soft); font-size: 12px; margin-top: 3px; }
+  /* Done state — struck through, checkbox filled. */
+  .cl-item.done { background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.25); }
+  .cl-item.done .check {
+    background: #10b981;
+    border-color: #10b981;
+    position: relative;
+  }
+  .cl-item.done .check::after {
+    content: "";
+    position: absolute;
+    left: 3px; top: 0px;
+    width: 5px; height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .cl-item.done .cl-title,
+  .cl-item.done .cl-desc { text-decoration: line-through; color: var(--muted); }
+  .cl-item.done::after {
+    content: "SHIPPED";
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #10b981;
+    align-self: center;
+    margin-left: auto;
+    padding: 2px 6px;
+    border: 1px solid #10b981;
+    border-radius: 3px;
+  }
+
+  /* TEAM & RESOURCES */
+  .section-head {
+    margin: 56px 0 20px;
+  }
+  .section-head h2 {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.02em;
+  }
+  .section-head .section-sub {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .person {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    border-left: 4px solid var(--person-color, var(--accent));
+  }
+  .person[data-role="owner"] { --person-color: var(--accent); }
+  .person[data-role="dev"] { --person-color: var(--rose); }
+  .person[data-role="design"] { --person-color: var(--violet); }
+  .person .p-role {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--person-color);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .person .p-name {
+    font-family: 'Georgia', serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .person .p-title {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .person .p-focus {
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .person .p-focus strong { color: var(--ink); }
+  .person .p-tracks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .person .p-tracks a {
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.04);
+    color: var(--ink-soft);
+  }
+  .person .p-tracks a:hover { background: rgba(0,0,0,0.08); }
+
+  .budget-note {
+    background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+  }
+  .budget-note strong { color: var(--coral); }
+
+  /* TIMELINE */
+  .timeline {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px;
+  }
+  .tl-phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .tl-phase {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    position: relative;
+    border-top: 4px solid var(--phase-color, var(--accent));
+    background: rgba(0,0,0,0.01);
+  }
+  .tl-phase[data-phase="now"] { --phase-color: var(--coral); }
+  .tl-phase[data-phase="next"] { --phase-color: var(--accent); }
+  .tl-phase[data-phase="later"] { --phase-color: var(--violet); }
+  .tl-phase[data-phase="horizon"] { --phase-color: var(--slate); }
+  .tl-phase[data-phase="tbd"] { --phase-color: #047857; }
+  .tl-phase[data-phase="tbd"] .tl-tag::after {
+    content: " · TBD";
+    opacity: 0.85;
+  }
+  .tl-phase .tl-tag {
+    display: inline-block;
+    background: var(--phase-color);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .tl-phase .tl-window {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .tl-phase h4 {
+    font-family: 'Georgia', serif;
+    font-size: 17px;
+    margin: 4px 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .tl-phase ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+  .tl-phase li {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 4px 0;
+    line-height: 1.45;
+  }
+  .tl-phase li .tl-owner {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(0,0,0,0.05);
+    color: var(--ink-soft);
+    margin-right: 6px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .tl-phase li .tl-owner.tal { background: var(--accent-soft); color: var(--accent); }
+  .tl-phase li .tl-owner.gil { background: var(--rose-soft); color: var(--rose); }
+  .tl-phase li .tl-owner.talia { background: var(--violet-soft); color: var(--violet); }
+  .tl-note {
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+  }
+</style>
+<style>
+  /* Interactive grid canvas — fixed behind everything so the wave/repel
+     stays alive across the entire page as you scroll. Pointer-events off
+     so links and buttons remain fully clickable. */
+  #grid-bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.55;
+  }
+  body > * { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { #grid-bg { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="grid-bg" aria-hidden="true"></canvas>
+<script>
+/* Interactive grid: mouse repel + scroll-driven ripple.
+   Nodes displace away from the cursor with distance falloff, and a
+   sine wave phase-shifts based on scrollY so scrolling literally sends
+   waves through the mesh. Cheap enough for 60fps on a laptop. */
+(function() {
+  var canvas = document.getElementById('grid-bg');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d', { alpha: true });
+  var dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  var W = 0, H = 0;
+  var SPACING = 44;                   // grid cell size in CSS px
+  var REPEL_RADIUS = 160;             // cursor influence radius
+  var REPEL_STRENGTH = 55;            // max node displacement (px) from cursor
+  var WAVE_AMPLITUDE = 7;             // scroll-driven wave amplitude (px)
+  var WAVE_WAVELENGTH = 260;          // px per wave cycle
+  var COLOR = 'rgba(15, 23, 41, 0.55)';       // ink
+  var ACCENT = 'rgba(13, 148, 136, 0.9)';     // teal accent for near-cursor
+  var DOT_R = 1.1;
+
+  var mouse = { x: -9999, y: -9999, active: false };
+  var scrollY = window.scrollY || 0;
+  // Grid is straight by default. The wave is driven by scroll *velocity*
+  // — energy spikes when you scroll and decays back to 0 when you stop.
+  var lastScrollY = scrollY;
+  var waveEnergy = 0; // 0 = flat, 1 = full amplitude
+
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize, { passive: true });
+
+  window.addEventListener('mousemove', function(e) {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    mouse.active = true;
+  }, { passive: true });
+  window.addEventListener('mouseleave', function() { mouse.active = false; }, { passive: true });
+  window.addEventListener('scroll', function() {
+    var y = window.scrollY || 0;
+    var delta = Math.abs(y - lastScrollY);
+    lastScrollY = y;
+    scrollY = y;
+    // Pump wave energy proportional to scroll speed. Clamp so a
+    // wheel-flick doesn't over-shoot into visual noise.
+    waveEnergy = Math.min(1, waveEnergy + delta * 0.02);
+  }, { passive: true });
+
+  // Precompute base grid positions — recomputed on resize implicitly by
+  // the render loop using W/H, so no cached array to invalidate.
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    var cols = Math.ceil(W / SPACING) + 2;
+    var rows = Math.ceil(H / SPACING) + 2;
+    var offsetX = -SPACING; // start one column off-screen so no visible edge
+    var offsetY = -SPACING;
+
+    // Wave phase — advances with scroll position, but the wave is only
+    // visible when waveEnergy > 0 (i.e. actively scrolling). Grid sits
+    // perfectly straight at rest.
+    var phase = scrollY * 0.008;
+    var amp = WAVE_AMPLITUDE * waveEnergy;
+    // Decay the wave energy each frame — 0.94 gives a soft ~1s settle.
+    waveEnergy *= 0.94;
+    if (waveEnergy < 0.001) waveEnergy = 0;
+
+    // Two-pass render: lines first (so dots sit on top), computing each
+    // node's distorted position on demand. Cache column by column to
+    // avoid computing each node twice per frame.
+    var prev = new Array(cols);
+    var cur = new Array(cols);
+
+    function nodeAt(cx, cy) {
+      var bx = offsetX + cx * SPACING;
+      var by = offsetY + cy * SPACING;
+
+      // Scroll-driven ripple — sine wave across the page, phase-shifted
+      // by scrollY. Uses distance from center to produce a radial feel.
+      var wave = amp === 0 ? 0
+        : Math.sin((bx + by) / WAVE_WAVELENGTH * Math.PI * 2 + phase) * amp;
+
+      var x = bx + wave * 0.6;
+      var y = by + wave;
+
+      // Mouse repel — push node away from cursor, magnitude falls off
+      // smoothly to zero at REPEL_RADIUS.
+      if (mouse.active) {
+        var dx = x - mouse.x;
+        var dy = y - mouse.y;
+        var d2 = dx * dx + dy * dy;
+        var r2 = REPEL_RADIUS * REPEL_RADIUS;
+        if (d2 < r2 && d2 > 0.01) {
+          var d = Math.sqrt(d2);
+          var falloff = 1 - d / REPEL_RADIUS;
+          var push = REPEL_STRENGTH * falloff * falloff; // quadratic falloff = softer edge
+          x += (dx / d) * push;
+          y += (dy / d) * push;
+        }
+      }
+      return { x: x, y: y };
+    }
+
+    // First column
+    for (var r = 0; r < rows; r++) prev[r] = nodeAt(0, r);
+
+    for (var c = 1; c < cols; c++) {
+      for (var r2 = 0; r2 < rows; r2++) cur[r2] = nodeAt(c, r2);
+
+      // Lines: horizontal (prev-col row r → cur-col row r) and
+      // vertical (cur-col row r-1 → cur-col row r).
+      for (var r3 = 0; r3 < rows; r3++) {
+        var a = prev[r3];
+        var b = cur[r3];
+
+        // Color near cursor bleeds toward accent
+        var midx = (a.x + b.x) * 0.5;
+        var midy = (a.y + b.y) * 0.5;
+        var stroke = COLOR;
+        if (mouse.active) {
+          var mdx = midx - mouse.x;
+          var mdy = midy - mouse.y;
+          var md2 = mdx * mdx + mdy * mdy;
+          if (md2 < REPEL_RADIUS * REPEL_RADIUS) {
+            var t = 1 - Math.sqrt(md2) / REPEL_RADIUS;
+            stroke = t > 0.5 ? ACCENT : COLOR;
+          }
+        }
+
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        if (r3 > 0) {
+          var top = cur[r3 - 1];
+          ctx.beginPath();
+          ctx.moveTo(top.x, top.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+
+      // swap prev/cur for next column
+      var tmp = prev; prev = cur; cur = tmp;
+    }
+
+    // Second pass: dots at the intersections (last-column state is in
+    // `prev` after the swap). Redraw all so dots are crisp on top of
+    // lines. Cheaper than tracking every position — we recompute.
+    ctx.fillStyle = COLOR;
+    for (var cc = 0; cc < cols; cc++) {
+      for (var rr = 0; rr < rows; rr++) {
+        var n = nodeAt(cc, rr);
+        var fillStyle = COLOR;
+        if (mouse.active) {
+          var ndx = n.x - mouse.x;
+          var ndy = n.y - mouse.y;
+          var nd2 = ndx * ndx + ndy * ndy;
+          if (nd2 < REPEL_RADIUS * REPEL_RADIUS) {
+            var nt = 1 - Math.sqrt(nd2) / REPEL_RADIUS;
+            if (nt > 0.4) fillStyle = ACCENT;
+          }
+        }
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, DOT_R, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+})();
+</script>
+
+<div class="layout">
+
+<aside>
+  <div class="brand">Klaser</div>
+  <div class="brand-sub">Platform Roadmap</div>
+  <nav>
+    <a href="#resources"><span class="num">◈</span> Team &amp; resources</a>
+    <a href="#timeline"><span class="num">◐</span> Timeline</a>
+    <div class="divider"></div>
+    <a href="#t1"><span class="num">1</span> Core engine</a>
+    <a href="#t2"><span class="num">2</span> User experience</a>
+    <a href="#t3"><span class="num">3</span> Documents &amp; archive</a>
+    <a href="#t4"><span class="num">4</span> Meeting capture</a>
+    <a href="#t5"><span class="num">5</span> Observability</a>
+    <a href="#t6"><span class="num">6</span> Mailer service</a>
+    <a href="#t7"><span class="num">7</span> Sales CRM</a>
+    <a href="#t8"><span class="num">8</span> Marketing site</a>
+    <a href="#t9"><span class="num">9</span> Shared infra</a>
+    <div class="divider"></div>
+    <a href="#north-star"><span class="num">★</span> North star</a>
+  </nav>
+</aside>
+
+<main>
+
+<section class="hero">
+  <h1>Klaser Platform Roadmap</h1>
+  <p class="lede">The digital frontier of kibbutz &amp; moshav governance.</p>
+  <div class="meta">
+    <span>Owner<strong>Tal Gurevich</strong></span>
+    <span>Updated<strong>2026-07-16</strong></span>
+    <span>Status<strong>Draft for discussion</strong></span>
+  </div>
+</section>
+
+<section id="resources">
+  <div class="section-head" style="margin-top: 0;">
+    <h2>Team &amp; resources</h2>
+    <div class="section-sub">Who's on the platform and how their time splits across the tracks.</div>
+  </div>
+
+  <div class="team-grid">
+    <div class="person" data-role="owner">
+      <div class="p-role">Product builder · Takanon</div>
+      <div class="p-name">Tal Gurevich</div>
+      <div class="p-title">Founder, full-stack</div>
+      <div class="p-focus">
+        <strong>Focus.</strong> Core engine, retrieval quality, tenant infra, superadmin surface, mailer. Owns <strong>Takanon</strong> end-to-end and the golden set.
+        <div class="p-tracks">
+          <a href="#t1">T1 Core</a>
+          <a href="#t3">T3 Documents</a>
+          <a href="#t5">T5 Observability</a>
+          <a href="#t6">T6 Mailer</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="person" data-role="dev">
+      <div class="p-role">Product builder · Klaser Meetings</div>
+      <div class="p-name">Gil Toledo</div>
+      <div class="p-title">Full-stack</div>
+      <div class="p-focus">
+        <strong>Focus.</strong> Owns Track 4 — <strong>Klaser Meetings</strong> — as a separate product under the Klaser brand. Ships audio → draft protocol end-to-end, then the governance workflow. Coordinates with Tal on the shared decision/bylaw registry seams.
+        <div class="p-tracks">
+          <a href="#t4">T4 Meeting capture</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="person" data-role="design">
+      <div class="p-role">Design · Cross-track</div>
+      <div class="p-name">Talia Savchenko</div>
+      <div class="p-title">UX designer</div>
+      <div class="p-focus">
+        <strong>Focus.</strong> Runs across <strong>every</strong> project — Takanon and Klaser Meetings. Owns end-user surface polish, admin surface consistency, first-run &amp; onboarding, empty states, and the visual system shared across the Klaser brand.
+        <div class="p-tracks">
+          <a href="#t2">T2 UX</a>
+          <a href="#t3">T3 Documents</a>
+          <a href="#t4">T4 Meeting capture</a>
+          <a href="#t3">T3 Onboarding</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="budget-note">
+    <strong>Budget.</strong> Being worked on offline first. Headcount cost, model/infra spend (Anthropic, OpenAI, Resend, Render, transcription), and per-tenant unit economics tracked separately. A summary lands in this section once the offline pass is settled.
+  </div>
+</section>
+
+<section id="track-status">
+  <div class="section-head">
+    <h2>Track status at a glance</h2>
+    <div class="section-sub">One-line status per track. Update the pill as things move — the sections below have the detail.</div>
+  </div>
+
+  <style>
+    .ts-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
+    .ts-row {
+      display: grid;
+      grid-template-columns: 40px 1fr auto;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 14px;
+      background: var(--surface, #fff);
+      border: 1px solid var(--line, #e5e7eb);
+      border-radius: 6px;
+    }
+    .ts-num { font-weight: 700; color: var(--muted); font-size: 13px; }
+    .ts-body { min-width: 0; }
+    .ts-title { font-weight: 600; color: var(--ink); }
+    .ts-title a { color: inherit; text-decoration: none; border-bottom: 1px dashed transparent; }
+    .ts-title a:hover { border-bottom-color: currentColor; }
+    .ts-desc { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+    .ts-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .ts-pill.shipped { background: #d1fae5; color: #065f46; }
+    .ts-pill.progress { background: #dbeafe; color: #1e40af; }
+    .ts-pill.partial { background: #fef3c7; color: #92400e; }
+    .ts-pill.notstarted { background: #f3f4f6; color: #4b5563; }
+    .ts-pill.planned { background: #ede9fe; color: #5b21b6; }
+  </style>
+
+  <div class="ts-grid">
+    <div class="ts-row">
+      <div class="ts-num">T1</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t1">Core engine — hierarchy, context, tooling</a></div>
+        <div class="ts-desc">Retrieval primitive + hybrid search live. Hierarchy, tool-wrapped retrieval, and agentic loop still ahead. Golden-set now in place to measure improvements.</div>
+      </div>
+      <span class="ts-pill progress">In progress</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T2</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t2">User experience</a></div>
+        <div class="ts-desc">Chat surface + citations shipped. Onboarding, empty states, and self-serve diagnostics still open.</div>
+      </div>
+      <span class="ts-pill progress">In progress</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T3</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t3">Document management &amp; archival integration</a></div>
+        <div class="ts-desc">Upload, extraction, AI classification, folder taxonomy, faceted browse, dup-detection shipped. Bulk Google Drive import still open.</div>
+      </div>
+      <span class="ts-pill partial">Partial</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T4</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t4">Meeting capture &amp; minute-taking</a></div>
+        <div class="ts-desc">Gil building in the <code>klaser-meetings</code> repo, consuming the shared identity SDK from T9. Handoff doc at <code>docs/identity-cutover.md</code>.</div>
+      </div>
+      <span class="ts-pill progress">In progress</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T5</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t5">Observability</a></div>
+        <div class="ts-desc">Debug queue + query logging shipped. P50/P95 latency alerts and ingest-failure alerts still open.</div>
+      </div>
+      <span class="ts-pill partial">Partial</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T6</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t6">Mailer service</a></div>
+        <div class="ts-desc">Transactional mail via Resend (broken-answer alerts, admin notifications). Weekly digest job wired. Templates + suppression list next.</div>
+      </div>
+      <span class="ts-pill partial">Partial</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T7</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t7">Sales CRM</a></div>
+        <div class="ts-desc">Two-week internal tool. Owner TBD. Slated for August–September once Takanon + Klaser Meetings are live.</div>
+      </div>
+      <span class="ts-pill planned">Planned</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T8</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t8">Marketing site — klaser.co.il</a></div>
+        <div class="ts-desc">Landing page, hero Q&amp;A carousel, contact form → email shipped. Content iteration ongoing.</div>
+      </div>
+      <span class="ts-pill shipped">Shipped</span>
+    </div>
+
+    <div class="ts-row">
+      <div class="ts-num">T9</div>
+      <div class="ts-body">
+        <div class="ts-title"><a href="#t9">Shared infrastructure — Klaser identity</a></div>
+        <div class="ts-desc">Identity service live at <code>auth.klaser.co.il</code>. Takanon fully cut over 2026-07-14. Auth tables dropped from Takanon DB. Meetings will consume the same SDK.</div>
+      </div>
+      <span class="ts-pill shipped">Shipped</span>
+    </div>
+  </div>
+</section>
+
+<section class="golive" id="golive">
+  <div class="golive-header">
+    <span class="golive-tag">Now — go-live</span>
+    <span class="golive-timeline">Between today &amp; design-partner launch</span>
+  </div>
+  <h2>Immediate action items until go-live</h2>
+  <p class="golive-lede">Not the full roadmap — just what must land before <strong>אל-רום</strong> can run in production without El-Rom holding their hand. Each item links back to its home track for detail.</p>
+
+  <div class="checklist">
+    <div class="cl-column p0">
+      <h3><span class="cl-badge">P0</span> Must ship for go-live</h3>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Fix BM25 Hebrew normalization — per-word OR tsquery</span> <a class="cl-ref" href="#t1">§1.1</a>
+          <div class="cl-desc">Root cause: <code>plainto_tsquery</code> AND'd every normalized form so a doc had to contain all of them at once. Fix: new <code>normalize_hebrew_to_tsquery</code> builds a proper <code>(form1 | form2) &amp; (form3 | form4)</code> expression per source word + drops Hebrew stop words. Retrieval swaps to <code>to_tsquery</code>. Real queries now return hits.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Tenant context injection — per-tenant system prompt</span> <a class="cl-ref" href="#t1">§1.5</a>
+          <div class="cl-desc">Answerer's system prompt now composed as PREFIX + <code>tenant.system_context</code> + SUFFIX. אל-רום's hierarchy + precision rules (§2 + §5) live in the DB, editable from the super-admin panel. New tenants without a filled-in context fall through to a generic template built from just the tenant name — safe minimal defaults (recency + specificity + no fabrication).</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Cite-or-refuse mode + hallucination guardrails</span> <a class="cl-ref" href="#t1">§1</a>
+          <div class="cl-desc">Three-layer trust floor: (1) prompt <code>§3.5</code> — LLM must audit every claim against the sources before returning <code>confident</code>; (2) server guardrail — a confident answer with no references, or with references that don't match any retrieved filename, is downgraded to <code>refused</code> before it reaches the user; (3) refused UI reframed as integrity, with a one-click "the corpus should know this" path into the super-admin debug queue.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Original document viewer (PDF v1) — click-to-open</span> <a class="cl-ref" href="#t3">§3.5</a>
+          <div class="cl-desc">Original file persisted on ingest to a Render disk; click a citation, a reference, or a document card → opens the PDF in the browser's built-in viewer via <code>/api/documents/{id}/file</code>. Page-jump + passage highlight are deferred to v2.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Email + password auth &amp; password reset</span> <a class="cl-ref" href="#t3">§3.6 Auth</a>
+          <div class="cl-desc">Invite-only registration via signed <code>AuthToken</code> — super-admin creates the user, mailer sends a <code>/register?token=</code> link, user sets a password and lands signed-in. <code>POST /login</code> against the bcrypt hash; <code>POST /forgot-password</code> issues a reset token with a generic response (no account enumeration); <code>POST /reset-password</code> consumes it. Google OAuth and password auth co-exist on the same user row, so a member may have either or both. Shipped by Gil in PR #3.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Production domain setup — <code>klaser.co.il</code></span> <a class="cl-ref" href="#t3">§3.6 Enterprise</a>
+          <div class="cl-desc">Custom domain live on Render (frontend), SSL auto-provisioned via Let's Encrypt. Mailer sender domain (SPF/DKIM/DMARC) tracked separately with the mailer infra item.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Mailer infrastructure setup — Resend + first templates</span> <a class="cl-ref" href="#t6">§6</a>
+          <div class="cl-desc">Resend wired up with a Hebrew RTL template base. Two flows live: user invite (on admin create-user) and broken-answer alert to every super-admin (on mark-broken). Sender domain flip from <code>onboarding@resend.dev</code> → <code>noreply@klaser.co.il</code> pending DNS propagation.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Separate admin surface from client-facing UI</span> <a class="cl-ref" href="#t3">§3.6 Enterprise</a>
+          <div class="cl-desc">Split the app into two clear surfaces — end-user Q&amp;A/browse vs admin/superadmin. Distinct navigation, distinct routes, distinct permissions boundary. Precondition for the new admin dash.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">New admin dashboard — tenants, users, super-admins</span> <a class="cl-ref" href="#t3">§3.6 Enterprise</a>
+          <div class="cl-desc">Super-admin lands in פאנל ניהול: create tenants, add/remove users per tenant, grant/revoke super-admin. Corpus health / recent uploads / review-queue widgets are follow-up.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Query &amp; retrieval logging visible to superadmin — תור באגים</span> <a class="cl-ref" href="#t5">§5</a>
+          <div class="cl-desc">End-user flags a wrong answer → lands in the super-admin debug queue with full retrieval trace, retrieved chunks, and a one-click copy-markdown report for out-of-band diagnosis.</div>
+        </div>
+      </div>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Golden-set baseline for אל-רום corpus</span> <a class="cl-ref" href="#t1">§1 cross-cutting</a>
+          <div class="cl-desc">30 questions across 5 buckets (single-hop bylaw, decision lookup, multi-hop, procedural, guardrail refusal) seeded from <code>docs/eval/golden-baseline.md</code>. Grading is human-in-the-loop, not structural: press <strong>▶ הרץ בצ'אט</strong> on a golden → the chat auto-runs the question tagging its <code>Query.golden_id</code> → 👍/👎 on the answer rolls into a per-golden pass-rate report. Inline grading directly on the eval page for past runs. Refused answers now support "✓ צדקת שסירבת" so guardrail bucket can be scored positively.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cl-column p1">
+      <h3><span class="cl-badge">P1</span> Should ship or fast-follow</h3>
+
+      <div class="cl-item done">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Faceted browse v1 — filter sidebar on Documents</span> <a class="cl-ref" href="#t3">§3.1</a>
+          <div class="cl-desc">Sticky filter sidebar on the Documents page: doc type (multi-select), folder (multi-select), effective-date range (all / last year / last 2 years), "יש קובץ מקור" toggle, "מטא־דאטה נבדק" toggle. Counts per option, "נקה (N)" resets everything, empty state offers one-click clear. Client-side — no backend changes.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Welcome email + first-run tour</span> <a class="cl-ref" href="#t3">§3.6 Onboarding</a>
+          <div class="cl-desc">So a new secretary can sign in and know what to do without a phone call.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">In-app support widget (minimum)</span> <a class="cl-ref" href="#t3">§3.6 Support</a>
+          <div class="cl-desc">Chat channel with session context attached. Cuts email/WhatsApp support noise.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Bulk import from Google Drive</span> <a class="cl-ref" href="#t3">§3.4</a>
+          <div class="cl-desc">One-shot ingest of the tenant's existing archive tree — no manual reupload per file.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">"No confident answer" state in the UI</span> <a class="cl-ref" href="#t2">§2</a>
+          <div class="cl-desc">Clearer visual distinction between a real answer and a low-confidence one. Pairs with cite-or-refuse.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Basic latency &amp; error monitoring</span> <a class="cl-ref" href="#t5">§5.2</a>
+          <div class="cl-desc">P50 / P95 answer latency, ingest failures. Doesn't need dashboards yet — just alerts on spikes.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Admin support console (minimum)</span> <a class="cl-ref" href="#t3">§3.6 Support</a>
+          <div class="cl-desc">Superadmin view of a tenant's last activity, failed queries, ingestion errors. Enough to diagnose without switching in.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">Additional login methods</span> <a class="cl-ref" href="#t3">§3.6 Auth</a>
+          <div class="cl-desc">Magic link (passwordless email) as a lower-friction option alongside Google + email/password. Optional Microsoft OAuth if tenants ask.</div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="check"></div>
+        <div class="cl-body">
+          <span class="cl-title">First mailer templates live</span> <a class="cl-ref" href="#t6">§6</a>
+          <div class="cl-desc">Beyond transactional (P0): welcome digest, weekly "what's new in your archive," admin health summary. Ships with the mailer infra but non-blocking for launch day.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<article class="track" data-color="teal" id="t1">
+  <div class="track-header">
+    <div class="track-num">1</div>
+    <div class="track-titles">
+      <span class="track-tag">Foundation</span>
+      <h2>Core engine — hierarchy, context, tooling</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Give the system the same organizational scaffolding and reasoning surface a smart human researcher would need. Move away from embedding-first RAG as the sole retrieval path; treat retrieval as a tool surface the LLM can call iteratively.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.1</span> Fix the retrieval primitive</h3>
+    <ul>
+      <li>Real Hebrew morphology in <code>normalize_hebrew</code> — prefix (ה / ו / ב / כ / ל / מ / ש) and inflection handling.</li>
+      <li>Section-path and folder filters exposed to the retrieval layer.</li>
+      <li>Folder / collection metadata pushed into the chunk index for scoped search.</li>
+      <li>Chunking strategy revisit — semantic vs fixed, overlap, section-aware for bylaws.</li>
+      <li>Reranker layer confirmed end-to-end against the golden set.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Actual BM25 recall on inflected Hebrew queries (today's silent 0-hit path starts working). Scoped search becomes possible. Everything downstream inherits the improvement.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.2</span> Hierarchy construction &amp; document structure</h3>
+    <p>Building a rich, machine-navigable hierarchy over the corpus is what turns retrieval from keyword-lookup into structured reasoning. Same principle a smart researcher would apply — "where would this live?" before "what does it say?"</p>
+    <ol>
+      <li>Explicit hierarchy model: <strong>tenant → collection → doc_type → document → section → subsection</strong>. Persisted as first-class entities with parent/child relationships, not implicit in filenames.</li>
+      <li>Automatic hierarchy inference — LLM-assisted classification of newly ingested documents into the right collection + doc_type, with confidence scores and review queue for low-confidence placements.</li>
+      <li>Section-tree extraction — parse structural markers (סעיף, פרק, החלטה, סעיף משנה, נספח) into a proper tree, not a flat section-path string. Enables ancestor/descendant queries.</li>
+      <li>Cross-document relationships — a decision "cites" a bylaw section; a protocol "contains" decisions; an amendment "modifies" a section. First-class graph edges, queryable and displayable.</li>
+      <li>Per-tenant hierarchy customization — tenants have different governance structures (committees, sub-organizations); the hierarchy adapts rather than forcing a one-size-fits-all tree.</li>
+      <li>Hierarchy-aware chunking — chunks carry their full ancestor path (collection → doc → section → subsection) as metadata, retrievable and filterable.</li>
+      <li>Hierarchy browse tool for the agent — <code>get_hierarchy(path?, depth?)</code> so the agent can zoom in and out ("what's in the pension collection?", "what sections does bylaw X have?") before drilling into content.</li>
+      <li>Human-editable hierarchy — admins can restructure, rename, merge, or split collections without breaking retrieval or amendment links.</li>
+      <li>Hierarchy visualization — a browseable tree view of the corpus for humans (feeds into §3.1 faceted browse) and a compact serialized form for the LLM context.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> The single biggest lever for agentic retrieval quality. An LLM that can reason "this question is about a decision, so search the decisions collection first, in the pension committee, from the last 3 years" is dramatically more accurate than one blindly searching all chunks. Also unlocks per-type UX in §3.3 and per-collection ACLs in §3.2.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.3</span> Wrap retrieval, amendments &amp; HITL as tools</h3>
+    <ul>
+      <li><code>search_documents(query, folder?, doc_type?, top_k)</code></li>
+      <li><code>get_document_toc(doc_id)</code></li>
+      <li><code>read_section(doc_id, section_path)</code> — current effective version.</li>
+      <li><code>list_amendments(doc_id, section?)</code></li>
+      <li><code>check_authoritative_answers(question)</code> — HITL cache probe.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Stable retrieval API reused by RAG, agent, mailer, integrations. Preserves the amendment graph and HITL cache. Retrieval quality becomes independently testable against the golden set.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.4</span> Agentic loop on top of the tools</h3>
+    <ul>
+      <li>Replace one-shot "retrieve → answer" with a Sonnet loop that iterates tool calls.</li>
+      <li>Agent decides when to search, drill in, check amendments, consult HITL.</li>
+      <li>Every tool call logged for traceable debugging.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Multi-hop questions become tractable — bylaw → section → amendment → answer. Self-correction on empty retrievals. Cache-first via <code>check_authoritative_answers</code>.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">1.5</span> Tenant context injection</h3>
+    <ul>
+      <li>Per-tenant system-prompt block: who they are, governance structure, main folders, glossary, common query patterns.</li>
+      <li>Query rewriting / HyDE retained where useful — no longer carrying the retrieval burden alone.</li>
+    </ul>
+    <div class="benefit"><strong>Benefit.</strong> Cheapest single quality lever. Correct terminology per organization. Feeds tool-call reasoning ("search this folder first"). First step toward multi-tenant differentiation.</div>
+  </div>
+
+  <div class="subtrack">
+    <h4>Trust &amp; safety (folded in)</h4>
+    <ul>
+      <li>Hallucination guardrails.</li>
+      <li>"Cite or refuse" mode.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h4>Cross-cutting: golden-set evaluation <span style="color:#059669;">✓ Shipped 2026-07-15</span></h4>
+    <ul>
+      <li>30 goldens covering all five buckets (single-hop bylaw lookup ×10, decision lookup ×6, multi-hop amendment trace ×5, procedural ×5, guardrail refusal ×4).</li>
+      <li>Human 👍/👎 per question, aggregated into a per-golden pass-rate report. Structural auto-scorer kept as a CLI endpoint (<code>POST /api/eval/run</code>) but removed from the UI — the human grade is the one that matters while expected filenames are still being tuned.</li>
+      <li>Inline grading of past chat runs directly on the eval page (no need to re-run). Editable "הערות פסיקה" per golden for grading rationale that persists.</li>
+    </ul>
+    <p class="deprio"><strong>Deprioritized:</strong> A/B testing (too much overhead for team size); recall as headline metric (vanity).</p>
+  </div>
+
+  <div class="subtrack">
+    <h4>Sequencing bet</h4>
+    <div class="sequence">
+      <div class="step">1.1<small>Retrieval</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.2<small>Hierarchy</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.5<small>Context</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.3<small>Tools</small></div>
+      <div class="arrow">→</div>
+      <div class="step">1.4<small>Agent</small></div>
+    </div>
+    <div class="sequence-caption">1.1 and 1.2 are the two foundations — retrieval primitive plus hierarchy — that everything else runs on. 1.5 is the highest ROI-per-effort layer. 1.3 is a refactor without behavior change. 1.4 is the biggest architectural lift and rides on a solid foundation.</div>
+  </div>
+</article>
+
+<article class="track" data-color="coral" id="t2">
+  <div class="track-header">
+    <div class="track-num">2</div>
+    <div class="track-titles">
+      <span class="track-tag">Go-live</span>
+      <h2>User experience</h2>
+    </div>
+  </div>
+  <div class="focus"><strong>Focus.</strong> Is it good enough for secretaries and managers on day one? Four surfaces get the day-one lift — support, onboarding, chat, and documents. Talia leads across all four; each has a concrete P0/P1 slice ahead of go-live.</div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.1</span> Support experience</h3>
+    <p>A secretary who's stuck at 22:00 needs help without a phone call to Tal. Support has to feel present without becoming a distraction on the main surface.</p>
+    <ol>
+      <li>In-app support widget — chat channel (Intercom / Crisp / equivalent) with session context (tenant, role, current page, last query) attached automatically. Bottom-corner, dismissible.</li>
+      <li>Contextual help — inline "?" tooltips next to non-obvious features (amendment review, HITL cache, folder filters, "why refused" explainer).</li>
+      <li>One-click bug / feedback report — grabs current URL, recent actions, optional screenshot; routes into the debug queue with a "user-reported" tag.</li>
+      <li>Self-serve diagnostics — "why did I get no answer?" surface exposing the retrieval trace in a friendly form (not raw JSON).</li>
+      <li>Public status page for platform-wide incidents.</li>
+      <li>Ticket lifecycle visible to the reporting user — "your issue is being worked on" beats silence.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Every ticket that gets resolved without a human touch is a step toward operating at more than a handful of tenants. Also feeds §7 sales — support quality is a churn signal.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.2</span> Onboarding experience</h3>
+    <p>Formalize the path from first sign-in to daily use. First-run polish should get every new user to first value in under two minutes, without a call.</p>
+    <ol>
+      <li>Welcome email on account creation — tenant-branded, one clear CTA to the first action per role.</li>
+      <li>Role-aware landing — secretary lands on "upload your first document"; end user lands on Q&amp;A with 3–5 suggested-question chips from tenant context.</li>
+      <li>Empty states across every surface — no "no data" screens; each empty view teaches the next action.</li>
+      <li>Progressive disclosure — advanced surfaces (bulk ops, amendment review, HITL cache) unlock as usage grows, not on day one.</li>
+      <li>Sample corpus / demo tenant for evaluators and sales calls — no more staring at an empty box during a pitch.</li>
+      <li>Tenant-admin onboarding runbook — a separate flow for the person setting up the tenant vs the end users.</li>
+      <li>Onboarding checklist (later) — visible until dismissed: upload first doc, try a query, invite a colleague, set notifications.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Turns onboarding from bespoke Tal-time into a repeatable, measurable path. Precondition for scaling beyond design-partner customers. Metrics feed §5 (time-to-first-query, D7 return).</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.3</span> Chat enhancements</h3>
+    <p>The Q&amp;A surface is where 90% of user attention lives. Small polish here compounds.</p>
+    <ol>
+      <li>Clearer confidence states — "confident + cited" vs "low-confidence guess" vs "refused" render as three visually distinct answer types, not one style with a badge.</li>
+      <li>Refined refused state — integrity framing (already shipped in §1) reinforced with a one-click "the corpus should know this" path into the debug queue.</li>
+      <li>Suggested next questions — after every answer, 2–3 follow-ups derived from the retrieved chunks. "Did you also want to see…"</li>
+      <li>Recent-searches surface — quick access to the last 10 queries per user; pinnable.</li>
+      <li>Inline citation preview — hover a citation → mini-preview of the surrounding paragraph without opening the PDF.</li>
+      <li>Copy answer with citations — one button that copies the answer + inline source references, ready to paste into an email.</li>
+      <li>Query rewriting hints — when the retrieval was empty, suggest a rewrite ("try mentioning the committee name") rather than a bare refusal.</li>
+      <li>Conversation memory polish — visible "this thread" indicator when a follow-up builds on the previous turn.</li>
+      <li>Lexicon-term highlighting in the chat input — as the user types, any word matching an active lexicon entry renders in an accent color with a subtle underline. Signals "we know this term and will expand it in retrieval" and turns the invisible query-rewriting step into visible trust. Hover reveals the expansion.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Increases both perceived quality and actual trust per answer. Follow-up suggestions and refused-to-flag path directly reduce zero-result frustration, the top complaint in early usage.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">2.4</span> Document enhancements</h3>
+    <p>Documents are the trust artifact. Every improvement here reinforces "the answer is grounded in something real you can open."</p>
+    <ol>
+      <li>Jump-to-page from citations — click a citation → PDF opens at the referenced page, not just the file (v1 opens the file; this is the v2 upgrade).</li>
+      <li>Passage highlight on open — the cited paragraph is visually marked in the PDF when the viewer opens.</li>
+      <li>Rich document detail page — beyond the current file view: metadata sidebar (type, date, uploader), amendment chain, related documents, "questions this document answered."</li>
+      <li>Doc-type badges throughout the UI — bylaws / decisions / protocols / contracts each get a distinct color + icon so the user always knows what kind of source they're looking at.</li>
+      <li>In-viewer search — Ctrl+F inside a document, RTL-aware, works on OCR text layer too.</li>
+      <li>Side-by-side mode — original PDF on one side, extracted / answered text on the other. Useful for reviewers.</li>
+      <li>Print / download the original with tenant-level ACL respected.</li>
+      <li>Better cards on the Documents browse view — richer previews, better visual hierarchy, faster scan.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Closes the trust loop end-to-end: retrieved → cited → opened at the exact spot → verified. This is the single biggest lever for "the platform feels serious" perception on the first visit.</div>
+  </div>
+
+  <div class="subtrack">
+    <h4>Cross-cutting</h4>
+    <ul>
+      <li><strong>Mobile polish</strong> — every above surface has to survive a secretary opening it on a phone in a meeting. Not a separate track, a constraint on every §2 item.</li>
+      <li><strong>Design system</strong> — Talia owns the shared visual language across Takanon and Klaser Meetings so §2 improvements ship consistent, not one-off.</li>
+    </ul>
+  </div>
+</article>
+
+<article class="track" data-color="violet" id="t3">
+  <div class="track-header">
+    <div class="track-num">3</div>
+    <div class="track-titles">
+      <span class="track-tag">Client-signaled</span>
+      <h2>Document management &amp; archival integration</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> The platform is the tenant's system of record for governance documents — not just a Q&amp;A surface over uploads. Secretaries want to sift, browse, and search their corpus, and to integrate with the archives they already run.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.1</span> Faceted browse &amp; structured search</h3>
+    <ol>
+      <li>Corpus browser as a first-class surface (not just Q&amp;A). List / grid view of all documents.</li>
+      <li>Filter sidebar over <code>doc_metadata</code>: doc type, folder, effective date range, status (active / amended / repealed), authority, tags, uploader.</li>
+      <li>Sort by date, title, last modified, relevance.</li>
+      <li>Structured search: title contains, decision number = X, meeting number range, effective between dates — combinable with full-text search inside the current filter.</li>
+      <li>Saved views ("all active pension bylaws", "unclassified uploads this month").</li>
+      <li>Bookmarks / pinned documents per user.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Matches how secretaries actually work — they usually know roughly what they're looking for and want to narrow down. Turns the platform from Q&amp;A box into daily working environment.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.2</span> Repository structure</h3>
+    <ol>
+      <li>Folder / collection hierarchy (bylaws vs decisions vs protocols vs contracts).</li>
+      <li>Rich metadata surfaced as filter dimensions in 3.1.</li>
+      <li>Amendment / supersession graph (extend existing work).</li>
+      <li>Version history and diff view.</li>
+      <li>Bulk operations: upload, retag, move, reclassify, delete.</li>
+      <li>Access control per collection.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.3</span> Doc-type expansion (first-class governance artifact types)</h3>
+    <ol>
+      <li>Per-type schemas — each artifact type gets structured metadata beyond generic tags:
+        <ul>
+          <li><strong>Bylaws</strong> — sections, effective ranges, superseded-by chain.</li>
+          <li><strong>Decisions</strong> — committee, decision number, date, outcome, cites bylaw sections.</li>
+          <li><strong>Protocols (minutes)</strong> — meeting date, committee, attendees, agenda items, contained decisions, action items.</li>
+          <li><strong>Contracts</strong> — parties, effective / expiry dates, obligations, renewal terms.</li>
+          <li><strong>Correspondence, financial reports, permits</strong> — added as needed.</li>
+        </ul>
+      </li>
+      <li>Per-type browse UX — decision registry view, protocol calendar view, contract expiry dashboard.</li>
+      <li>Per-type semantics in the amendment graph — a decision doesn't amend a bylaw the way an amendment does.</li>
+      <li>Per-type extraction prompts extending the classifier.</li>
+      <li>Per-type retrieval filters exposed to the agent (§1.2 tools).</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Unlocks queries the current pipeline can't answer well — "list all pension-committee decisions from 2024 that reference section 4 of the housing bylaw." Turns generic RAG into a governance-specific system.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.4</span> Archival system integration</h3>
+    <ol>
+      <li>Google Drive / SharePoint import — preserve source folder structure, filenames, and existing metadata.</li>
+      <li>Bulk archive import: point at a Drive tree or an uploaded zip and ingest wholesale.</li>
+      <li>One-way sync (external → El-Rom) as v1; round-trip sync explicitly held as a v2 decision.</li>
+      <li>Deduplication: same bylaw arriving from multiple sources — detect and merge.</li>
+      <li>Provenance &amp; attribution: source path, uploader, ingestion timestamp, channel — visible in the doc detail view.</li>
+      <li>Local filesystem / Windows share import for tenants without cloud archives.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Lowers switching cost — tenants extend existing archives rather than abandoning them. Direct answer to the "integrate with our archival system" ask.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.5</span> Original document viewer</h3>
+    <p>Today the platform displays a rendered/extracted view of the document. Users need to open the <em>original</em> file (PDF, DOCX, scanned image) in a proper web viewer embedded in the platform — not download-and-open in an external app, and not our re-rendering.</p>
+    <ol>
+      <li>In-app web viewer for PDF and DOCX — page navigation, zoom, search within the document.</li>
+      <li>Click-through from any citation, chunk, or search result opens the original at the correct page / section.</li>
+      <li>Deep-link support — a URL points to a specific document page or section for sharing and bookmarking.</li>
+      <li>Text-layer overlay on scanned PDFs — OCR text stays selectable and searchable in the viewer so citations remain jump-to-source even on image-based scans.</li>
+      <li>Highlight the cited passage on open — the section the LLM referenced is visually marked in the original.</li>
+      <li>Side-by-side mode — original document on one side, extracted/answered text or metadata on the other.</li>
+      <li>Print / download the original file, with tenant-level ACL enforcement.</li>
+      <li>Viewer works on mobile — pinch-zoom, page swipe, readable on small screens.</li>
+      <li>Format coverage roadmap — PDF and DOCX in v1; images (JPG/PNG), spreadsheets, and legacy DOC as fastfollows.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Trust and verifiability. Secretaries and reviewers need to see the actual signed / scanned document, not our interpretation of it — especially for bylaws and decisions where the exact wording is legally meaningful. Also closes a common regression path where extraction loses formatting, tables, or signatures that matter.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">3.6</span> Key peripherals</h3>
+    <h4>Enterprise / superadmin tools</h4>
+    <ol>
+      <li>Tenant setup wizard (currently manual).</li>
+      <li>User management: invite, roles, deactivate, SSO.</li>
+      <li>Per-tenant usage and billing view.</li>
+      <li>Audit log — who read / uploaded / deleted what.</li>
+      <li>Feature flags per tenant.</li>
+      <li>Cross-tenant health dashboard.</li>
+    </ol>
+
+    <h4>Authentication expansion</h4>
+    <p>Today auth is Google-OAuth-only. Broadens the addressable user base (non-Google organizations, personal-email users, tenants with mixed provider mix).</p>
+    <ol>
+      <li>Email + password authentication alongside Google OAuth.</li>
+      <li>Password reset flow (email link, expiry, single-use token).</li>
+      <li>Self-registration surface — admin-controlled per tenant. Tenant admins toggle "allow self-registration" and set the allowed email domain(s); registrants land in a pending state until approved, or auto-approved if the domain matches.</li>
+      <li>Invite-based registration path — admin sends invite link, invitee sets password on first click.</li>
+      <li>Email verification on first sign-up.</li>
+      <li>Session &amp; token management: refresh tokens, revoke sessions, "sign out everywhere."</li>
+      <li>Optional MFA (TOTP) for admin roles.</li>
+      <li>Account linking — same email across Google and email/password resolves to one user.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Removes the Google-account precondition, unblocks tenants whose staff use personal or non-Google email, and gives admins a real registration workflow instead of manual CLI provisioning.</div>
+
+    <h4>User onboarding &amp; activation</h4>
+    <p>Formalize the path from first sign-in to daily use. Reduces admin hand-holding per new user and gets each user to first value faster.</p>
+    <ol>
+      <li>Welcome email on account creation — tenant-branded, explains what the platform is for and links to first action.</li>
+      <li>First-run in-app tour — role-aware (secretary vs manager vs reviewer see different steps).</li>
+      <li>Onboarding checklist — visible until dismissed: e.g. "upload your first document," "try a query," "set your notification preferences," "invite a colleague."</li>
+      <li>Progressive disclosure — advanced features (bulk operations, amendment review, HITL cache) unlocked as usage builds, not dumped on the user on day one.</li>
+      <li>Sample corpus / sandbox tenant for evaluators and demos — pre-populated so new tenants aren't staring at empty state.</li>
+      <li>Empty-state design across the app — every empty view says what to do next, not just "no data."</li>
+      <li>Tenant-admin onboarding runbook — separate flow for the person setting up the tenant vs the end users using it.</li>
+      <li>Activation metrics tracked in §5 (time-to-first-query, time-to-first-upload, D7 return rate).</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Cuts the "someone from El-Rom has to sit with each new user" cost. Turns onboarding from bespoke consulting into a repeatable, measurable process — precondition for scaling beyond design-partner customers.</div>
+
+    <h4>Support tools integration</h4>
+    <p>Give users a real support surface inside the app, and give the El-Rom team the tools to answer them efficiently.</p>
+    <ol>
+      <li>In-app help center — searchable knowledge base of how-to articles, embedded in the product (not a separate site).</li>
+      <li>In-app support widget — chat / message channel (Intercom, Crisp, or equivalent) for direct user-to-support communication. Attaches session context (tenant, role, current page) automatically.</li>
+      <li>Bug report &amp; feedback capture — one-click surface that grabs the current URL, recent actions, and (optional) screenshot; routes to the internal tracker.</li>
+      <li>Contextual help — inline "?" tooltips next to non-obvious features (amendment review, HITL cache, folder filters).</li>
+      <li>Admin support console — superadmin view to see a tenant's recent errors, failed queries, ingestion problems, and last activity without switching into their tenant read-only.</li>
+      <li>Ticket / issue lifecycle — from user report to resolution, visible to the reporting user ("your issue is being worked on").</li>
+      <li>Status page for platform-wide incidents.</li>
+      <li>Self-serve diagnostics — "why did I get no answer?" surface that shows the retrieval trace to the user in a friendly form.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Users get answers without going through Tal directly. Support team gets the context needed to resolve issues without a debugging conversation. Together with onboarding, this is what makes the platform operable at more than a handful of design-partner tenants.</div>
+    <h4>Sensitivity / PII handling</h4>
+    <p>For HR documents and other sensitive corpora.</p>
+    <h4>Other integrations</h4>
+    <ol>
+      <li>WhatsApp / Teams query interface.</li>
+      <li>Calendar hooks for meeting protocols?</li>
+    </ol>
+    <h4>Workflow actions</h4>
+    <ol>
+      <li>"Draft a response citing bylaw X."</li>
+      <li>"Flag decisions conflicting with new amendment."</li>
+    </ol>
+    <h4>Open FAQ</h4>
+    <p>For frequent public Q&amp;A.</p>
+  </div>
+</article>
+
+<article class="track" data-color="rose" id="t4">
+  <div class="track-header">
+    <div class="track-num">4</div>
+    <div class="track-titles">
+      <span class="track-tag">New product · Klaser brand</span>
+      <h2>Meeting capture &amp; minute-taking</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> A <strong>separate product</strong> under the Klaser brand, alongside Takanon. Upload meeting audio → transcript → structured draft protocol. Owned end-to-end by Gil. Feeds Takanon via the shared decision registry, but stands alone commercially.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">4.1</span> Audio → draft protocol</h3>
+    <ol>
+      <li>Upload meeting audio (or video) — Hebrew-tuned transcription, RTL-aware.</li>
+      <li>Speaker diarization; map speakers to known attendees where possible.</li>
+      <li>Structured extraction: attendees, agenda items, decisions, action items with owners.</li>
+      <li>Auto-generated draft protocol (per tenant template) queued for secretary review.</li>
+      <li>Decision entries auto-created and linked to the source protocol; classified into the doc-type registry from §3.3.</li>
+      <li>Review UI — secretary approves / edits before the protocol becomes canonical.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Compresses the "meeting → typed protocol" workflow from days to minutes. Solves the highest-friction task in the secretary's week.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">4.2</span> Governance workflow</h3>
+    <ol>
+      <li>Send draft protocol to attendees for approval (integrates with §6 Mailer).</li>
+      <li>Attendee comments / correction requests tracked against the draft.</li>
+      <li>Approved protocol locks; decisions promote to canonical registry.</li>
+      <li>Action-item tracker — items surface in the mailer digest until closed.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Closes the loop: meeting recorded → protocol drafted → decisions logged → participants notified → action items tracked.</div>
+  </div>
+</article>
+
+<article class="track" data-color="amber" id="t5">
+  <div class="track-header">
+    <div class="track-num">5</div>
+    <div class="track-titles">
+      <span class="track-tag">Operations</span>
+      <h2>Observability</h2>
+    </div>
+  </div>
+  <div class="focus"><strong>Focus.</strong> Useful monitoring — not vanity dashboards.</div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">5.1</span> Analytics &amp; session recording</h3>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">5.2</span> Internal metrics</h3>
+    <ol>
+      <li>Latency SLOs.</li>
+      <li>Cost per query.</li>
+      <li>Model routing — Haiku for cheap queries, Opus for hard ones.</li>
+      <li>Query volume, top queries, zero-result queries.</li>
+      <li>Retrieval quality signals — thumbs, click-through to source.</li>
+      <li>Document coverage heatmap — which docs are never retrieved.</li>
+      <li>User engagement / activation funnel.</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="slate" id="t6">
+  <div class="track-header">
+    <div class="track-num">6</div>
+    <div class="track-titles">
+      <span class="track-tag">Communication</span>
+      <h2>Mailer service</h2>
+    </div>
+  </div>
+  <div class="focus"><strong>Focus.</strong> Establish a mode of communication and tooling for better management.</div>
+
+  <div class="subtrack">
+    <ol>
+      <li>Lexicon review digest.</li>
+      <li>New-document notifications and subscriptions.</li>
+      <li>Weekly "unanswered questions" report to admins.</li>
+      <li>Scheduled report exports.</li>
+      <li>Transactional infrastructure: templates, unsubscribe, deliverability.</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="emerald" id="t7">
+  <div class="track-header">
+    <div class="track-num">7</div>
+    <div class="track-titles">
+      <span class="track-tag">Internal · Sales ops</span>
+      <h2>Sales CRM</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Internal tool for tracking the Klaser sales pipeline — <strong>not a customer product</strong>. Prospect universe in the hundreds (every kibbutz and moshav in Israel is addressable), so a real system beats scattered spreadsheets and WhatsApps from day one. Two-week delivery target. Owner: Tal or Gil (TBD). Placement in the master timeline is TBD; likely August–September once Takanon and Klaser Meetings are live.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.0</span> Buy vs build — decide first</h3>
+    <p>Open question, answered before any code. The right answer isn't obvious at hundreds-of-prospects scale.</p>
+    <h4>Off-the-shelf candidates</h4>
+    <ul>
+      <li><strong>HubSpot Free / Starter</strong> — familiar UX, generous free tier, weak on custom lifecycle sync.</li>
+      <li><strong>Pipedrive</strong> — pipeline-first, cheap per seat.</li>
+      <li><strong>Attio</strong> — modern, API-first, strong for custom objects (would map cleanly to tenant records).</li>
+      <li><strong>Airtable / Notion</strong> — cheapest, most flexible, weakest as a sales surface for daily use.</li>
+    </ul>
+    <h4>Decision criteria</h4>
+    <ul>
+      <li>Cost at hundreds of contacts, single-digit seats.</li>
+      <li>API surface for the tenant-lifecycle sync (§7.2) — critical.</li>
+      <li>Hebrew UX / RTL for anyone else logging notes.</li>
+      <li>Time-to-live vs. the two-week build target.</li>
+      <li>Exit cost — how bad is it to move off later?</li>
+    </ul>
+    <div class="benefit"><strong>Bias.</strong> Start with Attio or HubSpot Free and only build if a real integration or workflow limit hits. Buying wins on the first two weeks; building only wins if the CRM has to become the operational hub of the business (tenant provisioning, billing, health signals).</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.1</span> Pipeline</h3>
+    <ol>
+      <li>Stages: lead → contacted → demo booked → pilot → paying → churned.</li>
+      <li>Per-prospect record: organization (kibbutz / moshav name), contact person, role, region, size, notes, next action.</li>
+      <li>Bulk import — seed from the existing spreadsheet / list of every kibbutz &amp; moshav.</li>
+      <li>Kanban and list views; filter by stage, region, last-contact-age.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.2</span> Tenant lifecycle sync</h3>
+    <ol>
+      <li>A prospect promoted to "paying" auto-provisions (or flags for provisioning) a real tenant in Takanon.</li>
+      <li>Usage stats from Takanon (last activity, doc count, query volume, health flags) flow back to the CRM record.</li>
+      <li>Churn signal — a paying tenant idle for N weeks surfaces in the CRM as at-risk.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> This is the one feature no off-the-shelf CRM gives for free, and the strongest argument for build. Without it the CRM is just a nicer address book.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.3</span> Notes, tasks, reminders</h3>
+    <ol>
+      <li>One shared timeline per prospect — call notes, emails, doc attachments.</li>
+      <li>Tasks with due dates and owner; a daily "what's on my plate today" list.</li>
+      <li>Follow-up reminders when a prospect goes silent past a threshold.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">7.4</span> Later (post-MVP)</h3>
+    <ol>
+      <li>Email / calendar hooks — log Gmail threads and Calendar meetings against the prospect automatically.</li>
+      <li>Contract e-sign flow.</li>
+      <li>Invoicing / payment status.</li>
+      <li>Prospect self-service intake form (public "book a demo" page).</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="indigo" id="t8">
+  <div class="track-header">
+    <div class="track-num">8</div>
+    <div class="track-titles">
+      <span class="track-tag">Marketing · klaser.co.il</span>
+      <h2>Marketing site</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> The public site (<a href="https://www.klaser.co.il" target="_blank" rel="noopener">klaser.co.il</a>) is the top of the funnel for two very different audiences — the <strong>buyer</strong> (kibbutz / moshav manager, B2B) and the <strong>end user</strong> (member looking for day-to-day info). Findings below come from a walk-through of the current site; each item calls out what's already shipped and what's still open.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.1</span> Two personas — write the site to both</h3>
+    <ol>
+      <li>Buyer path — kibbutz / moshav manager wanting to know "can this run my organization's memory?" Needs product proof, pricing, security, contact.</li>
+      <li>End-user path — member curious about a tool their organization runs. Needs "what does this do for me?" and a low-friction way to try it or ask.</li>
+      <li>Site structure should let each persona self-select within the first fold, not funnel both into the same login CTA.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.2</span> Header &amp; navigation — the entry problem</h3>
+    <p>Finding: every button on the page currently says "כניסה למערכת" and every button leads to a login screen — with a footer note that access is restricted to approved Google accounts. Effectively, there is no way to <em>start</em> using the product from the marketing site. Either the platform isn't live yet (fine, but the UX doesn't reflect that) or the CTA is broken.</p>
+    <ol>
+      <li>Differentiate <strong>"התחל עכשיו"</strong> (for real users) from <strong>"בקש הדגמה"</strong> / <strong>"צור קשר"</strong> (for prospects). Same button doing double duty is what breaks today.</li>
+      <li>Login page needs a <strong>"חזרה לאתר"</strong> escape hatch — someone who clicks by mistake shouldn't be trapped.</li>
+      <li>Enable the browser back button on the login route (SPA history push, not replace).</li>
+      <li>Footer copy about "approved Google accounts only" should live inside the login page, not on the marketing homepage — it reads as a wall to a first-time visitor.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.3</span> Hero polish</h3>
+    <ol>
+      <li>Q&amp;A "דוגמה חיה" — <strong>3-sample carousel shipped ✓</strong> (auto-cycles, larger heading, dot indicators). Reviewer feedback that spawned this is closed.</li>
+      <li>Trust bullets under the CTAs (citations / RTL / built-for-kibbutzim) — currently too small; these carry a lot of the trust signal. <strong>Open:</strong> bump size + weight, give them room to breathe.</li>
+      <li>Consider a rotating headline that pairs with the sample carousel — same question type framing on both sides of the fold.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.4</span> Products section</h3>
+    <ol>
+      <li><strong>Product mocks / screenshots.</strong> Today the products section describes the product without showing it. Buyers want to see the UI — even a static hero shot of the Q&amp;A screen with a real citation would carry weight. Talia to design 2–3 hero mocks per product.</li>
+      <li><strong>Content partner logos.</strong> The line "קלסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים" is doing a lot of work — surface the actual partners as logos (with permission). אל-רום first; others as they join.</li>
+      <li><strong>CTA naming consistency.</strong> Currently "כניסה למערכת" and "כניסה לתקנון" both exist and point at the same login. Pick one label per action; ties in with §8.2.</li>
+      <li><strong>Coming-soon products (Klaser Meetings).</strong> Today the "בקרוב" state has no way to register interest. Add "אני מעוניין לשמוע" / "הצטרף לרשימת המתנה" secondary CTA — captures leads from prospects who wouldn't otherwise contact us.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">8.5</span> Trust surfaces — social proof, security, pricing</h3>
+    <ol>
+      <li><strong>Social proof.</strong> Logos of partner organizations (§8.4), plus 1–2 testimonials from אל-רום once the design partnership yields quotable moments. Ships when we have material — no fake placeholders.</li>
+      <li><strong>Security &amp; privacy messaging.</strong> "המסמכים שלכם נשארים פרטיים" — a short section covering: data isolation per tenant, no training of external models on tenant data, hosting region, retention. Buyers ask about this before anything else.</li>
+      <li><strong>Pricing page.</strong> Currently missing. Even a "בקש הצעת מחיר" landing surface with a scoping form is better than the empty state. Free trial? Design-partner pricing? Needs a decision from Tal first.</li>
+      <li><strong>Contact us.</strong> <strong>Shipped ✓</strong> — public form on the landing page routes to tal.gurevich@elrom.tv via Resend. Replaces the weak <code>mailto:</code> pattern flagged in feedback.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> The site's job is to earn a first call from a manager. Security, social proof, and pricing are what turn "interesting" into "let's talk" for the buyer persona; the design-partner pipeline hinges on this.</div>
+  </div>
+
+  <div class="subtrack">
+    <h4>Sequencing bet</h4>
+    <ol>
+      <li>Fix §8.2 (login escape hatch + CTA naming) — quick wins, unblock accidental clicks. Half a day.</li>
+      <li>§8.3 trust bullets bigger + §8.4 CTA consistency — same-day polish.</li>
+      <li>§8.4 mocks + partner logos — Talia leads once אל-רום agrees to be named.</li>
+      <li>§8.5 security messaging + pricing decision — needs product/business decision before copy.</li>
+    </ol>
+  </div>
+</article>
+
+<article class="track" data-color="sky" id="t9">
+  <div class="track-header">
+    <div class="track-num">9</div>
+    <div class="track-titles">
+      <span class="track-tag">Foundational · Shared platform</span>
+      <h2>Shared infrastructure — Klaser identity service</h2>
+    </div>
+  </div>
+  <div class="focus">
+    <strong>Focus.</strong> Klaser is a multi-product brand — Takanon today, Klaser Meetings next, more later. This track builds the shared identity, tenants, and subscriptions layer that both products (and every future product) sit on top of. Full plan in <a href="klaser-platform-infra.md">klaser-platform-infra.md</a>. Decision: <strong>Approach B1</strong> — a dedicated identity service, own repo, own Render project, own Postgres. No shortcuts.
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.1</span> The three-service shape</h3>
+    <p>Three independent services replacing the current single-service layout:</p>
+    <ol>
+      <li><code>klaser-identity</code> (new) — users, tenants, sessions, subscriptions, Google OAuth callback, email/password, invites, resets. Own DB. Hosted at <code>auth.klaser.co.il</code>.</li>
+      <li><code>klaser-takanon</code> (rename of <code>elrom-platform</code>) — docs, chunks, lexicon, amendments, goldens. No user or tenant tables anymore. Frontend at <code>takanon.klaser.co.il</code>.</li>
+      <li><code>klaser-meetings</code> (new, Gil owns) — recordings, transcripts, protocols. Same auth pattern. Frontend at <code>meetings.klaser.co.il</code>.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Every product deploys on its own cadence. A third product plugs in without a migration. אל-רום appears as the same tenant in all products because tenants live in one place.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.2</span> Auth flow</h3>
+    <ol>
+      <li>User hits a product frontend → cookie check on <code>.klaser.co.il</code>.</li>
+      <li>If no session → redirect to <code>auth.klaser.co.il/login?redirect=…</code>.</li>
+      <li>Identity handles Google OAuth (single client) or email+password, sets cookie on <code>.klaser.co.il</code>, redirects back.</li>
+      <li>Product backend calls identity <code>/api/me</code> with the cookie → gets <code>{ user, tenant, entitlements: [...] }</code>.</li>
+      <li>Backend checks its entitlement is in the list, or 403s.</li>
+    </ol>
+    <div class="benefit"><strong>Benefit.</strong> Sign in once, land in any product. Cookie-scope trick avoids building an auth proxy.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.3</span> Data ownership rule</h3>
+    <ul>
+      <li><strong>Identity DB</strong>: users, tenants, user_tenants, subscriptions, auth_tokens, sessions. Nothing else.</li>
+      <li><strong>Takanon DB</strong>: everything doc-related. User/tenant IDs are UUIDs — no cross-DB joins.</li>
+      <li><strong>Meetings DB</strong>: everything meeting-related. Same rule.</li>
+      <li>Enrichment across DBs is always an HTTP call to the identity API, never a direct DB read.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.4</span> Product switcher &amp; entitlements</h3>
+    <ol>
+      <li>Each frontend renders a header switcher from <code>me.entitlements</code>.</li>
+      <li><code>["takanon"]</code> → no switcher; <code>["takanon", "meetings"]</code> → both shown, deep-link to the other.</li>
+      <li>Entitlements live in the identity DB (<code>subscriptions</code> table: <code>tenant_id, product, plan, active, expires_at</code>).</li>
+      <li>Product IDs are stable strings — <code>takanon</code>, <code>meetings</code>. Adding a product = adding an entitlement, not a schema change.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.5</span> Service-to-service auth</h3>
+    <ol>
+      <li>Each product backend gets a long-lived service token for the identity API.</li>
+      <li>Used for background jobs, cron, admin scripts — anything outside a request context.</li>
+      <li>Passed as <code>Authorization: Bearer &lt;service-token&gt;</code>. Per-product, rotatable.</li>
+    </ol>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.6</span> Migration order — <span style="color:#059669;">✓ Shipped 2026-07-14</span></h3>
+    <ol>
+      <li><strong>✓ Stood up <code>klaser-identity</code></strong> — new repo, new Render project, own Postgres, live at <code>auth.klaser.co.il</code>. Auth routes ported from Takanon.</li>
+      <li><strong>✓ One-shot data migration</strong> — copied tenants + users from Takanon DB into identity DB with UUIDs preserved. Cookie renamed from <code>elrom_session</code> to <code>klaser_session</code>.</li>
+      <li><strong>✓ Pointed Takanon backend at identity</strong> — every request now flows through <code>/api/introspect</code>. Local auth routes deleted (<code>routes/auth.py</code>, <code>services/security.py</code>, <code>services/tokens.py</code>).</li>
+      <li><strong>✓ Widened cookie scope to <code>.klaser.co.il</code></strong> — spans <code>auth</code>, <code>api</code>, and <code>www</code> subdomains.</li>
+      <li><strong>Custom domain for Takanon backend</strong> — <code>api.klaser.co.il</code> live, CNAME'd to Render. Cookie flows because it's on a klaser.co.il subdomain.</li>
+      <li><strong>Six admin service endpoints added</strong> on identity — list/get/invite/patch/delete/resend for users, list/get/create for tenants. Admin panel reads + writes now flow through identity end-to-end.</li>
+      <li><strong>Gil unblocked to start <code>klaser-meetings</code></strong> against the live identity service.</li>
+    </ol>
+    <div class="benefit"><strong>What still exists but doesn't matter.</strong> Takanon DB still has copies of <code>users</code>, <code>tenants</code>, <code>auth_tokens</code> from the migration. Nothing reads from them anymore. A follow-up alembic migration will drop them once we've had a few days of clean identity operation.</div>
+  </div>
+
+  <div class="subtrack">
+    <h3><span class="sub-num">9.7</span> Render layout</h3>
+    <ul>
+      <li>3 Render projects (one per service).</li>
+      <li>3 web services (backends) + 3 static-site services (frontends).</li>
+      <li>3 managed Postgres instances (identity can be smallest tier).</li>
+      <li>All under <code>klaser.co.il</code> so the parent-domain cookie works.</li>
+      <li>Cost delta vs "identity inside Takanon" — ~$20–30/month. Cheap vs a future migration.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h4>Non-negotiables</h4>
+    <ul>
+      <li>Do not build a second users table in either product.</li>
+      <li>Do not create a second Google OAuth client.</li>
+      <li>Do not scope the session cookie to a specific subdomain — must be <code>.klaser.co.il</code>.</li>
+      <li>Do not have Meetings call Takanon's backend for auth (that's the abandoned B2 shape).</li>
+      <li>Do not put shared code in cross-repo <code>shared/</code> folders and expect it to work; publish a package or copy-paste until it stabilizes.</li>
+    </ul>
+  </div>
+
+  <div class="subtrack">
+    <h4>Sequencing bet</h4>
+    <div class="sequence">
+      <div class="step">9.1<small>Stand up</small></div>
+      <div class="arrow">→</div>
+      <div class="step">9.6<small>Migrate</small></div>
+      <div class="arrow">→</div>
+      <div class="step">9.2<small>Cut over</small></div>
+      <div class="arrow">→</div>
+      <div class="step">T4<small>Meetings</small></div>
+    </div>
+    <div class="sequence-caption">§9 must be live before Track 4 (Klaser Meetings) enters real development. If it slips, Gil stubs the identity SDK in dev but never ships a local users table.</div>
+  </div>
+</article>
+
+<section id="timeline">
+  <div class="section-head">
+    <h2>General timeline</h2>
+    <div class="section-sub">Rough phasing across the two products. Windows are indicative — dates lock in with the budget pass.</div>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-phases">
+
+      <div class="tl-phase" data-phase="now">
+        <span class="tl-tag">Now</span>
+        <div class="tl-window">July 2026 — Takanon shipped ✓ · Meetings kickoff</div>
+        <h4>Takanon in production (design partner: אל-רום) · Meetings unblocked</h4>
+        <ul>
+          <li><span class="tl-owner tal">Tal</span><strong>Shipped 2026-07-14 – 2026-07-15</strong> — password auth (PR #3 by Gil), identity extraction (Track 9), Takanon cut over to <code>auth.klaser.co.il</code>, and the אל-רום golden-set baseline (30 questions, human-graded 👍/👎 with per-golden pass-rate report). All P0s now closed.</li>
+          <li><span class="tl-owner talia">Talia</span>Onboards; audits Takanon UX; ships the first polish targets from the P1 list (welcome + tour, "no confident answer" state).</li>
+          <li><span class="tl-owner gil">Gil</span>Unblocked — starts <code>klaser-meetings</code> repo against the live identity service.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="tbd">
+        <span class="tl-tag">Interleaved</span>
+        <div class="tl-window">Window TBD — between Takanon and Klaser Meetings</div>
+        <h4>Sales CRM (§7) — 2-week build or buy</h4>
+        <ul>
+          <li><span class="tl-owner tal">Tal / Gil</span>Owner TBD. First step is §7.0 — decide buy vs build; only then schedule the two-week slot.</li>
+          <li>If <strong>buy</strong>: pick tool (HubSpot / Attio / Pipedrive), seed the prospect list, wire the minimum tenant-lifecycle hook we can. Days, not weeks.</li>
+          <li>If <strong>build</strong>: 2-week sprint slotted between Takanon go-live and Klaser Meetings go-live, or immediately after Meetings ships — whichever protects the two product launches.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="next">
+        <span class="tl-tag">Next</span>
+        <div class="tl-window">August 2026 — Klaser Meetings go-live</div>
+        <h4>Klaser Meetings ships · Takanon hardens</h4>
+        <ul>
+          <li><span class="tl-owner gil">Gil</span>Klaser Meetings live end of August — audio → transcript → draft protocol, secretary review UI.</li>
+          <li><span class="tl-owner talia">Talia</span>Shared Klaser visual system; Meetings flow design; onboarding runbook for tenant admins.</li>
+          <li><span class="tl-owner tal">Tal</span>Post-launch Takanon fixes; Track 1 hierarchy work (§1.2); superadmin support console.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="later">
+        <span class="tl-tag">Later</span>
+        <div class="tl-window">Q4 2026</div>
+        <h4>Agentic retrieval · governance workflow</h4>
+        <ul>
+          <li><span class="tl-owner tal">Tal</span>Tools + agent loop (§1.3–1.4); doc-type expansion (§3.3); Drive bulk import (§3.4); observability build-out (§5).</li>
+          <li><span class="tl-owner gil">Gil</span>Governance workflow (§4.2) — attendee approval, decisions promote to registry, action-item tracker.</li>
+          <li><span class="tl-owner talia">Talia</span>Decision-registry surface shared between both products; action-item UX.</li>
+        </ul>
+      </div>
+
+      <div class="tl-phase" data-phase="horizon">
+        <span class="tl-tag">Horizon</span>
+        <div class="tl-window">2027+</div>
+        <h4>Second tenants · North-star bets</h4>
+        <ul>
+          <li>Second tenant onboarding; move from design-partner mode to repeatable rollout.</li>
+          <li>North-star bets evaluated: member-facing surface (#2), cross-community precedent network (#3).</li>
+        </ul>
+      </div>
+
+    </div>
+    <div class="tl-note">
+      Aggressive: two products live inside eight weeks. Assumes Gil Toledo and Talia Savchenko both onboarded and productive from day one. Windows lock with the budget pass; ordering and per-owner allocation stay stable regardless.
+    </div>
+  </div>
+</section>
+
+<section class="north-star" id="north-star">
+  <div class="ns-tag">Beyond the single product</div>
+  <h2>North star bets</h2>
+  <p class="ns-lede">Vertical: digital frontier of kibbutz &amp; moshav management. The near-term product is a search-and-archive tool. The strategic surface is much larger.</p>
+
+  <div class="bets">
+    <div class="bet near-term">
+      <div class="bet-num">01</div>
+      <h3>Governance operating system</h3>
+      <p>Extend upstream from bylaws and decisions to the full lifecycle: meeting agenda → discussion → vote → decision → automatically becomes searchable, versioned bylaw. Become the system of record for governance, not just a search layer on top.</p>
+    </div>
+    <div class="bet">
+      <div class="bet-num">02</div>
+      <h3>Member-facing side (B2B2C)</h3>
+      <p>Open a resident-facing surface — "what are my rights re: parking?", "what did the assembly decide about the pool?" Turns the platform from admin tool into community infrastructure.</p>
+    </div>
+    <div class="bet moat">
+      <div class="bet-num">03</div>
+      <h3>Cross-community precedent network</h3>
+      <p>Anonymized decision/bylaw corpus across kibbutzim &amp; moshavim, so a secretary can ask "how did others handle a member leaving with equity?" Every new customer improves the product for all — data network effect as the moat.</p>
+    </div>
+    <div class="bet">
+      <div class="bet-num">04</div>
+      <h3>Regulatory / legal layer</h3>
+      <p>Proactive advisor against רשם האגודות השיתופיות rules and national regulation. "Your bylaw conflicts with new regulation X"; "decision from 2019 needs review."</p>
+    </div>
+  </div>
+
+  <div class="framing">
+    <strong>Working framing.</strong> Bet #1 is the near-term expansion (same customer, wider problem). Bet #3 is the long-term defensibility play (network effect). #2 and #4 held as options.
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>
