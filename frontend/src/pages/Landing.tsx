@@ -117,6 +117,9 @@ export default function Landing({ onLogin }: Props) {
             <button onClick={() => scrollTo("about")} className="hover:text-ink transition">
               עלינו
             </button>
+            <button onClick={() => scrollTo("faq")} className="hover:text-ink transition">
+              שאלות נפוצות
+            </button>
             <button onClick={() => scrollTo("contact")} className="hover:text-ink transition">
               יצירת קשר
             </button>
@@ -388,6 +391,47 @@ export default function Landing({ onLogin }: Props) {
         </div>
       </section>
 
+      {/* FAQ */}
+      <section id="faq" className="border-b border-ink">
+        <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
+          <div className="mb-10">
+            <div className="text-[10px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+              שאלות נפוצות
+            </div>
+            <h2 className="font-display font-black text-3xl md:text-5xl leading-tight text-ink">
+              מה שאנשים שואלים אותנו הכי הרבה.
+            </h2>
+            <p className="mt-5 text-lg text-ink-soft max-w-2xl leading-relaxed">
+              שאלות תמימות זוכות לתשובות ישרות. חסר לכם משהו? כתבו לנו בטופס למטה.
+            </p>
+          </div>
+
+          <div className="border-t-2 border-ink">
+            {FAQ_ITEMS.map((item, i) => (
+              <details
+                key={i}
+                className="group border-b-2 border-ink"
+              >
+                <summary className="cursor-pointer list-none py-5 flex items-start justify-between gap-4 hover:bg-line/30 transition px-2">
+                  <span className="font-display font-bold text-lg md:text-xl text-ink leading-snug">
+                    {item.q}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="mt-1 shrink-0 text-2xl text-accent leading-none transition-transform group-open:rotate-45"
+                  >
+                    +
+                  </span>
+                </summary>
+                <div className="pb-6 px-2 text-base md:text-lg text-ink-soft leading-relaxed whitespace-pre-line">
+                  {item.a}
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Contact */}
       <section id="contact" className="border-b border-ink bg-line/20">
         <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
@@ -580,6 +624,49 @@ export default function Landing({ onLogin }: Props) {
     </div>
   );
 }
+
+const FAQ_ITEMS: { q: string; a: string }[] = [
+  {
+    q: "איך אתם מבטיחים שהתשובה נכונה?",
+    a: "כל תשובה נשענת על ציטוט ישיר ממסמך אמיתי — עם קישור למקור. אם אין ראיה מוצקה בקורפוס, המערכת בוחרת שלא לענות במקום לנחש. במקביל, אנחנו מריצים באופן שוטף מערך שאלות בקרה (\"golden set\") שמעיד על יציבות התשובות לאורך זמן.",
+  },
+  {
+    q: "מה קורה כשהתשובה שגויה?",
+    a: "בכל תשובה יש כפתור \"דווח בעיה\" שמעביר אלינו את השאלה, התשובה וקישור לשיחה. הפנייה נכנסת לתור טיפול של המנהל ומעודכנת תוך יום עסקים.",
+  },
+  {
+    q: "האם המסמכים שלנו נשמרים בסביבה מבודדת?",
+    a: "כן. כל ארגון מקבל מרחב נתונים משלו — אין ערבוב בין ארגונים, אין שימוש במסמכים לאימון מודלים כלליים, והנתונים לעולם לא נמסרים לצד ג' שלא לצורך תפעולי מוגדר.",
+  },
+  {
+    q: "אילו סוגי מסמכים נתמכים?",
+    a: "PDF ו-DOCX, כולל סרוקים (עם זיהוי טקסט אוטומטי). עברית ואנגלית. המערכת מכירה במבנים של תקנונים, פרוטוקולים והחלטות ומעבדת אותם בהתאם.",
+  },
+  {
+    q: "מה עם עברית?",
+    a: "קלסר נבנתה מהיסוד לעברית — לא תרגום. מזהה הטיות שורש, קידומות (ה, ו, ב, כ, ל, מ, ש), ראשי תיבות עם גרשיים, ומטפלת נכון ב-RTL בכל ממשק.",
+  },
+  {
+    q: "איך מתחיל התהליך?",
+    a: "בשלב הזה — קליטה מלווה. אנחנו יושבים איתכם, מייבאים את הארכיון הקיים, מגדירים את הארגון, ובונים יחד את ה-golden set הראשוני. בדרך כלל מיום עסקים אחד אתם כבר עם מערכת פעילה.",
+  },
+  {
+    q: "כמה זה עולה?",
+    a: "המחיר תלוי בגודל הארגון ובנפח המסמכים. עדיין לא הצבנו מחירון פומבי — מדברים איתנו וחוזרים עם הצעה מותאמת.",
+  },
+  {
+    q: "מה קורה אם נחליט לעזוב?",
+    a: "כל המסמכים והנתונים ניתנים להורדה ולייצוא. אין נעילה על הלקוח.",
+  },
+  {
+    q: "באילו מודלים ובאילו ספקים אתם משתמשים?",
+    a: "Claude של Anthropic לניסוח התשובות, Cohere לחיפוש סמנטי, Azure Document Intelligence לזיהוי מסמכים סרוקים. הבחירה בכל אחד היא הנדסית — אנחנו יכולים להחליף כשמופיע משהו איכותי יותר.",
+  },
+  {
+    q: "מי עוד משתמש בקלסר?",
+    a: "בעבודה עם קיבוץ אל-רום כשותפי עיצוב (design partner). ארגונים נוספים — קיבוצים ומושבים — בתהליך קליטה במהלך 2026.",
+  },
+];
 
 const BENEFITS = [
   {
