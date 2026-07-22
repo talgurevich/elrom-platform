@@ -12,7 +12,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Amendment, AuthoritativeAnswer, Chunk, Document, Lexicon, Query
+from app.models import (
+    Amendment,
+    AuthoritativeAnswer,
+    Chunk,
+    Document,
+    FolderSuggestion,
+    FolderTaxonomy,
+    Lexicon,
+    Query,
+)
 from app.services.identity import IdentityUser, current_user
 
 log = structlog.get_logger()
@@ -650,4 +659,300 @@ def reject_amendment(
     db.delete(a)
     db.commit()
     log.info("reviewer.amendment_rejected", amendment_id=str(amendment_id))
+    return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Folder taxonomy — bounded per-tenant folder set (see migration 0016)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class FolderTaxonomyItem(BaseModel):
+    id: UUID
+    name: str
+    description: str | None
+    active: bool
+    # Convenience for the UI: how many documents currently live in this folder.
+    doc_count: int = 0
+    updated_at: str
+
+
+class CreateFolderRequest(BaseModel):
+    name: str
+    description: str | None = None
+    active: bool = True
+
+
+class UpdateFolderRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    active: bool | None = None
+
+
+@router.get("/folders", response_model=list[FolderTaxonomyItem])
+def list_folders(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> list[FolderTaxonomyItem]:
+    """List all folders (active + inactive) for the tenant, with document
+    counts. Reviewers use counts to spot "dying" folders they might want
+    to retire or merge."""
+    from sqlalchemy import func as sa_func
+
+    rows = (
+        db.query(FolderTaxonomy)
+        .filter(FolderTaxonomy.tenant_id == user.tenant_id)
+        .order_by(FolderTaxonomy.active.desc(), FolderTaxonomy.name)
+        .all()
+    )
+    # One aggregation, keyed by name (Document.folder is the string name,
+    # not a FK — legacy shape kept to avoid a documents backfill).
+    counts_by_name: dict[str, int] = dict(
+        db.query(Document.folder, sa_func.count(Document.id))
+        .filter(Document.tenant_id == user.tenant_id)
+        .filter(Document.folder.isnot(None))
+        .group_by(Document.folder)
+        .all()
+    )
+    return [
+        FolderTaxonomyItem(
+            id=r.id,
+            name=r.name,
+            description=r.description,
+            active=r.active,
+            doc_count=counts_by_name.get(r.name, 0),
+            updated_at=r.updated_at.isoformat() if r.updated_at else "",
+        )
+        for r in rows
+    ]
+
+
+@router.post("/folders", response_model=FolderTaxonomyItem)
+def create_folder(
+    req: CreateFolderRequest,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> FolderTaxonomyItem:
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(400, "name is required")
+    existing = (
+        db.query(FolderTaxonomy)
+        .filter(FolderTaxonomy.tenant_id == user.tenant_id)
+        .filter(FolderTaxonomy.name == name)
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(409, f"folder '{name}' already exists")
+    row = FolderTaxonomy(
+        tenant_id=user.tenant_id,
+        name=name,
+        description=(req.description or "").strip() or None,
+        active=req.active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    log.info("folder.created", name=name)
+    return FolderTaxonomyItem(
+        id=row.id,
+        name=row.name,
+        description=row.description,
+        active=row.active,
+        doc_count=0,
+        updated_at=row.updated_at.isoformat() if row.updated_at else "",
+    )
+
+
+@router.patch("/folders/{folder_id}")
+def update_folder(
+    folder_id: UUID,
+    req: UpdateFolderRequest,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    row = db.get(FolderTaxonomy, folder_id)
+    if row is None or row.tenant_id != user.tenant_id:
+        raise HTTPException(404, "folder not found")
+    if req.name is not None:
+        new_name = req.name.strip()
+        if not new_name:
+            raise HTTPException(400, "name cannot be empty")
+        if new_name != row.name:
+            # Rename cascades to existing documents.folder values so the
+            # UI facet grouping stays consistent. Keeps folder as a string
+            # column (no FK migration needed).
+            db.query(Document).filter(
+                Document.tenant_id == user.tenant_id,
+                Document.folder == row.name,
+            ).update({Document.folder: new_name})
+            row.name = new_name
+    if req.description is not None:
+        row.description = req.description.strip() or None
+    if req.active is not None:
+        row.active = req.active
+    db.commit()
+    log.info("folder.updated", folder_id=str(folder_id))
+    return {"status": "ok"}
+
+
+@router.delete("/folders/{folder_id}")
+def delete_folder(
+    folder_id: UUID,
+    reassign_to: str | None = QParam(None, description="Reassign documents to this folder name; null clears folder."),
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    row = db.get(FolderTaxonomy, folder_id)
+    if row is None or row.tenant_id != user.tenant_id:
+        raise HTTPException(404, "folder not found")
+    # Reassign or clear documents currently using this folder name so
+    # deleting the taxonomy row doesn't leave orphan documents.folder
+    # values pointing at nothing.
+    target = None
+    if reassign_to:
+        target_row = (
+            db.query(FolderTaxonomy)
+            .filter(FolderTaxonomy.tenant_id == user.tenant_id)
+            .filter(FolderTaxonomy.name == reassign_to)
+            .first()
+        )
+        if target_row is None:
+            raise HTTPException(400, f"reassign_to folder '{reassign_to}' does not exist")
+        target = target_row.name
+    db.query(Document).filter(
+        Document.tenant_id == user.tenant_id,
+        Document.folder == row.name,
+    ).update({Document.folder: target})
+    db.delete(row)
+    db.commit()
+    log.info("folder.deleted", folder_id=str(folder_id), reassigned_to=target)
+    return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Folder suggestions — pending no_fit proposals from the classifier
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class FolderSuggestionItem(BaseModel):
+    id: UUID
+    proposed_name: str
+    proposed_description: str | None
+    source_doc_id: UUID | None
+    source_title: str | None
+    source_summary: str | None
+    status: str
+    created_at: str
+
+
+class AcceptFolderSuggestionRequest(BaseModel):
+    # Optional overrides — reviewer can rename the folder before accepting.
+    name: str | None = None
+    description: str | None = None
+
+
+@router.get("/folder-suggestions", response_model=list[FolderSuggestionItem])
+def list_folder_suggestions(
+    status: str = QParam("pending"),
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> list[FolderSuggestionItem]:
+    rows = (
+        db.query(FolderSuggestion)
+        .filter(FolderSuggestion.tenant_id == user.tenant_id)
+        .filter(FolderSuggestion.status == status)
+        .order_by(FolderSuggestion.created_at.desc())
+        .all()
+    )
+    return [
+        FolderSuggestionItem(
+            id=r.id,
+            proposed_name=r.proposed_name,
+            proposed_description=r.proposed_description,
+            source_doc_id=r.source_doc_id,
+            source_title=r.source_title,
+            source_summary=r.source_summary,
+            status=r.status,
+            created_at=r.created_at.isoformat() if r.created_at else "",
+        )
+        for r in rows
+    ]
+
+
+@router.post("/folder-suggestions/{sug_id}/accept", response_model=FolderTaxonomyItem)
+def accept_folder_suggestion(
+    sug_id: UUID,
+    req: AcceptFolderSuggestionRequest,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> FolderTaxonomyItem:
+    """Accept a pending suggestion → create a FolderTaxonomy row and
+    reassign the source doc (if any) to it."""
+    from datetime import datetime, timezone
+
+    sug = db.get(FolderSuggestion, sug_id)
+    if sug is None or sug.tenant_id != user.tenant_id:
+        raise HTTPException(404, "suggestion not found")
+    if sug.status != "pending":
+        raise HTTPException(400, f"suggestion is already {sug.status}")
+    name = (req.name or sug.proposed_name or "").strip()
+    if not name:
+        raise HTTPException(400, "name is required")
+    description = (req.description if req.description is not None else sug.proposed_description) or None
+    # If the reviewer's chosen name collides with an existing folder,
+    # treat as duplicate — assign the source doc to the existing folder
+    # instead of creating a second row.
+    existing = (
+        db.query(FolderTaxonomy)
+        .filter(FolderTaxonomy.tenant_id == user.tenant_id)
+        .filter(FolderTaxonomy.name == name)
+        .first()
+    )
+    if existing is not None:
+        target = existing
+        sug.status = "duplicate"
+    else:
+        target = FolderTaxonomy(
+            tenant_id=user.tenant_id,
+            name=name,
+            description=(description or "").strip() or None,
+            active=True,
+        )
+        db.add(target)
+        db.flush()
+        sug.status = "accepted"
+    sug.reviewed_at = datetime.now(timezone.utc)
+    if sug.source_doc_id:
+        doc = db.get(Document, sug.source_doc_id)
+        if doc is not None and doc.tenant_id == user.tenant_id:
+            doc.folder = target.name
+    db.commit()
+    db.refresh(target)
+    log.info("folder_suggestion.accepted", sug_id=str(sug_id), folder=target.name)
+    return FolderTaxonomyItem(
+        id=target.id,
+        name=target.name,
+        description=target.description,
+        active=target.active,
+        doc_count=1 if sug.source_doc_id else 0,
+        updated_at=target.updated_at.isoformat() if target.updated_at else "",
+    )
+
+
+@router.post("/folder-suggestions/{sug_id}/reject")
+def reject_folder_suggestion(
+    sug_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    from datetime import datetime, timezone
+
+    sug = db.get(FolderSuggestion, sug_id)
+    if sug is None or sug.tenant_id != user.tenant_id:
+        raise HTTPException(404, "suggestion not found")
+    sug.status = "rejected"
+    sug.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    log.info("folder_suggestion.rejected", sug_id=str(sug_id))
     return {"status": "ok"}

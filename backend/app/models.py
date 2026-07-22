@@ -254,6 +254,52 @@ class Lexicon(Base):
     )
 
 
+class FolderTaxonomy(Base):
+    """Per-tenant curated folder set. The classifier picks folder names
+    from active rows here — free-text folder generation was retired to
+    stop the "generic name eats everything" drift (see migration 0016
+    rationale)."""
+
+    __tablename__ = "folder_taxonomy"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Shown both to the classifier (as semantic boundary) and to reviewers.
+    description: Mapped[str | None] = mapped_column(Text)
+    # Deactivating hides a folder from new classifications without breaking
+    # existing documents.folder values that reference its name.
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FolderSuggestion(Base):
+    """Pending 'no_fit' proposals from the classifier — same lifecycle as
+    pending Lexicon rows: pending → accepted (spawns a FolderTaxonomy row)
+    or rejected."""
+
+    __tablename__ = "folder_suggestion"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    proposed_name: Mapped[str] = mapped_column(Text, nullable=False)
+    proposed_description: Mapped[str | None] = mapped_column(Text)
+    source_doc_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL")
+    )
+    source_title: Mapped[str | None] = mapped_column(Text)
+    source_summary: Mapped[str | None] = mapped_column(Text)
+    # pending | accepted | rejected | duplicate
+    status: Mapped[str] = mapped_column(String(32), default="pending", server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class LexiconMatchEvent(Base):
     """One row per surface-form match. Feeds usage stats (30d hit count,
     dead-entry detection). Kept lean — no answer body, no user id — so

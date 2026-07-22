@@ -318,6 +318,32 @@ export type LexiconWritePayload = Partial<{
   status: "active" | "pending" | "rejected";
 }>;
 
+export type FolderTaxonomyItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  doc_count: number;
+  updated_at: string;
+};
+
+export type FolderTaxonomyWrite = Partial<{
+  name: string;
+  description: string;
+  active: boolean;
+}>;
+
+export type FolderSuggestionItem = {
+  id: string;
+  proposed_name: string;
+  proposed_description: string | null;
+  source_doc_id: string | null;
+  source_title: string | null;
+  source_summary: string | null;
+  status: "pending" | "accepted" | "rejected" | "duplicate";
+  created_at: string;
+};
+
 export type AmendmentItem = {
   id: string;
   amendment_doc_id: string;
@@ -779,6 +805,45 @@ export const api = {
     }),
   deleteLexicon: (id: string) =>
     request<{ status: string }>(`/api/reviewer/lexicon/${id}`, { method: "DELETE" }),
+
+  // Folder taxonomy
+  listFolders: () => request<FolderTaxonomyItem[]>("/api/reviewer/folders"),
+  createFolder: (body: FolderTaxonomyWrite) =>
+    request<FolderTaxonomyItem>("/api/reviewer/folders", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateFolder: (id: string, body: FolderTaxonomyWrite) =>
+    request<{ status: string }>(`/api/reviewer/folders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteFolder: (id: string, reassignTo?: string) => {
+    const qs = reassignTo
+      ? `?reassign_to=${encodeURIComponent(reassignTo)}`
+      : "";
+    return request<{ status: string }>(
+      `/api/reviewer/folders/${id}${qs}`,
+      { method: "DELETE" },
+    );
+  },
+  listFolderSuggestions: (status: "pending" | "accepted" | "rejected" | "duplicate" = "pending") =>
+    request<FolderSuggestionItem[]>(
+      `/api/reviewer/folder-suggestions?status=${status}`,
+    ),
+  acceptFolderSuggestion: (
+    id: string,
+    body: { name?: string; description?: string } = {},
+  ) =>
+    request<FolderTaxonomyItem>(
+      `/api/reviewer/folder-suggestions/${id}/accept`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  rejectFolderSuggestion: (id: string) =>
+    request<{ status: string }>(
+      `/api/reviewer/folder-suggestions/${id}/reject`,
+      { method: "POST" },
+    ),
 
   // Amendments — cross-document supersession graph
   listAmendments: (needsReview?: boolean) => {

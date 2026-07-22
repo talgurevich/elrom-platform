@@ -4,6 +4,7 @@ import Amendments from "./pages/Amendments";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
 import Landing from "./pages/Landing";
+import Folders from "./pages/Folders";
 import Lexicon from "./pages/Lexicon";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -21,6 +22,7 @@ type Tab =
   | "review"
   | "authoritative"
   | "lexicon"
+  | "folders"
   | "amendments"
   | "eval"
   | "admin";
@@ -60,6 +62,11 @@ const Icon = {
       <line x1="8" y1="9" x2="14" y2="9" />
     </svg>
   ),
+  folders: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  ),
   amendments: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 1 0-5.66-5.66l-1.5 1.5" />
@@ -89,6 +96,7 @@ const ALL_TABS: TabDef[] = [
   { id: "upload", label: "מסמכים" },
   { id: "authoritative", label: "תשובות מאושרות" },
   { id: "lexicon", label: "מילון" },
+  { id: "folders", label: "תיקיות" },
   { id: "amendments", label: "תיקונים" },
   { id: "review", label: "תור בדיקה", superOnly: true },
   { id: "eval", label: "הערכה", superOnly: true },
@@ -559,6 +567,7 @@ export default function App() {
           {tab === "review" && <Review />}
           {tab === "authoritative" && <Authoritative />}
           {tab === "lexicon" && <Lexicon />}
+          {tab === "folders" && <Folders />}
           {tab === "amendments" && <Amendments />}
           {tab === "eval" && <Eval onRunInChat={() => setTab("search")} />}
           {tab === "admin" && <Admin currentUserId={user.id} />}
