@@ -11,6 +11,9 @@ python -m scripts.seed_dev || true
 echo "▶ Backfilling אל-רום tenant.system_context (no-op if already set)…"
 python -m scripts.backfill_tenant_context || true
 
+echo "▶ Backfilling lexicon surface_forms (idempotent — skips rows already expanded)…"
+python -m scripts.backfill_lexicon || true
+
 echo "▶ Starting uvicorn on 0.0.0.0:${PORT:-8000} with ${WEB_CONCURRENCY:-2} workers"
 # Run at least 2 workers so /api/health stays responsive while another worker
 # is busy on a long-running OCR upload. Render's default WEB_CONCURRENCY=1

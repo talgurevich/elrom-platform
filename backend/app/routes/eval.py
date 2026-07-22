@@ -119,7 +119,9 @@ def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunRes
     retrieved_filenames = [c.document.filename for c in retrieved]
 
     if retrieved:
-        lex = find_relevant_terms(db, tenant_id=tenant_id, question=g.question)
+        lex = find_relevant_terms(
+            db, tenant_id=tenant_id, question=g.question, record_events=False
+        )
         llm = answer_with_citations(
             question=g.question,
             chunks=retrieved,

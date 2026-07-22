@@ -282,17 +282,41 @@ export type AuthoritativeItem = {
   approved_at: string;
 };
 
+export type LexiconEntryType = "definition" | "pointer" | "rule";
+
 export type LexiconItem = {
   id: string;
   term: string;
+  // Matchable variants (canonical first, then Hebrew prefix/plural forms).
+  surface_forms: string[];
+  entry_type: LexiconEntryType;
+  // Reader-facing tooltip (short, one sentence).
+  short_gloss: string | null;
+  // Answerer-facing context injection (1-3 sentences).
+  answerer_expansion: string | null;
+  // Legacy free-text field — fall back to this if the split fields are empty.
   expansion: string;
   notes: string | null;
   source: "manual" | "learned";
   status: "active" | "pending" | "rejected";
   confidence: number | null;
   evidence: Record<string, unknown> | null;
+  // Usage stats over the last 30 days.
+  match_count_30d: number;
+  last_matched_at: string | null;
   updated_at: string;
 };
+
+export type LexiconWritePayload = Partial<{
+  term: string;
+  surface_forms: string[];
+  entry_type: LexiconEntryType;
+  short_gloss: string;
+  answerer_expansion: string;
+  expansion: string;
+  notes: string;
+  status: "active" | "pending" | "rejected";
+}>;
 
 export type AmendmentItem = {
   id: string;
@@ -743,15 +767,12 @@ export const api = {
   listLexicon: () => request<LexiconItem[]>("/api/reviewer/lexicon"),
   suggestLexicon: () =>
     request<LexiconSuggestion[]>("/api/reviewer/lexicon/suggestions", { method: "POST" }),
-  createLexicon: (body: { term: string; expansion: string; notes?: string }) =>
+  createLexicon: (body: LexiconWritePayload) =>
     request<LexiconItem>("/api/reviewer/lexicon", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  updateLexicon: (
-    id: string,
-    body: Partial<{ term: string; expansion: string; notes: string; status: "active" | "pending" | "rejected" }>
-  ) =>
+  updateLexicon: (id: string, body: LexiconWritePayload) =>
     request<{ status: string }>(`/api/reviewer/lexicon/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

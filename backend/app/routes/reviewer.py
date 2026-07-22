@@ -132,6 +132,27 @@ def approve_query(
     query.authoritative_answer_id = auth.id
     db.commit()
 
+    # Harvest lexicon candidates from the reviewer's edits. Best-effort —
+    # a proposer failure must not fail the approve. See
+    # services/lexicon_harvest.harvest_from_reviewer_edit for the signal
+    # rationale: new noun-phrase-shaped tokens in the edit are usually
+    # terms the reviewer wanted the glossary to know about.
+    if req.edited_answer and req.edited_answer.strip() != (query.answer or "").strip():
+        try:
+            from app.services.lexicon_harvest import harvest_from_reviewer_edit
+
+            harvest_from_reviewer_edit(
+                db,
+                tenant_id=query.tenant_id,
+                original_answer=query.answer or "",
+                edited_answer=req.edited_answer,
+                source_query_id=query.id,
+            )
+            db.commit()
+        except Exception as e:  # noqa: BLE001
+            log.warning("reviewer.approve.lexicon_harvest_failed", err=str(e))
+            db.rollback()
+
     log.info("reviewer.approved", query_id=str(query_id), auth_id=str(auth.id))
     return ApproveResponse(
         authoritative_answer_id=auth.id,
@@ -242,24 +263,44 @@ def update_authoritative(
 class LexiconItem(BaseModel):
     id: UUID
     term: str
+    # Matchable variants (canonical first). Reviewer edits list on the page.
+    surface_forms: list[str] = []
+    # definition | pointer | rule — see models.Lexicon.entry_type.
+    entry_type: str = "definition"
+    # Reader-facing tooltip.
+    short_gloss: str | None = None
+    # Answerer-facing context injection.
+    answerer_expansion: str | None = None
+    # Legacy free-text field — clients should render short_gloss+answerer_expansion
+    # when present, and fall back to `expansion` for un-migrated rows.
     expansion: str
     notes: str | None
-    # Provenance fields — let the reviewer page sort learned vs manual entries.
     source: str = "manual"  # manual | learned
     status: str = "active"  # active | pending | rejected
     confidence: float | None = None
     evidence: dict | None = None
+    # 30-day match count for the stats mini-panel. Populated by list_lexicon.
+    match_count_30d: int = 0
+    last_matched_at: str | None = None
     updated_at: str
 
 
 class CreateLexiconRequest(BaseModel):
     term: str
-    expansion: str
+    expansion: str | None = None
+    surface_forms: list[str] | None = None
+    entry_type: str | None = None
+    short_gloss: str | None = None
+    answerer_expansion: str | None = None
     notes: str | None = None
 
 
 class UpdateLexiconRequest(BaseModel):
     term: str | None = None
+    surface_forms: list[str] | None = None
+    entry_type: str | None = None
+    short_gloss: str | None = None
+    answerer_expansion: str | None = None
     expansion: str | None = None
     notes: str | None = None
     # Reviewer-only: approve / reject / re-activate learned entries.
@@ -278,22 +319,58 @@ def list_lexicon(
     sees both their curated lexicon and the queue of learner-proposed
     additions). Pass ``status=rejected`` to inspect what's been suppressed.
     """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func as sa_func
+
+    from app.models import LexiconMatchEvent
+
     q = db.query(Lexicon).filter(Lexicon.tenant_id == user.tenant_id)
     if status is not None:
         q = q.filter(Lexicon.status == status)
     else:
         q = q.filter(Lexicon.status.in_(["active", "pending"]))
     rows = q.order_by(Lexicon.status.desc(), Lexicon.term).all()
+
+    # Aggregate 30d match stats in one query — cheap and keeps the stats
+    # panel from N+1'ing.
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    lex_ids = [r.id for r in rows]
+    stats: dict[UUID, tuple[int, datetime | None]] = {}
+    if lex_ids:
+        agg = (
+            db.query(
+                LexiconMatchEvent.lexicon_id,
+                sa_func.count(LexiconMatchEvent.id),
+                sa_func.max(LexiconMatchEvent.created_at),
+            )
+            .filter(LexiconMatchEvent.lexicon_id.in_(lex_ids))
+            .filter(LexiconMatchEvent.created_at >= since)
+            .group_by(LexiconMatchEvent.lexicon_id)
+            .all()
+        )
+        stats = {row[0]: (row[1], row[2]) for row in agg}
+
     return [
         LexiconItem(
             id=r.id,
             term=r.term,
+            surface_forms=r.surface_forms or [],
+            entry_type=r.entry_type or "definition",
+            short_gloss=r.short_gloss,
+            answerer_expansion=r.answerer_expansion,
             expansion=r.expansion,
             notes=r.notes,
             source=r.source or "manual",
             status=r.status or "active",
             confidence=r.confidence,
             evidence=r.evidence,
+            match_count_30d=stats.get(r.id, (0, None))[0],
+            last_matched_at=(
+                stats.get(r.id, (0, None))[1].isoformat()
+                if stats.get(r.id, (0, None))[1]
+                else None
+            ),
             updated_at=r.updated_at.isoformat() if r.updated_at else "",
         )
         for r in rows
@@ -307,13 +384,27 @@ def create_lexicon(
     user: IdentityUser = Depends(current_user),
 ) -> LexiconItem:
     """Add a new lexicon entry in the caller's tenant."""
-    if not req.term.strip() or not req.expansion.strip():
-        raise HTTPException(400, "term and expansion are required")
+    from app.services.hebrew_prefixes import expand_hebrew_prefixes
+
+    term = (req.term or "").strip()
+    if not term:
+        raise HTTPException(400, "term is required")
+    # answerer_expansion is the canonical "what the LLM should know" field.
+    # `expansion` (legacy NOT NULL) mirrors it so old readers keep working.
+    answerer_exp = (req.answerer_expansion or req.expansion or "").strip()
+    short = (req.short_gloss or "").strip()
+    if not answerer_exp and not short:
+        raise HTTPException(400, "provide at least one of expansion / answerer_expansion / short_gloss")
+    surface_forms = req.surface_forms or expand_hebrew_prefixes(term)
 
     entry = Lexicon(
         tenant_id=user.tenant_id,
-        term=req.term.strip(),
-        expansion=req.expansion.strip(),
+        term=term,
+        surface_forms=surface_forms,
+        entry_type=req.entry_type or "definition",
+        short_gloss=short or None,
+        answerer_expansion=answerer_exp or None,
+        expansion=answerer_exp or short or term,
         notes=req.notes,
     )
     db.add(entry)
@@ -323,8 +414,14 @@ def create_lexicon(
     return LexiconItem(
         id=entry.id,
         term=entry.term,
+        surface_forms=entry.surface_forms or [],
+        entry_type=entry.entry_type or "definition",
+        short_gloss=entry.short_gloss,
+        answerer_expansion=entry.answerer_expansion,
         expansion=entry.expansion,
         notes=entry.notes,
+        source=entry.source or "manual",
+        status=entry.status or "active",
         updated_at=entry.updated_at.isoformat() if entry.updated_at else "",
     )
 
@@ -342,8 +439,24 @@ def update_lexicon(
         raise HTTPException(404, "Lexicon entry not found")
     if req.term is not None:
         entry.term = req.term.strip()
+    if req.surface_forms is not None:
+        entry.surface_forms = [s.strip() for s in req.surface_forms if s.strip()]
+    if req.entry_type is not None:
+        if req.entry_type not in {"definition", "pointer", "rule"}:
+            raise HTTPException(400, "entry_type must be definition|pointer|rule")
+        entry.entry_type = req.entry_type
+    if req.short_gloss is not None:
+        entry.short_gloss = req.short_gloss.strip() or None
+    if req.answerer_expansion is not None:
+        entry.answerer_expansion = req.answerer_expansion.strip() or None
     if req.expansion is not None:
         entry.expansion = req.expansion.strip()
+    else:
+        # Keep legacy `expansion` in sync with answerer_expansion when the
+        # reviewer edits the new field but not the old one, so downstream
+        # readers that still consult `expansion` see the fresh value.
+        if req.answerer_expansion is not None and entry.answerer_expansion:
+            entry.expansion = entry.answerer_expansion
     if req.notes is not None:
         entry.notes = req.notes
     if req.status is not None:
@@ -351,6 +464,9 @@ def update_lexicon(
             raise HTTPException(400, "status must be active|pending|rejected")
         entry.status = req.status
     db.commit()
+    # Regex cache in lexicon_matcher is keyed by (surface_forms tuple), so
+    # editing surface_forms invalidates automatically on next call. No
+    # explicit purge needed.
     log.info("lexicon.updated", lex_id=str(lex_id))
     return {"status": "ok"}
 

@@ -276,7 +276,10 @@ async def search_pipeline(
             find_relevant_terms, db, tenant_id=tenant_id, question=question
         )
         lexicon_block = format_lexicon_block(lexicon_entries)
-        lexicon_expansions = [(e.term, e.expansion) for e in lexicon_entries]
+        lexicon_expansions = [
+            (e.term, (e.answerer_expansion or e.expansion or "").strip())
+            for e in lexicon_entries
+        ]
 
         # Cheap doc index for triage: just titles, capped to keep prompt size
         # bounded. The triage uses these to surface "did you mean doc X?".

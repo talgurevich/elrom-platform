@@ -17,6 +17,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models import Lexicon
+from app.services import lexicon_matcher
 
 
 # Hebrew quote flavors we treat as "notable phrase":
@@ -41,29 +42,29 @@ class AnnotationSpan:
 
 
 def _find_known_spans(answer: str, entries: list[Lexicon]) -> list[AnnotationSpan]:
+    """Delegate to the shared matcher so hover-highlights and retrieval
+    agree on what counts as a match. Hover tooltip prefers `short_gloss`;
+    falls back to the legacy `expansion`."""
+    matches = lexicon_matcher.match_in_text(entries, answer)
+    if not matches:
+        return []
+    by_id = {e.id: e for e in entries}
     spans: list[AnnotationSpan] = []
-    # Longer terms first so "בית ילדים" wins over "בית".
-    for e in sorted(entries, key=lambda x: -len(x.term or "")):
-        term = (e.term or "").strip()
-        if not term or len(term) < 2:
+    for m in matches:
+        e = by_id.get(m.lexicon_id)
+        if e is None:
             continue
-        start = 0
-        while True:
-            idx = answer.find(term, start)
-            if idx < 0:
-                break
-            end = idx + len(term)
-            spans.append(
-                AnnotationSpan(
-                    start=idx,
-                    end=end,
-                    text=term,
-                    kind="known",
-                    lexicon_id=e.id,
-                    expansion=e.expansion,
-                )
+        tooltip = (e.short_gloss or "").strip() or (e.expansion or "").strip()
+        spans.append(
+            AnnotationSpan(
+                start=m.start,
+                end=m.end,
+                text=m.surface_form,
+                kind="known",
+                lexicon_id=e.id,
+                expansion=tooltip,
             )
-            start = end
+        )
     return spans
 
 
@@ -126,19 +127,46 @@ def _resolve_overlaps(spans: list[AnnotationSpan]) -> list[AnnotationSpan]:
 
 
 def annotate_answer(
-    db: Session, *, tenant_id: UUID, answer: str
+    db: Session,
+    *,
+    tenant_id: UUID,
+    answer: str,
+    query_id: UUID | None = None,
 ) -> list[AnnotationSpan]:
     if not answer or not answer.strip():
         return []
-    entries = (
-        db.query(Lexicon)
-        .filter(Lexicon.tenant_id == tenant_id)
-        .filter(Lexicon.status == "active")
-        .all()
-    )
-    existing_terms_lower = {
-        (e.term or "").strip().lower() for e in entries if e.term
-    }
+    entries = lexicon_matcher.load_active_entries(db, tenant_id=tenant_id)
+    # Existing surface_forms (not just canonical term) — a candidate span
+    # that already matches an entry variant shouldn't be re-proposed.
+    existing_terms_lower: set[str] = set()
+    for e in entries:
+        for f in (e.surface_forms or []):
+            if f:
+                existing_terms_lower.add(f.strip().lower())
+        if e.term:
+            existing_terms_lower.add(e.term.strip().lower())
     known = _find_known_spans(answer, entries)
     candidates = _find_candidate_spans(answer, existing_terms_lower)
+    # Record answer_render events for the known matches. We reconstruct
+    # Match objects from the resolved spans so overlap-resolved-out
+    # duplicates don't inflate stats.
+    if known:
+        rendered_matches = [
+            lexicon_matcher.Match(
+                lexicon_id=s.lexicon_id,  # type: ignore[arg-type]
+                canonical_term="",  # not used by record_match_events
+                surface_form=s.text,
+                start=s.start,
+                end=s.end,
+            )
+            for s in known
+            if s.lexicon_id is not None
+        ]
+        lexicon_matcher.record_match_events(
+            db,
+            tenant_id=tenant_id,
+            matches=rendered_matches,
+            context="answer_render",
+            query_id=query_id,
+        )
     return _resolve_overlaps(known + candidates)

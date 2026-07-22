@@ -6,6 +6,10 @@ We tell Claude explicitly when those terms appear in a query.
 
 Used at query time: scan question for known terms, collect their expansions,
 prepend them to the LLM context as a "domain note" block.
+
+Matching moved to `lexicon_matcher.py` (word-boundary regex over
+surface_forms). This module now stays thin: query the DB, delegate the
+match, format the block, record the events.
 """
 from uuid import UUID
 
@@ -13,39 +17,61 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.models import Lexicon
+from app.services import lexicon_matcher
 
 log = structlog.get_logger()
 
 
-def find_relevant_terms(db: Session, *, tenant_id: UUID, question: str) -> list[Lexicon]:
-    """Return active lexicon entries whose term appears in the question.
+def find_relevant_terms(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    question: str,
+    query_id: UUID | None = None,
+    record_events: bool = True,
+) -> list[Lexicon]:
+    """Return active lexicon entries whose surface_forms appear in `question`.
 
-    Simple substring match for MVP. Could be improved with lemmatization
-    (Hebrew morphology) in a later iteration.
+    Delegates matching to `lexicon_matcher.match_in_text` so retrieval and
+    highlighting share one implementation. When `record_events=True`, logs
+    a match event per hit so the reviewer stats panel can show usage.
     """
-    candidates = (
-        db.query(Lexicon)
-        .filter(Lexicon.tenant_id == tenant_id)
-        # Only active entries influence retrieval. Learned-but-pending entries
-        # stay out of the loop until a reviewer accepts them.
-        .filter(Lexicon.status == "active")
-        .all()
-    )
-    hits = [c for c in candidates if c.term and c.term in question]
-    if hits:
-        log.info(
-            "lexicon.hit",
-            count=len(hits),
-            terms=[c.term for c in hits],
+    entries = lexicon_matcher.load_active_entries(db, tenant_id=tenant_id)
+    matches = lexicon_matcher.match_in_text(entries, question)
+    if not matches:
+        return []
+    matched_ids = {m.lexicon_id for m in matches}
+    hits = [e for e in entries if e.id in matched_ids]
+    if record_events:
+        lexicon_matcher.record_match_events(
+            db,
+            tenant_id=tenant_id,
+            matches=matches,
+            context="query",
+            query_id=query_id,
         )
+    log.info(
+        "lexicon.hit",
+        count=len(hits),
+        terms=[e.term for e in hits],
+    )
     return hits
 
 
 def format_lexicon_block(entries: list[Lexicon]) -> str:
-    """Format lexicon entries for inclusion in the LLM prompt context."""
+    """Format lexicon entries for inclusion in the LLM prompt context.
+
+    Prefers `answerer_expansion` (the split, LLM-facing field). Falls back
+    to the legacy `expansion` for entries not yet migrated by the reviewer.
+    """
     if not entries:
         return ""
-    lines = [f"- \"{e.term}\": {e.expansion}" for e in entries]
+    lines: list[str] = []
+    for e in entries:
+        body = (e.answerer_expansion or "").strip() or (e.expansion or "").strip()
+        if not body:
+            continue
+        lines.append(f'- "{e.term}": {body}')
     return "\n".join(lines)
 
 

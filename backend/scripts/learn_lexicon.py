@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Chunk, Conversation, Document, Lexicon, Query
+from app.models import Chunk, Conversation, Document, Lexicon, LexiconMatchEvent, Query
 from app.services.identity import TenantRow, get_tenant_row_by_name, list_tenants_as_rows
 
 log = structlog.get_logger()
@@ -281,6 +281,34 @@ def _insert_mappings(
 def run_for_tenant(
     db: Session, tenant: TenantRow, *, since: datetime, max_pairs: int, min_confidence: float
 ) -> dict:
+    # Signal 6: quoted phrases + Hebrew acronyms in recent answers.
+    # Runs before pair-harvesting so proposals from the two signals see
+    # each other in the dedup set.
+    from app.services.lexicon_corpus_mining import harvest_corpus_mining
+    from app.services.lexicon_harvest import harvest_auto_quoted_acronym
+
+    quoted_inserted = 0
+    try:
+        quoted_inserted = harvest_auto_quoted_acronym(
+            db, tenant_id=tenant.id, since=since
+        )
+        if quoted_inserted:
+            db.commit()
+    except Exception as e:
+        log.warning("learn_lexicon.auto_quoted_failed", tenant=tenant.name, err=str(e))
+        db.rollback()
+
+    # Signals 4 + 5: corpus mining (doc-frequent/query-rare and reverse).
+    # Cheap regex tokenizer; the proposer LLM does the semantic filtering.
+    corpus_stats: dict = {"doc_frequent": 0, "query_frequent": 0}
+    try:
+        corpus_stats = harvest_corpus_mining(db, tenant_id=tenant.id, since=since)
+        if any(corpus_stats.values()):
+            db.commit()
+    except Exception as e:
+        log.warning("learn_lexicon.corpus_mining_failed", tenant=tenant.name, err=str(e))
+        db.rollback()
+
     pairs = find_refinement_pairs(
         db, tenant_id=tenant.id, since=since, max_pairs=max_pairs
     )
@@ -314,7 +342,30 @@ def run_for_tenant(
                 pair=(str(failed.id), str(succeeded.id)),
                 inserted=n,
             )
-    return {"pairs": len(pairs), "inserted": inserted_total}
+    # Prune match events older than the stats window + buffer. Keeps the
+    # events table bounded — the stats panel only reads the last 30 days.
+    pruned = 0
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        pruned = (
+            db.query(LexiconMatchEvent)
+            .filter(LexiconMatchEvent.tenant_id == tenant.id)
+            .filter(LexiconMatchEvent.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        if pruned:
+            db.commit()
+    except Exception as e:
+        log.warning("learn_lexicon.event_prune_failed", tenant=tenant.name, err=str(e))
+        db.rollback()
+
+    return {
+        "pairs": len(pairs),
+        "inserted_from_pairs": inserted_total,
+        "inserted_from_quoted": quoted_inserted,
+        "inserted_from_corpus_mining": corpus_stats,
+        "match_events_pruned": pruned,
+    }
 
 
 _RELATIVE_RE = __import__("re").compile(r"^\s*(\d+)\s*([dhm])\s*$")

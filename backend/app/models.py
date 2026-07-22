@@ -213,7 +213,28 @@ class Lexicon(Base):
     __tablename__ = "lexicon"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    # Canonical display term. `surface_forms` holds all matchable variants.
     term: Mapped[str] = mapped_column(Text, nullable=False)
+    # Matchable variants (canonical first, then Hebrew prefix/inflection
+    # variants). The matcher iterates this list — raw substring match on
+    # `term` alone misses "השיוך" when the entry is "שיוך".
+    surface_forms: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default="{}"
+    )
+    # definition = "here's what X means" (most entries)
+    # pointer    = "when X comes up, look at tokanon Y section Z"
+    # rule       = "when X appears, apply this policy"
+    entry_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="definition", server_default="definition"
+    )
+    # Reader-facing hover tooltip (one sentence).
+    short_gloss: Mapped[str | None] = mapped_column(Text)
+    # LLM-facing context injection when the term is matched in a question.
+    # Replaces the old free-text `expansion` field for the answerer path.
+    answerer_expansion: Mapped[str | None] = mapped_column(Text)
+    # Legacy free-text expansion. Kept nullable during transition — reads
+    # should prefer `answerer_expansion` (backfilled from this) and
+    # `short_gloss`. Do not write to this column in new code.
     expansion: Mapped[str] = mapped_column(Text, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
     # source: "manual" (human-curated) | "learned" (proposed by nightly job)
@@ -230,4 +251,24 @@ class Lexicon(Base):
     updated_by_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True),)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class LexiconMatchEvent(Base):
+    """One row per surface-form match. Feeds usage stats (30d hit count,
+    dead-entry detection). Kept lean — no answer body, no user id — so
+    volume is fine even on tenants with heavy traffic."""
+
+    __tablename__ = "lexicon_match_event"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    lexicon_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("lexicon.id", ondelete="CASCADE")
+    )
+    surface_form: Mapped[str] = mapped_column(Text, nullable=False)
+    # "query" | "answer_render" | "answerer_context"
+    context: Mapped[str] = mapped_column(String(32), nullable=False)
+    query_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
