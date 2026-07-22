@@ -108,8 +108,8 @@ def approve_query(
     query = db.get(Query, query_id)
     if query is None or query.tenant_id != user.tenant_id:
         raise HTTPException(404, "Query not found")
-    if query.confidence == "refused" and req.edited_answer is None:
-        raise HTTPException(400, "Cannot approve a refused answer without providing edited_answer")
+    if query.confidence in ("refused", "clarifying") and req.edited_answer is None:
+        raise HTTPException(400, "Cannot approve a refused/clarifying answer without providing edited_answer")
 
     final_answer = (req.edited_answer or query.answer or "").strip()
     if not final_answer:

@@ -797,7 +797,7 @@ def mark_good(
         )
 
     final_answer = (query.answer or "").strip()
-    if not final_answer or query.confidence == "refused":
+    if not final_answer or query.confidence in ("refused", "clarifying"):
         # Nothing to promote — still record the positive signal.
         db.commit()
         return MarkGoodResponse(status="ok", authoritative_answer_id=None)
