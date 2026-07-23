@@ -355,45 +355,43 @@ def hybrid_retrieve(
     for i, (chunk_id, _) in enumerate(bm25_sorted):
         combined[chunk_id] = combined.get(chunk_id, 0.0) + 1.0 / (i + 60)
 
-    # Year-anchored seeding — when the query names a year or range,
-    # do a SECOND vector search restricted to docs whose effective_date
-    # falls in range, then round-robin the results by year so every
-    # year gets representation. This is topic-aware (chunks are picked
-    # by semantic similarity to the query, not by arbitrary date order),
-    # so we don't waste per-year budget on unrelated docs from that year.
+    # Year-anchored seeding — when the query names a year or range, run
+    # ONE vector search PER YEAR in the range (each returns top-N chunks
+    # from that year, ordered by cosine similarity to the query).
+    #
+    # Why per-year queries instead of one big cosine sort:
+    # a single ORDER BY dist LIMIT 320 across the whole range lets
+    # semantically-strong newer years crowd out sparse-but-relevant older
+    # years — a short 2014 chunk with OK cosine can sit at rank #400 and
+    # never enter the pool. Per-year queries guarantee every year with
+    # any docs gets its most-relevant chunks in.
+    #
+    # Cost: N vector searches for an N-year range, but each is small
+    # (LIMIT ~5) so the total is under 100ms for a 20-year range.
     year_range = _extract_year_range(query)
     if year_range:
         y_from, y_to = year_range
-        year_vec_q = (
-            db.query(
-                Chunk,
-                Chunk.embedding.cosine_distance(query_embedding).label("dist"),
-            )
-            .join(Document, Chunk.document_id == Document.id)
-            .filter(Chunk.tenant_id == tenant_id)
-            .filter(Chunk.embedding.isnot(None))
-            .filter(Document.effective_date.isnot(None))
-            .filter(sa_func.extract("year", Document.effective_date) >= y_from)
-            .filter(sa_func.extract("year", Document.effective_date) <= y_to)
-            .order_by("dist")
-            .options(joinedload(Chunk.document))
-        )
-        if not include_superseded:
-            year_vec_q = year_vec_q.filter(Chunk.superseded_by_amendment_id.is_(None))
-        # Pull enough raw candidates that per-year cap has real choice.
-        year_raw = year_vec_q.limit(
-            YEAR_SEED_MAX_TOTAL * 4
-        ).all()
-        per_year: dict[int, int] = {}
         year_seed: list[Chunk] = []
-        for c, _dist in year_raw:
-            if c.document.effective_date is None:
-                continue
-            yr = c.document.effective_date.year
-            if per_year.get(yr, 0) >= YEAR_SEED_PER_YEAR:
-                continue
-            per_year[yr] = per_year.get(yr, 0) + 1
-            year_seed.append(c)
+        for yr in range(y_from, y_to + 1):
+            yr_q = (
+                db.query(
+                    Chunk,
+                    Chunk.embedding.cosine_distance(query_embedding).label("dist"),
+                )
+                .join(Document, Chunk.document_id == Document.id)
+                .filter(Chunk.tenant_id == tenant_id)
+                .filter(Chunk.embedding.isnot(None))
+                .filter(Document.effective_date.isnot(None))
+                .filter(sa_func.extract("year", Document.effective_date) == yr)
+                .order_by("dist")
+                .options(joinedload(Chunk.document))
+            )
+            if not include_superseded:
+                yr_q = yr_q.filter(Chunk.superseded_by_amendment_id.is_(None))
+            for c, _dist in yr_q.limit(YEAR_SEED_PER_YEAR).all():
+                year_seed.append(c)
+                if len(year_seed) >= YEAR_SEED_MAX_TOTAL:
+                    break
             if len(year_seed) >= YEAR_SEED_MAX_TOTAL:
                 break
         for c in year_seed:
