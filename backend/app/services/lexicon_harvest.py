@@ -29,7 +29,14 @@ from app.services.lexicon_proposer import propose_entry
 log = structlog.get_logger()
 
 # Shared regexes (mirror answer_annotations._QUOTED_RE / _ACRONYM_RE).
-_QUOTED_RE = re.compile(r'"([^"\n]{2,40})"|״([^״\n]{2,40})״|«([^»\n]{2,40})»')
+# The ״ (gershayim) alternative uses lookarounds to skip acronym markers
+# inside words — see the long comment on _QUOTED_RE in answer_annotations
+# for the "יו״ר ... ויו״ר" false-positive case.
+_QUOTED_RE = re.compile(
+    r'"([^"\n]{2,40})"'
+    r'|(?<![֐-׿])״([^״\n]{2,40})״(?![֐-׿])'
+    r'|«([^»\n]{2,40})»'
+)
 _ACRONYM_RE = re.compile(r'[֐-׿]{1,6}״[֐-׿]')
 
 # A candidate must appear in this many distinct answers within the harvest

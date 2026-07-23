@@ -22,10 +22,19 @@ from app.services import lexicon_matcher
 
 # Hebrew quote flavors we treat as "notable phrase":
 #   "…"   straight double quotes
-#   ״…״   Hebrew gershayim (U+05F4)
+#   ״…״   Hebrew gershayim (U+05F4) — but ONLY when free-standing.
+#         Inside a word (יו״ר, מנכ״ל) it's an acronym marker, not a quote.
+#         Lookarounds guard: opening ״ must not be preceded by a Hebrew
+#         letter; closing ״ must not be followed by one. Otherwise
+#         "יו״ר ועד ההנהלה ויו״ר" gets matched as one giant "quote"
+#         spanning the two acronyms.
 #   «…»   guillemets (rare, but cheap to include)
-# Group 1 captures the inner text.
-_QUOTED_RE = re.compile(r'"([^"\n]{2,40})"|״([^״\n]{2,40})״|«([^»\n]{2,40})»')
+# Group 1 captures the inner text (first non-empty group across the alternation).
+_QUOTED_RE = re.compile(
+    r'"([^"\n]{2,40})"'
+    r'|(?<![֐-׿])״([^״\n]{2,40})״(?![֐-׿])'
+    r'|«([^»\n]{2,40})»'
+)
 
 # Hebrew acronym: letters with a gershayim before the last letter, e.g. מנכ״ל.
 _ACRONYM_RE = re.compile(r'[֐-׿]{1,6}״[֐-׿]')
