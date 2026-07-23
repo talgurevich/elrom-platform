@@ -5,6 +5,7 @@ import {
   type ChunkPreview,
   type DocumentItem,
   type DocumentMetadataPatch,
+  type DuplicateGroup,
   type UploadResponse,
 } from "../lib/api";
 
@@ -112,11 +113,31 @@ export default function Upload() {
   const [defaultDocType, setDefaultDocType] = useState("bylaw");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
+  const [dedupSelection, setDedupSelection] = useState<Set<string>>(new Set());
+  const [dedupBusy, setDedupBusy] = useState(false);
+  const [dedupCollapsed, setDedupCollapsed] = useState(false);
+
   const loadDocs = useCallback(async () => {
     setLoadingDocs(true);
     setError(null);
     try {
-      setDocs(await api.listDocuments());
+      const [docs, dupes] = await Promise.all([
+        api.listDocuments(),
+        api.listDuplicates(),
+      ]);
+      setDocs(docs);
+      setDuplicates(dupes);
+      // Pre-select "delete all but the oldest" per group. `docs` inside
+      // each group already arrive sorted by ingested_at asc from the API,
+      // so index 0 is the recommended keep.
+      const preselect = new Set<string>();
+      for (const g of dupes) {
+        for (let i = 1; i < g.docs.length; i++) {
+          preselect.add(g.docs[i].id);
+        }
+      }
+      setDedupSelection(preselect);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -127,6 +148,42 @@ export default function Upload() {
   useEffect(() => {
     loadDocs();
   }, [loadDocs]);
+
+  const toggleDedup = (docId: string) => {
+    setDedupSelection((s) => {
+      const next = new Set(s);
+      if (next.has(docId)) next.delete(docId);
+      else next.add(docId);
+      return next;
+    });
+  };
+
+  const runDedup = async () => {
+    const ids = Array.from(dedupSelection);
+    if (!ids.length) return;
+    // Warn if any selected doc is cited by an approved answer.
+    const risky: string[] = [];
+    for (const g of duplicates) {
+      for (const d of g.docs) {
+        if (dedupSelection.has(d.id) && d.authoritative_ref_count > 0) {
+          risky.push(`${d.filename} (מצוטט ב-${d.authoritative_ref_count} תשובות)`);
+        }
+      }
+    }
+    const warn = risky.length
+      ? `שים לב — המסמכים הבאים מצוטטים בתשובות מאושרות:\n\n${risky.join("\n")}\n\nמחיקתם תשאיר ציטוטים "יתומים". להמשיך?`
+      : `למחוק ${ids.length} מסמכים כפולים?`;
+    if (!confirm(warn)) return;
+    setDedupBusy(true);
+    try {
+      await api.batchDeleteDocuments(ids);
+      await loadDocs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDedupBusy(false);
+    }
+  };
 
   const addFiles = useCallback(
     (files: FileList | File[]) => {
@@ -531,6 +588,116 @@ export default function Upload() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-900 text-sm">
           {error}
         </div>
+      )}
+
+      {/* Duplicates cleanup — appears only when dupes exist. See
+          backend/app/routes/documents.py:list_duplicates_by_hash. */}
+      {duplicates.length > 0 && (
+        <section className="mb-8 border-2 border-amber-400 bg-amber-50 rounded-md">
+          <button
+            onClick={() => setDedupCollapsed((c) => !c)}
+            className="w-full flex items-center justify-between px-4 py-3 text-right"
+          >
+            <div>
+              <div className="text-sm font-bold text-amber-900 tracking-wide">
+                נמצאו {duplicates.length} קבוצות של מסמכים כפולים
+              </div>
+              <div className="text-xs text-amber-800 mt-1">
+                סה״כ {duplicates.reduce((s, g) => s + g.count, 0)} מסמכים
+                בקבוצות. ברירת המחדל: להשאיר את הראשון שנקלט, למחוק את השאר.
+                {dedupSelection.size > 0 &&
+                  ` · ${dedupSelection.size} נבחרו למחיקה.`}
+              </div>
+            </div>
+            <span className="text-amber-700 text-lg">
+              {dedupCollapsed ? "▼" : "▲"}
+            </span>
+          </button>
+          {!dedupCollapsed && (
+            <div className="border-t border-amber-300 p-4 space-y-4">
+              {duplicates.map((g) => (
+                <div
+                  key={g.content_sha256}
+                  className="bg-white rounded border border-amber-200"
+                >
+                  <div className="px-3 py-2 border-b border-amber-100 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-ink-soft">
+                      {g.content_sha256.slice(0, 10)}…
+                    </span>
+                    <span className="text-xs text-amber-900 font-bold">
+                      {g.count} עותקים
+                    </span>
+                  </div>
+                  <ul className="divide-y divide-amber-100">
+                    {g.docs.map((d, i) => {
+                      const isRecommendedKeep = i === 0;
+                      const selected = dedupSelection.has(d.id);
+                      return (
+                        <li
+                          key={d.id}
+                          className={`flex items-start gap-3 px-3 py-2 ${
+                            selected ? "bg-red-50" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleDedup(d.id)}
+                            className="mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm text-ink font-medium truncate">
+                                {d.filename}
+                              </span>
+                              {isRecommendedKeep && (
+                                <span className="text-[10px] uppercase tracking-widest text-emerald-700 font-bold">
+                                  מומלץ להשאיר
+                                </span>
+                              )}
+                              {d.authoritative_ref_count > 0 && (
+                                <span className="text-[10px] uppercase tracking-widest text-red-700 font-bold">
+                                  מצוטט ב-{d.authoritative_ref_count} תשובות
+                                  מאושרות
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-ink-soft mt-1">
+                              נקלט{" "}
+                              {new Date(d.ingested_at).toLocaleString("he-IL")}
+                              {d.chunks_created !== null &&
+                                ` · ${d.chunks_created} קטעים`}
+                              {d.folder && ` · תיקייה: ${d.folder}`}
+                              {d.doc_type && ` · סוג: ${d.doc_type}`}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  onClick={() => setDedupSelection(new Set())}
+                  disabled={dedupBusy || dedupSelection.size === 0}
+                  className="text-xs px-2 py-1 text-ink-soft hover:bg-white/60 rounded disabled:opacity-50"
+                >
+                  נקה בחירה
+                </button>
+                <button
+                  onClick={runDedup}
+                  disabled={dedupBusy || dedupSelection.size === 0}
+                  className="px-3 py-1.5 bg-red-700 text-white text-sm rounded disabled:opacity-50"
+                >
+                  {dedupBusy
+                    ? "מוחק…"
+                    : `מחק ${dedupSelection.size} מסמכים שנבחרו`}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Queue */}

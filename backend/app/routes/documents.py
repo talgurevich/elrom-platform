@@ -756,6 +756,57 @@ def delete_document(
     return {"status": "ok"}
 
 
+class BatchDeleteRequest(BaseModel):
+    document_ids: list[UUID]
+
+
+class BatchDeleteResult(BaseModel):
+    deleted: list[UUID]
+    not_found: list[UUID]
+    forbidden: list[UUID]
+
+
+@router.post("/batch-delete", response_model=BatchDeleteResult)
+def batch_delete_documents(
+    req: BatchDeleteRequest,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> BatchDeleteResult:
+    """Delete many documents at once (dedup UI flow).
+
+    Historical citations that pointed at deleted chunks become orphans
+    (the chunk_id stays in Query/AuthoritativeAnswer.source_chunk_ids
+    arrays but points at nothing). That's an accepted trade — see the
+    dedup UI's warning about `authoritative_ref_count > 0` before
+    reviewer confirms the delete."""
+    if not req.document_ids:
+        return BatchDeleteResult(deleted=[], not_found=[], forbidden=[])
+
+    deleted: list[UUID] = []
+    not_found: list[UUID] = []
+    forbidden: list[UUID] = []
+    for doc_id in req.document_ids:
+        doc = db.get(Document, doc_id)
+        if doc is None:
+            not_found.append(doc_id)
+            continue
+        if doc.tenant_id != user.tenant_id:
+            forbidden.append(doc_id)
+            continue
+        db.delete(doc)
+        deleted.append(doc_id)
+    db.commit()
+    log.info(
+        "documents.batch_deleted",
+        deleted=len(deleted),
+        not_found=len(not_found),
+        forbidden=len(forbidden),
+    )
+    return BatchDeleteResult(
+        deleted=deleted, not_found=not_found, forbidden=forbidden
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Duplicate detection — feeds the reviewer dedup UI
 # ─────────────────────────────────────────────────────────────────────────
@@ -768,6 +819,10 @@ class DuplicateGroupDoc(BaseModel):
     chunks_created: int | None
     folder: str | None
     doc_type: str | None
+    # "Sticky" signal: if any chunk of this doc has been cited by a
+    # reviewer-approved answer, deleting it will leave dangling citations.
+    # UI surfaces this as a badge so reviewers don't casually kill it.
+    authoritative_ref_count: int = 0
 
 
 class DuplicateGroup(BaseModel):
@@ -812,6 +867,29 @@ def list_duplicates_by_hash(
         .all()
     )
 
+    # Count authoritative-answer references per doc in one query.
+    # unnest(source_chunk_ids) → join chunks → group by document_id.
+    from sqlalchemy import text as sa_text
+
+    doc_ids = [d.id for d in docs]
+    ref_counts: dict[UUID, int] = {}
+    if doc_ids:
+        rows = db.execute(
+            sa_text(
+                """
+                SELECT c.document_id, COUNT(DISTINCT aa.id) AS n
+                FROM authoritative_answers aa
+                CROSS JOIN LATERAL unnest(aa.source_chunk_ids) AS chunk_id
+                JOIN chunks c ON c.id = chunk_id
+                WHERE aa.tenant_id = :tid
+                  AND c.document_id = ANY(:doc_ids)
+                GROUP BY c.document_id
+                """
+            ),
+            {"tid": str(tenant_id), "doc_ids": [str(d) for d in doc_ids]},
+        ).all()
+        ref_counts = {r[0]: r[1] for r in rows}
+
     # Group in Python.
     from collections import defaultdict
 
@@ -833,6 +911,7 @@ def list_duplicates_by_hash(
                     chunks_created=r.chunks_created,
                     folder=r.folder,
                     doc_type=r.doc_type,
+                    authoritative_ref_count=ref_counts.get(r.id, 0),
                 )
                 for r in rows
             ],

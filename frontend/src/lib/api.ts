@@ -362,6 +362,23 @@ export type AmendmentItem = {
   created_at: string;
 };
 
+export type DuplicateGroupDoc = {
+  id: string;
+  filename: string;
+  ingested_at: string;
+  chunks_created: number | null;
+  folder: string | null;
+  doc_type: string | null;
+  // 0 means safe to delete. > 0 means at least one approved answer cites this doc.
+  authoritative_ref_count: number;
+};
+
+export type DuplicateGroup = {
+  content_sha256: string;
+  count: number;
+  docs: DuplicateGroupDoc[];
+};
+
 export type DocumentItem = {
   id: string;
   filename: string;
@@ -746,6 +763,13 @@ export const api = {
   listDocuments: () => request<DocumentItem[]>("/api/documents"),
   deleteDocument: (id: string) =>
     request<{ status: string }>(`/api/documents/${id}`, { method: "DELETE" }),
+  batchDeleteDocuments: (documentIds: string[]) =>
+    request<{ deleted: string[]; not_found: string[]; forbidden: string[] }>(
+      "/api/documents/batch-delete",
+      { method: "POST", body: JSON.stringify({ document_ids: documentIds }) },
+    ),
+  listDuplicates: () =>
+    request<DuplicateGroup[]>("/api/documents/duplicates/by-hash"),
   deleteAllDocuments: () =>
     request<{ status: string; documents_deleted: number; chunks_deleted: number }>(
       `/api/documents?confirm=true`,
