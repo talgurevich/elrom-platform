@@ -560,6 +560,11 @@ def answer_with_citations(
         f"מאגר המסמכים של הארגון (סיכום שאינו נשען על החיפוש) — השתמש בזה "
         f"לענות על שאלות מטא כמו \"כמה יש\", \"מה העדכני\", \"אילו סוגים\":\n"
         f"{corpus_stats_block}\n\n"
+        f"🚨 **חשוב**: כשאתה עונה על שאלת מטא בעזרת הבלוק הזה, השדה "
+        f"`references` חייב לכלול **רשומה אחת** בפורמט הבא בדיוק:\n"
+        f'  {{"title": "מאגר הארגון", "section_number": "", "source_type": "meta", "excerpt": "<השורה הרלוונטית מהבלוק>"}}\n'
+        f"אחרת המערכת תסרב אוטומטית (guardrail confident+no-references). "
+        f"אל תשתמש ב-source_type='meta' לתשובות שאינן שאלות מטא.\n\n"
         if corpus_stats_block
         else ""
     )
@@ -660,11 +665,21 @@ def _enforce_cite_or_refuse(
         )
 
     # (2) confident but every reference title is unknown to the retriever →
-    # LLM fabricated the source. If at least one reference *does* match a
-    # retrieved filename we let it through — models legitimately shorten
-    # titles or fold amendment docs into their target, and we don't want
-    # false positives that erode trust. We're only catching the "made up
-    # a whole citation" case.
+    # LLM fabricated the source. Two accepted-through exceptions:
+    #   a. At least one reference actually matches a retrieved filename —
+    #      models legitimately shorten titles or fold amendment docs into
+    #      their target, so we don't want false positives.
+    #   b. The reference is a canonical meta-reference (source_type=meta,
+    #      title="מאגר הארגון"). Emitted by the model when it answers a
+    #      corpus-meta question from the injected stats block — there IS
+    #      no retrieved chunk to cite, and the block itself is the source.
+    has_meta_ref = any(
+        (r.source_type or "").strip().lower() == "meta"
+        and (r.title or "").strip() == "מאגר הארגון"
+        for r in result.references
+    )
+    if has_meta_ref:
+        return result
     ref_titles = [r.title.strip() for r in result.references if r.title.strip()]
     if ref_titles and not any(
         _title_matches_any_filename(t, retrieved_filenames) for t in ref_titles
