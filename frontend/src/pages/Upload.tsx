@@ -149,7 +149,23 @@ export default function Upload() {
     [defaultDocType]
   );
 
+  // Batch-level guard so a second click on "העלה את כל" doesn't start a
+  // second concurrent iteration over a stale queue snapshot (each closure
+  // would re-check status.queued from its own snapshot, causing duplicate
+  // POSTs even though React would eventually reconcile the state).
+  // Also used per-file: the per-entry button is disabled while ANY upload
+  // is in flight — simpler mental model, and prevents the same race.
+  const uploadingRef = useRef(false);
+  const [uploading, setUploading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  // Track which entries have an inflight request so we can also render a
+  // per-file disabled state (defense in depth against double-click on the
+  // small "העלה" button next to each row).
+  const inflightIds = useRef<Set<string>>(new Set());
+
   const upload = async (entry: Queued) => {
+    if (inflightIds.current.has(entry.id)) return;  // per-file re-entry guard
+    inflightIds.current.add(entry.id);
     setQueue((q) =>
       q.map((e) => (e.id === entry.id ? { ...e, status: { kind: "uploading" } } : e))
     );
@@ -170,15 +186,34 @@ export default function Upload() {
             : e
         )
       );
+    } finally {
+      inflightIds.current.delete(entry.id);
     }
   };
 
   const uploadAll = async () => {
-    for (const entry of queue) {
-      if (entry.status.kind === "queued") {
+    if (uploadingRef.current) return;  // batch re-entry guard
+    uploadingRef.current = true;
+    setUploading(true);
+    // Snapshot the queue once at the start so per-entry state changes
+    // don't invalidate our target list.
+    const targets = queue.filter((e) => e.status.kind === "queued");
+    setBatchProgress({ done: 0, total: targets.length });
+    try {
+      let done = 0;
+      for (const entry of targets) {
         // eslint-disable-next-line no-await-in-loop
         await upload(entry);
+        done += 1;
+        setBatchProgress({ done, total: targets.length });
       }
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
+      // Keep the last progress visible for a moment so the counter doesn't
+      // vanish the instant the last file finishes — the user just watched
+      // it tick and deserves the "done" frame.
+      setTimeout(() => setBatchProgress(null), 1500);
     }
   };
 
@@ -469,10 +504,18 @@ export default function Upload() {
         {queuedCount > 0 && (
           <button
             onClick={uploadAll}
-            className="mr-auto px-3 py-1.5 bg-accent text-white rounded"
+            disabled={uploading}
+            className="mr-auto px-3 py-1.5 bg-accent text-white rounded disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            העלה את כל {queuedCount} הקבצים
+            {uploading && batchProgress
+              ? `מעלה ${batchProgress.done}/${batchProgress.total}…`
+              : `העלה את כל ${queuedCount} הקבצים`}
           </button>
+        )}
+        {!uploading && batchProgress && batchProgress.done === batchProgress.total && batchProgress.total > 0 && (
+          <span className="text-sm text-emerald-700 font-bold">
+            ✓ הועלו {batchProgress.total} קבצים
+          </span>
         )}
         {queue.some((e) => e.status.kind === "done") && (
           <button
@@ -552,7 +595,8 @@ export default function Upload() {
                   {entry.status.kind === "queued" && (
                     <button
                       onClick={() => upload(entry)}
-                      className="px-3 py-1 bg-accent text-white rounded text-xs"
+                      disabled={uploading}
+                      className="px-3 py-1 bg-accent text-white rounded text-xs disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       העלה
                     </button>

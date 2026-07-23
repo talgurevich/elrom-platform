@@ -767,10 +767,27 @@ export const api = {
     const fd = new FormData();
     fd.append("file", file);
     if (docType) fd.append("doc_type", docType);
+    // Hash the file client-side so the server can reject 409 before reading
+    // the multipart body on retries. Also send an Idempotency-Key per
+    // attempt so a network retry doesn't spawn a duplicate document.
+    // See backend/app/services/upload_dedup.py for the three layers.
+    const bytes = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const sha256Hex = Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const idempotencyKey =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const r = await fetch(`${BASE}/api/ingest/upload`, {
       method: "POST",
       body: fd,
       credentials: "include",
+      headers: {
+        "X-Content-SHA256": sha256Hex,
+        "X-Idempotency-Key": idempotencyKey,
+      },
     });
     if (!r.ok) throw new ApiError(r.status, (await r.text()) || r.statusText);
     return r.json();

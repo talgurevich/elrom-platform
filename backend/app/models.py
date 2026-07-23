@@ -254,6 +254,27 @@ class Lexicon(Base):
     )
 
 
+class UploadIdempotency(Base):
+    """One row per (tenant_id, X-Idempotency-Key). Lets clients safely
+    retry an upload attempt without spawning duplicate documents.
+
+    Distinct from content_sha256 dedup: this catches "same attempt
+    replayed", not "same content re-uploaded intentionally". See
+    migration 0017 rationale."""
+
+    __tablename__ = "upload_idempotency"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True))
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    document_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL")
+    )
+    response_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class FolderTaxonomy(Base):
     """Per-tenant curated folder set. The classifier picks folder names
     from active rows here — free-text folder generation was retired to

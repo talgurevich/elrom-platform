@@ -754,3 +754,88 @@ def delete_document(
     db.commit()
     log.info("documents.deleted", document_id=str(document_id))
     return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Duplicate detection — feeds the reviewer dedup UI
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class DuplicateGroupDoc(BaseModel):
+    id: UUID
+    filename: str
+    ingested_at: str
+    chunks_created: int | None
+    folder: str | None
+    doc_type: str | None
+
+
+class DuplicateGroup(BaseModel):
+    content_sha256: str
+    count: int
+    docs: list[DuplicateGroupDoc]
+
+
+@router.get("/duplicates/by-hash", response_model=list[DuplicateGroup])
+def list_duplicates_by_hash(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> list[DuplicateGroup]:
+    """Group documents by (tenant_id, content_sha256) where count > 1.
+
+    Feeds the dedup UI: reviewer sees each group, picks the doc to keep
+    (or picks several to delete). Documents without content_sha256
+    (pre-migration-0014 rows that never got backfilled) are excluded
+    because they can't be grouped reliably."""
+    from sqlalchemy import func as sa_func
+
+    tenant_id = user.tenant_id
+
+    # First pass: find hashes with duplicates.
+    dupe_hashes = (
+        db.query(Document.content_sha256, sa_func.count(Document.id))
+        .filter(Document.tenant_id == tenant_id)
+        .filter(Document.content_sha256.isnot(None))
+        .group_by(Document.content_sha256)
+        .having(sa_func.count(Document.id) > 1)
+        .all()
+    )
+    if not dupe_hashes:
+        return []
+
+    hashes = [h for (h, _) in dupe_hashes]
+    docs = (
+        db.query(Document)
+        .filter(Document.tenant_id == tenant_id)
+        .filter(Document.content_sha256.in_(hashes))
+        .order_by(Document.content_sha256, Document.ingested_at.asc())
+        .all()
+    )
+
+    # Group in Python.
+    from collections import defaultdict
+
+    grouped: dict[str, list[Document]] = defaultdict(list)
+    for d in docs:
+        if d.content_sha256:
+            grouped[d.content_sha256].append(d)
+
+    # Sort groups by count desc so worst offenders are first in the UI.
+    return [
+        DuplicateGroup(
+            content_sha256=h,
+            count=len(rows),
+            docs=[
+                DuplicateGroupDoc(
+                    id=r.id,
+                    filename=r.filename,
+                    ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",
+                    chunks_created=r.chunks_created,
+                    folder=r.folder,
+                    doc_type=r.doc_type,
+                )
+                for r in rows
+            ],
+        )
+        for h, rows in sorted(grouped.items(), key=lambda kv: -len(kv[1]))
+    ]

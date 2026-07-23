@@ -6,9 +6,10 @@ from pathlib import Path
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -20,6 +21,12 @@ from app.services.embedding import embed_texts
 from app.services.hebrew_text import normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
 from app.services.storage import save_original
+from app.services.upload_dedup import (
+    find_by_idempotency_key,
+    find_by_sha256,
+    handle_sha256_race,
+    record_idempotency,
+)
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -36,6 +43,14 @@ class IngestRequest(BaseModel):
     extraction_note: str | None = None
     force: bool = False  # bypass density sanity check
     auto_classify: bool = True  # background AI rename + summary + doc_type after ingest
+    # Optional dedup key. If provided (typically the raw file bytes'
+    # sha256 computed by the CLI extractor), it dedupes against the same
+    # column /upload uses. Otherwise we fall back to hashing `text` — same
+    # semantic but only catches other JSON-ingest of the same text.
+    content_sha256: str | None = None
+    # Optional idempotency key so retries of the same attempt don't
+    # create duplicates. See services/upload_dedup for the model.
+    idempotency_key: str | None = None
 
 
 class IngestResponse(BaseModel):
@@ -63,6 +78,22 @@ def ingest(
 ) -> IngestResponse:
     """Ingest a single document into the caller's tenant."""
     tenant_id = user.tenant_id
+
+    # Idempotency: same attempt replayed → return stored response.
+    idem_hit = find_by_idempotency_key(db, tenant_id=tenant_id, key=req.idempotency_key or "")
+    if idem_hit is not None and idem_hit.response_json:
+        log.info("ingest.idempotency_hit", key=(req.idempotency_key or "")[:16] + "…")
+        return IngestResponse(**idem_hit.response_json)
+
+    # Content dedup: same file already ingested.
+    content_sha256 = req.content_sha256 or hashlib.sha256(req.text.encode("utf-8")).hexdigest()
+    existing = find_by_sha256(db, tenant_id=tenant_id, content_sha256=content_sha256)
+    if existing is not None:
+        raise HTTPException(
+            409,
+            f"מסמך עם תוכן זהה כבר קיים במאגר: {existing.filename!r} "
+            f"(מזהה {existing.id}). לא בוצעה קליטה כפולה.",
+        )
 
     # Density sanity check — refuse PDFs that produced suspiciously little text
     # per page (usually means OCR was needed but didn't run, or partial OCR).
@@ -92,9 +123,22 @@ def ingest(
         chars_extracted=len(req.text),
         extraction_partial=req.extraction_partial,
         extraction_note=req.extraction_note,
+        content_sha256=content_sha256,
     )
     db.add(doc)
-    db.flush()  # get the id without committing
+    try:
+        db.flush()  # get the id without committing
+    except IntegrityError:
+        # Race: two callers passed the SELECT above, one lost the insert.
+        # Return the winner's doc as a 409 — same shape the pre-check emits.
+        winner = handle_sha256_race(db, tenant_id=tenant_id, content_sha256=content_sha256)
+        if winner is not None:
+            raise HTTPException(
+                409,
+                f"מסמך עם תוכן זהה נקלט על ידי בקשה מקבילה: {winner.filename!r} "
+                f"(מזהה {winner.id}).",
+            ) from None
+        raise
 
     structural_chunks = chunk_document(req.text)
     if not structural_chunks:
@@ -141,7 +185,7 @@ def ingest(
         with_section_path=sum(1 for c in structural_chunks if c.section_path),
         auto_classify=req.auto_classify,
     )
-    return IngestResponse(
+    response = IngestResponse(
         document_id=doc.id,
         chunks_created=len(structural_chunks),
         used_ocr=req.used_ocr,
@@ -151,6 +195,15 @@ def ingest(
         chars_extracted=len(req.text),
         partial=req.extraction_partial,
     )
+    record_idempotency(
+        db,
+        tenant_id=tenant_id,
+        key=req.idempotency_key,
+        document_id=doc.id,
+        response_json=response.model_dump(mode="json"),
+    )
+    db.commit()
+    return response
 
 
 @router.post("/upload", response_model=IngestResponse)
@@ -160,6 +213,8 @@ async def ingest_upload(
     doc_type: str | None = Form(None),
     prefer_ocr: bool | None = Form(None),
     auto_classify: bool = Form(True),
+    x_content_sha256: str | None = Header(None),
+    x_idempotency_key: str | None = Header(None),
     db: Session = Depends(get_db),
     user: IdentityUser = Depends(current_user),
 ) -> IngestResponse:
@@ -179,23 +234,42 @@ async def ingest_upload(
 
     resolved_tenant = user.tenant_id
 
+    # Layer 1 — Idempotency key. Same *attempt* replayed (network flake,
+    # double-click) → return the stored response without re-processing.
+    idem_hit = find_by_idempotency_key(
+        db, tenant_id=resolved_tenant, key=x_idempotency_key or ""
+    )
+    if idem_hit is not None and idem_hit.response_json:
+        log.info(
+            "ingest_upload.idempotency_hit",
+            key=(x_idempotency_key or "")[:16] + "…",
+        )
+        return IngestResponse(**idem_hit.response_json)
+
+    # Layer 2 — Client-provided content hash. If the browser hashed the
+    # file before POSTing, we can reject 409 without reading the multipart
+    # body (saves bandwidth on retries of large PDFs).
+    if x_content_sha256:
+        existing = find_by_sha256(
+            db, tenant_id=resolved_tenant, content_sha256=x_content_sha256.strip().lower()
+        )
+        if existing is not None:
+            raise HTTPException(
+                409,
+                f"קובץ עם תוכן זהה כבר קיים במאגר: {existing.filename!r} "
+                f"(מזהה {existing.id}). לא בוצעה קליטה כפולה.",
+            )
+
     # Read the raw upload bytes once — we need them for the dedup hash check
     # BEFORE spending 30-60s on extraction, and again later to persist the
     # original file to disk via save_original().
     contents = await file.read()
 
-    # Duplicate-upload guard. Same tenant + same content hash = same file
-    # uploaded again (typically under a different display name). Refuse
-    # with 409 pointing at the existing document rather than silently
-    # creating a second row with fresh chunks + embeddings.
+    # Layer 3 — Server-computed hash. Recheck (in case client didn't send
+    # X-Content-SHA256, or sent it wrong) BEFORE spending 30-60s on extraction.
     content_sha256 = hashlib.sha256(contents).hexdigest()
-    existing = (
-        db.query(Document)
-        .filter(
-            Document.tenant_id == resolved_tenant,
-            Document.content_sha256 == content_sha256,
-        )
-        .first()
+    existing = find_by_sha256(
+        db, tenant_id=resolved_tenant, content_sha256=content_sha256
     )
     if existing is not None:
         raise HTTPException(
@@ -259,7 +333,23 @@ async def ingest_upload(
         content_sha256=content_sha256,
     )
     db.add(doc)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Layer 3-final — the DB unique constraint (migration 0018, held
+        # until existing duplicates are cleaned) rejected our insert
+        # because a concurrent request slipped between our pre-check and
+        # this flush. Return the winner as a 409.
+        winner = handle_sha256_race(
+            db, tenant_id=resolved_tenant, content_sha256=content_sha256
+        )
+        if winner is not None:
+            raise HTTPException(
+                409,
+                f"קובץ עם תוכן זהה נקלט על ידי בקשה מקבילה: {winner.filename!r} "
+                f"(מזהה {winner.id}).",
+            ) from None
+        raise
 
     # Persist the original file for later in-browser viewing (click-a-citation
     # → open the source). Runs after extraction sanity-checks so failed
@@ -323,7 +413,7 @@ async def ingest_upload(
         chars=len(extraction.text),
         auto_classify=auto_classify,
     )
-    return IngestResponse(
+    response = IngestResponse(
         document_id=doc.id,
         chunks_created=len(structural_chunks),
         used_ocr=extraction.used_ocr,
@@ -333,3 +423,12 @@ async def ingest_upload(
         chars_extracted=len(extraction.text),
         partial=extraction.partial,
     )
+    record_idempotency(
+        db,
+        tenant_id=resolved_tenant,
+        key=x_idempotency_key,
+        document_id=doc.id,
+        response_json=response.model_dump(mode="json"),
+    )
+    db.commit()
+    return response
