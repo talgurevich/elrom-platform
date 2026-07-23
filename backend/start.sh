@@ -23,6 +23,9 @@ python -m scripts.rechunk_protocols || true
 echo "▶ Backfilling documents.forum via mini-classifier (idempotent — marker guarded)…"
 python -m scripts.backfill_forum || true
 
+echo "▶ Backfilling documents.effective_date from filename patterns (idempotent — NULL-only)…"
+python -m scripts.backfill_effective_date || true
+
 echo "▶ Backfilling folder_taxonomy from existing documents.folder values (idempotent)…"
 python -m scripts.backfill_folder_taxonomy || true
 

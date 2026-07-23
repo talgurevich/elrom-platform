@@ -9,10 +9,12 @@ Pipeline:
 Returns (final_chunks, debug_payload). Debug captures per-stage scores so the
 UI can show "what was retrieved and why" for failure triage.
 """
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from uuid import UUID
 
+from sqlalchemy import func as sa_func
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
@@ -81,6 +83,56 @@ def _recency_boost(doc: Document, today: date) -> float:
         return 0.0
     # Fresher → bigger boost.
     return (20 - years_old) * _RECENCY_WEIGHT_PER_YEAR
+
+
+# ─── Year-anchored retrieval ────────────────────────────────────────
+#
+# Queries that name a year ("מי התקבל לחברות ב2014", "בין 2010 ל-2015")
+# don't get date-filtered — semantic search treats the year as just
+# another token, and BM25 misses it when the doc renders the date as
+# "15.08.14" instead of "2014". Result: docs from the requested year
+# often never make retrieval, even when their content is a perfect match.
+#
+# Fix: extract year(s) from the query, pull chunks from docs whose
+# effective_date falls in that range, and inject them into the fusion
+# combined score with a boost strong enough to guarantee they enter
+# the rerank pool. Reranker then decides which are actually relevant.
+
+# Year regex — can't use \b because Hebrew prefix letters (ב2014, ל2014)
+# don't create a word boundary before the digit. Use digit-lookarounds
+# instead: no digit before, no digit after.
+_YEAR_RANGE_RE = re.compile(
+    r"(?:בין\s+)?(?P<from>(?<!\d)(?:19|20)\d{2}(?!\d))\s*"
+    r"(?:[-–]|עד|ל[-\s]?)\s*"
+    r"(?P<to>(?<!\d)(?:19|20)\d{2}(?!\d))"
+)
+_SINGLE_YEAR_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
+
+# How many year-matched chunks to seed. Small enough to not swamp the
+# fusion candidate set, big enough that rerank has a real choice.
+YEAR_SEED_LIMIT = 30
+# Boost added to fusion combined score for year-matched chunks. RRF
+# scores sit around 0.01–0.03, so 0.03 makes a year-match roughly
+# equivalent to a top-3 vector hit — guarantees it enters candidates
+# without silencing genuinely-better semantic matches.
+YEAR_MATCH_BOOST = 0.03
+
+
+def _extract_year_range(query: str) -> tuple[int, int] | None:
+    """Return (from_year, to_year) if the query names a year or range,
+    else None. Range wins over single year — 'בין 2010 ל-2015' returns
+    (2010, 2015). A lone year returns (year, year); multiple lone years
+    span the min→max."""
+    if not query:
+        return None
+    m = _YEAR_RANGE_RE.search(query)
+    if m:
+        f, t = int(m.group("from")), int(m.group("to"))
+        return (min(f, t), max(f, t))
+    years = [int(mm.group(0)) for mm in _SINGLE_YEAR_RE.finditer(query)]
+    if years:
+        return (min(years), max(years))
+    return None
 
 
 def _rerank_hint(chunk: Chunk) -> str:
@@ -291,6 +343,32 @@ def hybrid_retrieve(
     bm25_sorted = sorted(bm25_scores.items(), key=lambda kv: kv[1], reverse=True)
     for i, (chunk_id, _) in enumerate(bm25_sorted):
         combined[chunk_id] = combined.get(chunk_id, 0.0) + 1.0 / (i + 60)
+
+    # Year-anchored seeding — when the query names a year or range,
+    # pull chunks from docs whose effective_date falls in range and
+    # inject them with a strong fusion boost. Fixes the "מה קרה ב2014"
+    # class of query where BM25 misses the year token and vector
+    # loses short chunks to longer generic ones.
+    year_range = _extract_year_range(query)
+    if year_range:
+        y_from, y_to = year_range
+        year_q = (
+            db.query(Chunk)
+            .join(Document, Chunk.document_id == Document.id)
+            .filter(Chunk.tenant_id == tenant_id)
+            .filter(Document.effective_date.isnot(None))
+            .filter(sa_func.extract("year", Document.effective_date) >= y_from)
+            .filter(sa_func.extract("year", Document.effective_date) <= y_to)
+            .options(joinedload(Chunk.document))
+        )
+        if not include_superseded:
+            year_q = year_q.filter(Chunk.superseded_by_amendment_id.is_(None))
+        year_seed = year_q.limit(YEAR_SEED_LIMIT).all()
+        for c in year_seed:
+            combined[c.id] = combined.get(c.id, 0.0) + YEAR_MATCH_BOOST
+            # Also make sure we can resolve the chunk downstream — merge
+            # into the same lookup used for recency boost below.
+            vector_chunks.setdefault(c.id, (c, 1.0))
 
     # Recency boost — small linear bump for decisions/protocols by
     # effective_date. Zero for bylaws (amendments handle their versioning).
