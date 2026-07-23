@@ -291,6 +291,11 @@ _PROMPT_SUFFIX = """
 - **שאלה לא בתחום התקנונים / המסמכים של הארגון**: ענה בדיוק *"ייעוד הצ'אט הוא לענות על שאלות בנושאי המסמכים של הארגון בלבד. שאלה זו אינה בתחום."* החזר `confidence="refused"` ו-`references=[]`.
 - **המקורות לא מכסים את הנושא כלל**: ענה בדיוק *"לא מצאתי מידע מפורש במסמכים שעמדו לרשותי. פנה לגורם הרלוונטי בארגון."* החזר `confidence="refused"` ו-`references=[]`.
 
+🚨 **מה נחשב "בתחום" (חשוב לזיהוי הסירוב הנכון):**
+"בתחום המסמכים של הארגון" כולל גם **שאלות מטא על המאגר עצמו** — "כמה פרוטוקולים יש?", "מה המסמך העדכני?", "אילו תקנונים קיימים?", "מתי הופק פרוטוקול X?". אלה **בתחום**, גם אם התשובה אינה מופיעה בקטע אחזור ספציפי. השתמש בבלוק "מאגר המסמכים של הארגון" שהוזרק להקשר כדי לענות עליהן. **אל תסרב עליהן בסירוב "לא בתחום"** — אם בכל זאת אין תשובה, השתמש בסירוב "לא מצאתי".
+
+הסירוב "לא בתחום" מיועד לשאלות **שלא קשורות לארגון בכלל** — מזג האוויר, מתכונים, שאלות כלליות על יהדות, שאלות על ארגון אחר. לא לשאלות על המאגר של הארגון עצמו.
+
 **אסור** להחזיר תשובה ריקה כשיש במקורות חומר רלוונטי — גם אם רק חלקי. חבר בין הסעיפים ותן תשובה (זה `uncertain`, לא `refused`).
 
 **דוגמה לסירוב גרוע (אל תכתוב כך):**
@@ -507,6 +512,7 @@ def answer_with_citations(
     tenant_name: str,
     tenant_context: str | None = None,
     lexicon_block: str = "",
+    corpus_stats_block: str = "",
     prior_turns: list[PriorTurn] | None = None,
     amendment_notes: list[str] | None = None,
 ) -> LLMResult:
@@ -545,11 +551,25 @@ def answer_with_citations(
         else ""
     )
 
+    # Corpus-at-a-glance block — lets the answerer handle meta-questions
+    # ("how many protocols?", "what's the latest decision?") that vector
+    # retrieval can't serve, since no single chunk contains corpus counts.
+    # Also helps regular answers refuse honestly ("this tenant has zero
+    # decisions on X") instead of scraping around for anything.
+    corpus_section = (
+        f"מאגר המסמכים של הארגון (סיכום שאינו נשען על החיפוש) — השתמש בזה "
+        f"לענות על שאלות מטא כמו \"כמה יש\", \"מה העדכני\", \"אילו סוגים\":\n"
+        f"{corpus_stats_block}\n\n"
+        if corpus_stats_block
+        else ""
+    )
+
     history_section = _format_history_block(prior_turns)
 
     user_message = (
         f"{history_section}"
         f"שאלה נוכחית: {question}\n\n"
+        f"{corpus_section}"
         f"{lexicon_section}"
         f"{amendment_block}"
         f"קטעי הקשר ממסמכי הקיבוץ:\n\n{sources_block}\n\n"

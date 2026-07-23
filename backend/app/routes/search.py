@@ -39,6 +39,7 @@ from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
 from app.services.answer_annotations import annotate_answer
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
+from app.services.corpus_stats import format_corpus_stats
 from app.services.llm import answer_with_citations
 from app.services.query_rewriter import PriorTurn
 from app.services.retrieval import hybrid_retrieve
@@ -467,6 +468,12 @@ async def search_pipeline(
 
         yield {"type": "stage", "stage": "generating"}
         amendment_notes = [ac.format_for_prompt() for ac in amendment_context]
+        # Corpus-at-a-glance block — lets the answerer serve meta-questions
+        # ("how many protocols?", "what's the latest decision?") that can't
+        # be answered from retrieved chunks alone.
+        corpus_stats_block = await asyncio.to_thread(
+            format_corpus_stats, db, tenant_id=tenant_id
+        )
         llm_result = await asyncio.to_thread(
             answer_with_citations,
             question=question,
@@ -474,6 +481,7 @@ async def search_pipeline(
             tenant_name=tenant_name,
             tenant_context=tenant_context,
             lexicon_block=lexicon_block,
+            corpus_stats_block=corpus_stats_block,
             prior_turns=prior_turns,
             amendment_notes=amendment_notes or None,
         )
