@@ -40,11 +40,15 @@ Returns one ``TriageDecision``:
 """
 from dataclasses import dataclass, field
 from functools import lru_cache
+from uuid import UUID
 
 import structlog
+from sqlalchemy import text as sa_text
+from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import settings
+from app.services.hebrew_text import normalize_hebrew_to_tsquery
 from app.services.query_rewriter import PriorTurn, rewrite_query
 
 log = structlog.get_logger()
@@ -127,6 +131,8 @@ _TRIAGE_SYSTEM = """אתה ראש-שיחה ליועץ תקנון של קיבוץ
 
 הכלל הראשון: ברירת המחדל היא לענות, אבל לא בכל מחיר. שיחה שבה המערכת מקפיצה תשובה לא רלוונטית גרועה משיחה שבה היא מבקשת הבהרה אחת קצרה.
 
+🚨 **כלל-על: אל תבקש הבהרה אם ההבהרה לא תשנה את התוצאה.** אם הצצת בקטע המקורות שמסופק לך למטה, ונראה בבירור שהחומר לא מכיל את המידע שהמשתמש מחפש (למשל: שאל "מי חבר בוועדה X" והקטעים לא כוללים רשימת חברי ועדות בכלל) — עדיף לענות (התשובה תהיה סירוב נקי "לא מצאתי") מאשר לשאול שאלת הבהרה שכל תשובה עליה תוביל לאותו סירוב. שאלה שכל ענפיה נופלים לאותו "לא מצאתי" היא רעש טהור מבחינת המשתמש.
+
 מתי כן להבהיר (mode=clarify) — אלה טריגרים חזקים, אל תתעלם מהם:
 
 1. תפקיד המשתמש מהותית לתשובה ולא מצוין (חבר/יורש/לא-חבר/בן ממשיך) — וההבדל בין התשובות גדול.
@@ -144,7 +150,9 @@ _TRIAGE_SYSTEM = """אתה ראש-שיחה ליועץ תקנון של קיבוץ
 מתי לעולם לא להבהיר:
 - כשהמשתמש ביקש מפורשות תשובה ישירה ("ענה ישירות", "פשוט תענה", "תן תשובה מהירה", "תשובה קצרה").
 - כשבתור הקודם של המערכת הופיעה שאלת הבהרה והמשתמש ענה בחיוב ("כן", "נכון", "בדיוק", "אכן") או בחר אחת מהאפשרויות שהוצעו.
+- 🚨 **כשהתור הקודם של המערכת היה שאלת הבהרה עם 2+ צירים, והתור הנוכחי של המשתמש עונה על חלק מהצירים — אל תשאל שוב על הצירים שנענו.** דוגמה: המערכת שאלה "האם הכוונה להנהלה כלכלית או לוועדת ביקורת כלכלית? ויו״ר בלבד או כל החברים?" — והמשתמש עונה "אני שואל על הנהלה כלכלית". *ציר הגוף נסגר.* אל תשאל אותה שאלה שוב. אם הציר השני (יו״ר/כל החברים) עדיין קריטי — ענה עם ההנחה הסבירה ("כל החברים") במקום לשאול שוב, אלא אם ההנחה שגויה תוביל לתשובה שגויה מהותית.
 - כשהשאלה כבר מכילה את המונח המקצועי הנכון (שיוך/רישום/תקנון X) או מציינת בבירור את הסעיף/הישות הספציפיים.
+- 🚨 **שאלות רשימתיות** ("מי חבר ב-X", "מי מכהן ב-X", "אילו X קיימים") — ברירת המחדל הבלתי מפורשת היא **הרשימה המלאה**, לא ראש בלבד. אל תשאל "יו״ר בלבד או כל החברים?" — ההנחה הסבירה היא כל החברים. הבהר רק אם התור הקודם עסק ספציפית באדם/תפקיד יחיד ואז המשתמש שואל "מי חבר בוועדה?" (אז ההקשר יוצר עמימות אמיתית).
 
 ניסוח שאלת ההבהרה (כשהיא נדרשת):
 - שאלה אחת קצרה. לא רשימה.
@@ -181,6 +189,46 @@ def _format_lexicon(expansions: list[tuple[str, str]]) -> str:
     return "\n".join(f'- "{term}" → {exp}' for term, exp in expansions)
 
 
+def _format_snippets(snippets: list[str]) -> str:
+    """Peek at the top FTS chunks so triage can judge whether the answer
+    plausibly exists in the corpus. Not a substitute for full retrieval —
+    it's just a "does anything look related?" signal."""
+    if not snippets:
+        return "(לא נמצאו קטעים רלוונטיים — סימן שהתשובה כנראה לא במאגר.)"
+    return "\n---\n".join(s.strip() for s in snippets if s and s.strip())
+
+
+def peek_snippets(
+    db: Session, *, tenant_id: UUID, question: str, limit: int = 2, max_chars: int = 400
+) -> list[str]:
+    """Cheap tsvector-only peek: top-N chunk excerpts matching `question`.
+
+    Runs on the raw question (no rewrite) so it's fast and doesn't need
+    the canonical query that triage is deciding whether to produce.
+    Never raises — retrieval failure returns []."""
+    q = normalize_hebrew_to_tsquery(question)
+    if not q:
+        return []
+    try:
+        rows = db.execute(
+            sa_text(
+                """
+                SELECT text
+                FROM chunks
+                WHERE tenant_id = :tid
+                  AND text_search @@ to_tsquery('simple', :q)
+                ORDER BY ts_rank(text_search, to_tsquery('simple', :q)) DESC
+                LIMIT :lim
+                """
+            ),
+            {"tid": str(tenant_id), "q": q, "lim": limit},
+        ).all()
+    except Exception as e:  # noqa: BLE001
+        log.warning("chat_triage.peek_failed", err=str(e))
+        return []
+    return [(r[0] or "")[:max_chars] for r in rows if r[0]]
+
+
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=4))
 def _call_triage(*, user_message: str) -> dict:
     client = _claude_client()
@@ -206,8 +254,15 @@ def triage_turn(
     prior_turns: list[PriorTurn] | None = None,
     lexicon_expansions: list[tuple[str, str]] | None = None,
     doc_titles: list[str] | None = None,
+    doc_snippets: list[str] | None = None,
 ) -> TriageDecision:
     """Decide answer-vs-clarify and produce the canonical query.
+
+    `doc_snippets` (top-N FTS excerpts from `peek_snippets`) let the
+    triage model tell whether the answer plausibly exists in the corpus.
+    Without them the model over-clarifies on questions whose answer
+    isn't in the docs anyway — every clarification prong ends in the
+    same "לא מצאתי" refusal.
 
     Failure modes are absorbed gracefully: any LLM failure falls back to
     ``mode=answer`` with the mechanical canonical query from the rewriter,
@@ -216,11 +271,14 @@ def triage_turn(
     prior = prior_turns or []
     lexicon = lexicon_expansions or []
     titles = doc_titles or []
+    snippets = doc_snippets or []
 
     user_message = (
         f"שיחה עד כה:\n{_format_prior_turns(prior)}\n\n"
         f"שאלה נוכחית של המשתמש:\n{question.strip()}\n\n"
         f"מסמכי הקיבוץ הזמינים (כותרות):\n{_format_doc_index(titles)}\n\n"
+        f"קטעים מהמאגר שנמצאו רלוונטיים לשאלה (peek — לא רטריבל מלא):\n"
+        f"{_format_snippets(snippets)}\n\n"
         f"מונחי מילון שזוהו בשאלה:\n{_format_lexicon(lexicon)}\n\n"
         "הפעל את הכלי `triage` עם החלטתך."
     )

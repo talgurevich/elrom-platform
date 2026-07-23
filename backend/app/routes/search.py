@@ -34,7 +34,7 @@ from app.services.identity import (
     identity_service,
 )
 from app.services.mail import send_broken_answer_alert
-from app.services.chat_triage import triage_turn
+from app.services.chat_triage import peek_snippets, triage_turn
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
 from app.services.answer_annotations import annotate_answer
@@ -292,12 +292,20 @@ async def search_pipeline(
         )
         doc_titles = [r[0] for r in doc_titles_rows if r[0]]
 
+        # Peek at top-N FTS chunks so triage can tell whether the answer
+        # plausibly exists in the corpus. Prevents the "clarify a question
+        # that would refuse anyway" anti-pattern.
+        doc_snippets = await asyncio.to_thread(
+            peek_snippets, db, tenant_id=tenant_id, question=question
+        )
+
         triage = await asyncio.to_thread(
             triage_turn,
             question=question,
             prior_turns=prior_turns,
             lexicon_expansions=lexicon_expansions,
             doc_titles=doc_titles,
+            doc_snippets=doc_snippets,
         )
 
         # Clarify mode: short-circuit. No retrieval, no LLM-answer. We persist
