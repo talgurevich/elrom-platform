@@ -28,12 +28,15 @@ import re
 from collections import Counter
 from datetime import date
 
+import structlog
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models import Chunk, Document
 from app.services.identity import get_tenant_row_by_name, list_tenants_as_rows
+
+log = structlog.get_logger()
 
 # DD.MM.YY or DD.MM.YYYY (Hebrew dates in filenames almost always use this).
 # Digit-lookarounds so "15.08.14.docx" doesn't glue with adjacent digits.
@@ -73,6 +76,10 @@ def parse_filename_date(filename: str) -> date | None:
 
 
 def run_for_tenant(db: Session, tenant_id, *, dry_run: bool) -> dict:
+    """Populate effective_date on NULL-effective_date docs whose filename
+    encodes a date. Commits per-doc so a mid-loop error doesn't roll back
+    already-processed docs — historically we lost the whole batch on any
+    failure."""
     docs = (
         db.query(Document)
         .filter(Document.tenant_id == tenant_id)
@@ -84,13 +91,18 @@ def run_for_tenant(db: Session, tenant_id, *, dry_run: bool) -> dict:
 
     by_year: Counter = Counter()
     filled = 0
+    skipped_no_date = 0
+    errors = 0
     for d in docs:
         parsed = parse_filename_date(d.filename)
         if parsed is None:
+            skipped_no_date += 1
             continue
-        by_year[parsed.year] += 1
-        filled += 1
-        if not dry_run:
+        if dry_run:
+            by_year[parsed.year] += 1
+            filled += 1
+            continue
+        try:
             d.effective_date = parsed
             # Propagate onto chunks so retrieval date filters work at chunk
             # level (same denormalization the ingest path already does).
@@ -99,11 +111,29 @@ def run_for_tenant(db: Session, tenant_id, *, dry_run: bool) -> dict:
                 .where(Chunk.document_id == d.id)
                 .values(effective_date=parsed)
             )
-    if not dry_run and filled:
-        db.commit()
+            db.commit()
+            by_year[parsed.year] += 1
+            filled += 1
+            log.info(
+                "backfill_effective_date.filled",
+                doc_id=str(d.id),
+                filename=d.filename,
+                parsed_date=parsed.isoformat(),
+            )
+        except Exception as e:  # noqa: BLE001
+            db.rollback()
+            errors += 1
+            log.warning(
+                "backfill_effective_date.error",
+                doc_id=str(d.id),
+                filename=d.filename,
+                err=str(e),
+            )
     return {
         "scanned": len(docs),
         "filled": filled,
+        "skipped_no_date": skipped_no_date,
+        "errors": errors,
         "by_year": dict(sorted(by_year.items())),
         "dry_run": dry_run,
     }

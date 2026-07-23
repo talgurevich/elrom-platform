@@ -803,3 +803,68 @@ def delete_user(
         ) from e
     log.info("admin.user_deleted", user_id=user_id)
     return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# One-shot backfill triggers — same code paths as start.sh, but callable
+# from the admin panel when the deploy backfill didn't run or errored.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class BackfillSummary(BaseModel):
+    per_tenant: dict[str, dict]
+
+
+@router.post("/backfill/effective-date", response_model=BackfillSummary)
+def trigger_effective_date_backfill(
+    tenant_name: str | None = None,
+    db: Session = Depends(get_db),
+    _: IdentityUser = Depends(_require_super_admin),
+) -> BackfillSummary:
+    """Populate Document.effective_date from filename patterns for docs
+    where it's NULL. Same code the start.sh backfill runs. Use this when
+    a deploy didn't complete or you want to trigger on-demand after
+    uploading historical docs. Idempotent (NULL-only)."""
+    from app.services.identity import get_tenant_row_by_name, list_tenants_as_rows
+    from scripts.backfill_effective_date import run_for_tenant
+
+    if tenant_name:
+        t = get_tenant_row_by_name(tenant_name)
+        if t is None:
+            raise HTTPException(404, f"tenant not found: {tenant_name}")
+        tenants = [t]
+    else:
+        tenants = list_tenants_as_rows()
+
+    summary: dict[str, dict] = {}
+    for t in tenants:
+        summary[t.name] = run_for_tenant(db, t.id, dry_run=False)
+    log.info("admin.backfill_effective_date.done", summary=summary)
+    return BackfillSummary(per_tenant=summary)
+
+
+@router.post("/backfill/forum", response_model=BackfillSummary)
+def trigger_forum_backfill(
+    tenant_name: str | None = None,
+    db: Session = Depends(get_db),
+    _: IdentityUser = Depends(_require_super_admin),
+) -> BackfillSummary:
+    """Classify Document.forum for NULL-forum docs via mini-Haiku call.
+    Idempotent (marker-guarded). See scripts/backfill_forum for the
+    classifier."""
+    from app.services.identity import get_tenant_row_by_name, list_tenants_as_rows
+    from scripts.backfill_forum import run_for_tenant
+
+    if tenant_name:
+        t = get_tenant_row_by_name(tenant_name)
+        if t is None:
+            raise HTTPException(404, f"tenant not found: {tenant_name}")
+        tenants = [t]
+    else:
+        tenants = list_tenants_as_rows()
+
+    summary: dict[str, dict] = {}
+    for t in tenants:
+        summary[t.name] = run_for_tenant(db, t.id, dry_run=False)
+    log.info("admin.backfill_forum.done", summary=summary)
+    return BackfillSummary(per_tenant=summary)
