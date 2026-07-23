@@ -52,7 +52,9 @@ RECHUNK_TYPES = ("minutes", "decision")
 
 # Bump this key if the chunker gets a substantive protocol/decision
 # rule change and previously-rechunked docs need to be redone.
-_RECHUNK_MARKER = "rechunked_v2"
+# v3: chunks now tagged with decision_type (terminal / escalation) via
+# chunk_metadata — see chunking._classify_decision.
+_RECHUNK_MARKER = "rechunked_v3"
 
 
 def _reconstruct_text(db: Session, doc: Document) -> str:
@@ -114,6 +116,7 @@ def rechunk_doc(db: Session, doc: Document, *, dry_run: bool) -> tuple[int, int]
             text=sc.text,
             embedding=embedding,
             effective_date=doc.effective_date,
+            chunk_metadata={"decision_type": sc.decision_type} if sc.decision_type else None,
         )
         db.add(chunk)
         db.flush()

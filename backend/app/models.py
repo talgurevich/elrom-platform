@@ -54,6 +54,13 @@ class Document(Base):
     # classifier prefers to reuse an existing folder name when one fits to
     # avoid synonyms drifting apart ("פנסיה" / "פנסיוני" / "תקנון פנסיה").
     folder: Mapped[str | None] = mapped_column(String)
+    # Which decision-making body produced the doc. Distinct from doc_type
+    # (what it IS) — forum captures WHERE it was made, driving the
+    # supersession chain: committee → assembly → ballot. Values:
+    # assembly, committee, ballot, sub_committee, external_law,
+    # external_ruling, contract, legal_opinion, report, notice, procedure,
+    # budget, agreement_internal, other. See migration 0018 for rationale.
+    forum: Mapped[str | None] = mapped_column(String(32))
 
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 

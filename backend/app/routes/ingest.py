@@ -162,6 +162,7 @@ def ingest(
             section_ref=canonical_section_ref(sc.section_path),
             text=sc.text,
             embedding=embedding,
+            chunk_metadata={"decision_type": sc.decision_type} if sc.decision_type else None,
         )
         db.add(chunk)
         db.flush()
@@ -388,6 +389,7 @@ async def ingest_upload(
             section_ref=canonical_section_ref(sc.section_path),
             text=sc.text,
             embedding=embedding,
+            chunk_metadata={"decision_type": sc.decision_type} if sc.decision_type else None,
         )
         db.add(chunk)
         db.flush()

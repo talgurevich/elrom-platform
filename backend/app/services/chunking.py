@@ -30,6 +30,66 @@ class StructuralChunk:
     text: str
     section_path: str | None  # e.g. "סעיף 2" or None for the header
     position: int
+    # For chunks that start with a decision marker: "terminal" (הוחלט:
+    # substantive outcome) vs "escalation" (הוחלט להעביר לאסיפה / לקלפי —
+    # not the final decision on the substance). None for non-decision chunks.
+    # Drives the provenance chain rules in the answerer prompt.
+    decision_type: str | None = None
+
+
+# Escalation markers — the chunk is a decision to *escalate*, not a decision
+# on the substance. When seen, the answerer should look for the outcome at
+# the higher forum, not treat this as the terminal decision.
+_ESCALATION_PHRASES = (
+    "להעביר לאסיפה",
+    "להעביר לקלפי",
+    "להביא לאסיפה",
+    "להביא בפני האסיפה",
+    "יובא לאישור האסיפה",
+    "יובא לאישור אסיפה",
+    "יועלה להצבעה",
+    "יעלה להצבעה",
+    "יובא לקלפי",
+    "יועבר לקלפי",
+    "להביא בפני חברי הקיבוץ",
+)
+
+
+def _classify_decision(text: str) -> str | None:
+    """Return 'terminal', 'escalation', or None for a chunk. Only fires
+    when the chunk starts with a decision-marker (הוחלט / החלטה / החלטה N).
+
+    Only the *leading* decision's outcome classifies the chunk — we scan
+    for escalation phrases up to the next hard boundary (paragraph break,
+    or another "הוחלט"/"החלטה" line). Otherwise a chunk containing
+    "הוחלט: X" followed by an unrelated "הוחלט להעביר לאסיפה" would
+    misclassify as escalation."""
+    if not text:
+        return None
+    head = text.lstrip()
+    if not (head.startswith("הוחלט") or head.startswith("החלטה")):
+        return None
+
+    # Trim to the leading decision's scope: stop at first blank line, or
+    # at the next הוחלט/החלטה line.
+    scope_end = len(head)
+    for i, line in enumerate(head.split("\n")):
+        if i == 0:
+            continue
+        stripped = line.strip()
+        if not stripped:
+            # Blank line ends the current decision.
+            scope_end = sum(len(l) + 1 for l in head.split("\n")[:i])
+            break
+        if stripped.startswith(("הוחלט", "החלטה")):
+            scope_end = sum(len(l) + 1 for l in head.split("\n")[:i])
+            break
+    leading = head[:scope_end]
+
+    for phrase in _ESCALATION_PHRASES:
+        if phrase in leading:
+            return "escalation"
+    return "terminal"
 
 
 def build_contextual_input(
@@ -70,7 +130,10 @@ SECTION_RE = re.compile(
     r"|נוהל\s+(?:[א-ת]{1,3}|\d[\dא-ת./\-]*)"             # נוהל א, נוהל 1
     r"|החלטה\s+(?:מספר\s+)?\d[\dא-ת./\-]*"               # החלטה 5, החלטה מספר 5/2024
     r"|החלטה(?=\s*[:.])"                                 # bare "החלטה:" — common in unstructured protocols
-    r"|הוחלט(?:\s+פה\s+אחד|\s+ברוב|\s+כי|\s+ש)?(?=\s*[:.])"   # "הוחלט:", "הוחלט פה אחד:", "הוחלט ברוב:"
+    r"|הוחלט(?:\s+פה\s+אחד|\s+ברוב|\s+כי|\s+ש)?(?=\s*(?:[:.]|ל[א-ת]))"
+    # ↑ "הוחלט:", "הוחלט פה אחד:", "הוחלט ברוב:", plus infinitive forms
+    # like "הוחלט להעביר לאסיפה" / "הוחלט לאשר" / "הוחלט למנות"
+    # (colon isn't required — verb-prefix "ל" + Hebrew letter is enough).
     r"|פרוטוקול\s+(?:מספר\s+)?\d[\dא-ת./\-]*"            # פרוטוקול 12
     r"|\d+(?:\.\d+){1,3}(?=\s+[א-ת])"                    # dotted decimal: 1.1, 2.13, 3.4.2 — only if followed by Hebrew text
     r"|\d+\.(?=\s+[א-ת])"                                # top-level numbered: 1.  כותרת
@@ -130,13 +193,21 @@ def chunk_document(text: str) -> list[StructuralChunk]:
         section_path = m.group(1).strip()
         if len(section_text) <= MAX_CHUNK_CHARS:
             chunks.append(
-                StructuralChunk(text=section_text, section_path=section_path, position=len(chunks))
+                StructuralChunk(
+                    text=section_text,
+                    section_path=section_path,
+                    position=len(chunks),
+                    decision_type=_classify_decision(section_text),
+                )
             )
         else:
             for sub_text in _split_long_section(section_text):
                 chunks.append(
                     StructuralChunk(
-                        text=sub_text, section_path=section_path, position=len(chunks)
+                        text=sub_text,
+                        section_path=section_path,
+                        position=len(chunks),
+                        decision_type=_classify_decision(sub_text),
                     )
                 )
 
