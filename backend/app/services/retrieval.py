@@ -108,9 +108,13 @@ _YEAR_RANGE_RE = re.compile(
 )
 _SINGLE_YEAR_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
 
-# How many year-matched chunks to seed. Small enough to not swamp the
-# fusion candidate set, big enough that rerank has a real choice.
-YEAR_SEED_LIMIT = 30
+# How many year-matched chunks to seed *per year in the range*. Small
+# enough to not swamp fusion, big enough that a multi-year range gets
+# even coverage. For a 9-year range this yields ~45 chunks total.
+YEAR_SEED_PER_YEAR = 5
+# Hard cap on total year-seed chunks to protect fusion latency on very
+# wide ranges ("החלטות 1990-2026").
+YEAR_SEED_MAX_TOTAL = 80
 # Boost added to fusion combined score for year-matched chunks. RRF
 # scores sit around 0.01–0.03, so 0.03 makes a year-match roughly
 # equivalent to a top-3 vector hit — guarantees it enters candidates
@@ -244,6 +248,13 @@ def hybrid_retrieve(
     """
     debug = RetrievalDebug()
 
+    # For multi-year range queries, expand top_k so the answerer sees
+    # chunks from more distinct years. 5 chunks can't enumerate 9 years.
+    _range = _extract_year_range(query)
+    if _range and (_range[1] - _range[0]) >= 2:
+        span = _range[1] - _range[0] + 1
+        top_k = min(max(top_k, span + 2), 15)
+
     # Pull a much larger raw pool, then apply per-document diversity *before*
     # any downstream stage. Without this, an oversized document (e.g.
     # תקנון בנים נסמכים at 83 chunks) saturates the candidate set and
@@ -349,6 +360,13 @@ def hybrid_retrieve(
     # inject them with a strong fusion boost. Fixes the "מה קרה ב2014"
     # class of query where BM25 misses the year token and vector
     # loses short chunks to longer generic ones.
+    #
+    # For range queries ("בין 2010 ל-2015") we round-robin across the
+    # years in the range: cap at YEAR_SEED_PER_YEAR chunks per year so
+    # a decade-wide range doesn't get all its budget eaten by one
+    # doc-rich year (a lesson from the 5.24.2020 protocol dominating
+    # a 2014–2022 query). Deterministic ordering by effective_date
+    # DESC so results are stable across runs.
     year_range = _extract_year_range(query)
     if year_range:
         y_from, y_to = year_range
@@ -359,15 +377,33 @@ def hybrid_retrieve(
             .filter(Document.effective_date.isnot(None))
             .filter(sa_func.extract("year", Document.effective_date) >= y_from)
             .filter(sa_func.extract("year", Document.effective_date) <= y_to)
+            .order_by(Document.effective_date.desc(), Chunk.position.asc())
             .options(joinedload(Chunk.document))
         )
         if not include_superseded:
             year_q = year_q.filter(Chunk.superseded_by_amendment_id.is_(None))
-        year_seed = year_q.limit(YEAR_SEED_LIMIT).all()
+        # Round-robin cap per year to guarantee coverage across the range.
+        # Pull enough raw candidates to feed the per-year cap without
+        # running unbounded queries on wide ranges.
+        raw_year_cap = min(
+            YEAR_SEED_PER_YEAR * (y_to - y_from + 1) * 3,
+            YEAR_SEED_MAX_TOTAL * 3,
+        )
+        raw_year_seed = year_q.limit(raw_year_cap).all()
+        per_year: dict[int, int] = {}
+        year_seed: list[Chunk] = []
+        for c in raw_year_seed:
+            if c.document.effective_date is None:
+                continue
+            yr = c.document.effective_date.year
+            if per_year.get(yr, 0) >= YEAR_SEED_PER_YEAR:
+                continue
+            per_year[yr] = per_year.get(yr, 0) + 1
+            year_seed.append(c)
+            if len(year_seed) >= YEAR_SEED_MAX_TOTAL:
+                break
         for c in year_seed:
             combined[c.id] = combined.get(c.id, 0.0) + YEAR_MATCH_BOOST
-            # Also make sure we can resolve the chunk downstream — merge
-            # into the same lookup used for recency boost below.
             vector_chunks.setdefault(c.id, (c, 1.0))
 
     # Recency boost — small linear bump for decisions/protocols by
