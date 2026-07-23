@@ -7,24 +7,44 @@ const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const IDENTITY_BASE =
   import.meta.env.VITE_IDENTITY_BASE_URL || "http://localhost:8001";
 
+/** Unwrap FastAPI's {"detail": "..."} body into a plain string. Handles the
+ * three shapes FastAPI actually emits: {detail: string}, {detail: [{msg}]}
+ * (Pydantic validation), and raw text. Returns the input unchanged if nothing
+ * matches. */
+function _unwrapDetail(body: string): string {
+  if (!body) return body;
+  const trimmed = body.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return body;
+  try {
+    const parsed = JSON.parse(trimmed);
+    const detail = parsed?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      // Pydantic validation errors: [{loc, msg, type, ...}, ...]
+      return detail
+        .map((d) => (typeof d === "string" ? d : d?.msg ?? JSON.stringify(d)))
+        .join("; ");
+    }
+  } catch {
+    // Not JSON — fall through and keep the raw body.
+  }
+  return body;
+}
+
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
+  /** Original response body, preserved for debugging. Prefer `message` for
+   * user-facing rendering — it's the unwrapped {detail} string. */
+  public rawBody: string;
+  constructor(public status: number, body: string) {
+    super(_unwrapDetail(body));
+    this.rawBody = body;
   }
 }
 
-/** Best-effort extraction of a human-readable message from any thrown
- * error — unwraps FastAPI's {"detail": "..."} body when present. */
+/** @deprecated Kept for backwards compat — ApiError.message is already
+ * unwrapped since the constructor was hardened. New code can just use
+ * `err instanceof Error ? err.message : String(err)`. */
 export function apiErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    try {
-      const parsed = JSON.parse(err.message);
-      if (parsed?.detail) return parsed.detail;
-    } catch {
-      // not JSON — fall through to the raw message
-    }
-    return err.message.replace(/^\{"detail":"|"\}$/g, "");
-  }
   return err instanceof Error ? err.message : String(err);
 }
 
