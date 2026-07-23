@@ -361,45 +361,51 @@ def hybrid_retrieve(
     # class of query where BM25 misses the year token and vector
     # loses short chunks to longer generic ones.
     #
-    # For range queries ("בין 2010 ל-2015") we round-robin across the
-    # years in the range: cap at YEAR_SEED_PER_YEAR chunks per year so
-    # a decade-wide range doesn't get all its budget eaten by one
-    # doc-rich year (a lesson from the 5.24.2020 protocol dominating
-    # a 2014–2022 query). Deterministic ordering by effective_date
-    # DESC so results are stable across runs.
+    # Doc-first, then chunks-per-doc: previously we ORDER BY date DESC
+    # LIMIT N at chunk level, so a doc-rich year (2020 with 100+ chunks)
+    # ate the whole budget before older years were reached. Now we
+    # enumerate distinct docs by year, guaranteeing per-year coverage.
     year_range = _extract_year_range(query)
     if year_range:
         y_from, y_to = year_range
-        year_q = (
-            db.query(Chunk)
-            .join(Document, Chunk.document_id == Document.id)
-            .filter(Chunk.tenant_id == tenant_id)
+        # Get all docs whose effective_date falls in range, newest first.
+        # This is a small result set (docs, not chunks).
+        docs_in_range = (
+            db.query(Document)
+            .filter(Document.tenant_id == tenant_id)
             .filter(Document.effective_date.isnot(None))
             .filter(sa_func.extract("year", Document.effective_date) >= y_from)
             .filter(sa_func.extract("year", Document.effective_date) <= y_to)
-            .order_by(Document.effective_date.desc(), Chunk.position.asc())
-            .options(joinedload(Chunk.document))
+            .order_by(Document.effective_date.desc())
+            .all()
         )
-        if not include_superseded:
-            year_q = year_q.filter(Chunk.superseded_by_amendment_id.is_(None))
-        # Round-robin cap per year to guarantee coverage across the range.
-        # Pull enough raw candidates to feed the per-year cap without
-        # running unbounded queries on wide ranges.
-        raw_year_cap = min(
-            YEAR_SEED_PER_YEAR * (y_to - y_from + 1) * 3,
-            YEAR_SEED_MAX_TOTAL * 3,
-        )
-        raw_year_seed = year_q.limit(raw_year_cap).all()
+        # Round-robin: for each doc, pull its first N chunks; cap chunks
+        # per year across all its docs so one doc-heavy year doesn't
+        # crowd out sparse years.
         per_year: dict[int, int] = {}
         year_seed: list[Chunk] = []
-        for c in raw_year_seed:
-            if c.document.effective_date is None:
+        for d in docs_in_range:
+            if d.effective_date is None:
                 continue
-            yr = c.document.effective_date.year
+            yr = d.effective_date.year
             if per_year.get(yr, 0) >= YEAR_SEED_PER_YEAR:
                 continue
-            per_year[yr] = per_year.get(yr, 0) + 1
-            year_seed.append(c)
+            remaining_for_year = YEAR_SEED_PER_YEAR - per_year.get(yr, 0)
+            chunks_q = (
+                db.query(Chunk)
+                .filter(Chunk.document_id == d.id)
+                .order_by(Chunk.position)
+                .options(joinedload(Chunk.document))
+            )
+            if not include_superseded:
+                chunks_q = chunks_q.filter(
+                    Chunk.superseded_by_amendment_id.is_(None)
+                )
+            for c in chunks_q.limit(remaining_for_year).all():
+                year_seed.append(c)
+                per_year[yr] = per_year.get(yr, 0) + 1
+                if len(year_seed) >= YEAR_SEED_MAX_TOTAL:
+                    break
             if len(year_seed) >= YEAR_SEED_MAX_TOTAL:
                 break
         for c in year_seed:
