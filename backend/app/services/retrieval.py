@@ -10,6 +10,7 @@ Returns (final_chunks, debug_payload). Debug captures per-stage scores so the
 UI can show "what was retrieved and why" for failure triage.
 """
 from dataclasses import dataclass, field
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import text
@@ -18,6 +19,107 @@ from sqlalchemy.orm import Session, joinedload
 from app.models import Amendment, Chunk, Document
 from app.services.hebrew_text import normalize_hebrew, normalize_hebrew_to_tsquery
 from app.services.reranker import rerank
+
+
+# ─── Per-doc-type retrieval knobs ──────────────────────────────────────
+#
+# Bylaws are dense and self-contained — 2 chunks is usually enough context.
+# Protocols (minutes) and decisions unfold across many consecutive chunks
+# (agenda → discussion → decision → dissent → vote) and were being starved
+# by the old flat cap. Caps below are per doc_type, with a `_default` for
+# doc_type=None / unknown.
+#
+# See the "protocols / decisions retrieval" discussion for rationale.
+
+_VECTOR_CAP = {
+    "bylaw": 3,
+    "sub_bylaw": 3,
+    "decision": 6,
+    "minutes": 6,
+    "other": 3,
+    "_default": 3,
+}
+
+_FINAL_CAP = {
+    "bylaw": 2,
+    "sub_bylaw": 2,
+    "decision": 5,
+    "minutes": 5,
+    "other": 2,
+    "_default": 2,
+}
+
+
+def _cap_for(doc_type: str | None, table: dict[str, int]) -> int:
+    return table.get(doc_type or "", table["_default"])
+
+
+# Recency boost — decisions and protocols age. A 2018 decision usually
+# yields to a 2024 one on the same topic. Bylaws don't decay this way
+# (amendments handle their versioning), so they're excluded.
+#
+# Boost is added to the RRF fusion score. RRF scores are roughly in the
+# 0.01–0.03 range for reasonable ranks, so a 0.005 boost per decade of
+# recency is enough to break lightweight ties without overriding a
+# strongly-relevant older doc.
+
+_RECENCY_BOOSTED_TYPES = frozenset(["decision", "minutes"])
+_RECENCY_WEIGHT_PER_YEAR = 0.0005  # ~0.005 for a decade newer
+
+
+def _recency_boost(doc: Document, today: date) -> float:
+    """Returns a small positive number for recent decisions/protocols and
+    zero for everything else. Linear ramp: today = full weight, 20+
+    years old = zero. Bylaws never get a boost — see comment above."""
+    if not doc or doc.doc_type not in _RECENCY_BOOSTED_TYPES:
+        return 0.0
+    ed = doc.effective_date
+    if ed is None:
+        return 0.0
+    years_old = max(0, today.year - ed.year)
+    if years_old >= 20:
+        return 0.0
+    # Fresher → bigger boost.
+    return (20 - years_old) * _RECENCY_WEIGHT_PER_YEAR
+
+
+def _rerank_hint(chunk: Chunk) -> str:
+    """Prefix a doc-type-aware hint to the chunk text passed to the
+    reranker. Cohere doesn't see doc_type as metadata, so a bracketed
+    prefix in the text is the cheapest way to give it that signal.
+
+    Examples:
+      [החלטה 47/22 · 2024-03-14] …chunk text…
+      [פרוטוקול אסיפה · 2024-03-14] …chunk text…
+      [תקנון שיוך דירות · סעיף 3.2] …chunk text…
+    """
+    doc = chunk.document
+    if doc is None:
+        return chunk.text
+    tag_parts: list[str] = []
+    meta = doc.doc_metadata or {}
+    if doc.doc_type == "decision":
+        num = str(meta.get("decision_number") or "").strip()
+        tag_parts.append(f"החלטה {num}" if num else "החלטה")
+    elif doc.doc_type == "minutes":
+        num = str(meta.get("meeting_number") or "").strip()
+        tag_parts.append(f"פרוטוקול {num}" if num else "פרוטוקול")
+    elif doc.doc_type in ("bylaw", "sub_bylaw"):
+        # For bylaws the section is more useful than the doc name.
+        title = (doc.filename or "").rsplit(".", 1)[0]
+        if title:
+            tag_parts.append(title[:40])
+    else:
+        title = (doc.filename or "").rsplit(".", 1)[0]
+        if title:
+            tag_parts.append(title[:40])
+    if doc.effective_date:
+        tag_parts.append(doc.effective_date.isoformat())
+    if chunk.section_path:
+        tag_parts.append(f"סעיף {chunk.section_path}")
+    if not tag_parts:
+        return chunk.text
+    return f"[{' · '.join(tag_parts)}] {chunk.text}"
 
 
 @dataclass
@@ -94,8 +196,9 @@ def hybrid_retrieve(
     # any downstream stage. Without this, an oversized document (e.g.
     # תקנון בנים נסמכים at 83 chunks) saturates the candidate set and
     # starves smaller-but-equally-relevant bylaws from ever being considered.
+    # Cap is per doc_type: bylaws stay tight (3), protocols/decisions get
+    # more headroom (6) because their relevant context spans more chunks.
     VECTOR_RAW = top_k * 8
-    VECTOR_PER_DOC_CAP = 3
 
     vector_q = (
         db.query(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("dist"))
@@ -114,8 +217,9 @@ def hybrid_retrieve(
     vector_results: list = []
     vector_per_doc: dict[UUID, int] = {}
     for c, dist in raw_vector:
+        cap = _cap_for(c.document.doc_type if c.document else None, _VECTOR_CAP)
         n = vector_per_doc.get(c.document_id, 0)
-        if n >= VECTOR_PER_DOC_CAP:
+        if n >= cap:
             continue
         vector_per_doc[c.document_id] = n + 1
         vector_results.append((c, dist))
@@ -188,6 +292,21 @@ def hybrid_retrieve(
     for i, (chunk_id, _) in enumerate(bm25_sorted):
         combined[chunk_id] = combined.get(chunk_id, 0.0) + 1.0 / (i + 60)
 
+    # Recency boost — small linear bump for decisions/protocols by
+    # effective_date. Zero for bylaws (amendments handle their versioning).
+    # See _recency_boost + _RECENCY_WEIGHT_PER_YEAR for rationale.
+    today = date.today()
+    # Merge chunk→document lookups from both lanes so BM25-only chunks
+    # can also be boosted.
+    all_chunk_docs: dict[UUID, Chunk] = {cid: c for cid, (c, _) in vector_chunks.items()}
+    if bm25_rows:
+        for cid, c in bm25_chunk_map.items():
+            all_chunk_docs.setdefault(cid, c)
+    for chunk_id, chunk_obj in all_chunk_docs.items():
+        boost = _recency_boost(chunk_obj.document, today)
+        if boost:
+            combined[chunk_id] = combined.get(chunk_id, 0.0) + boost
+
     candidate_n = max(top_k * 4, 12)
     top_ids = [
         cid for cid, _ in sorted(combined.items(), key=lambda kv: kv[1], reverse=True)[:candidate_n]
@@ -226,17 +345,20 @@ def hybrid_retrieve(
     ]
 
     # Rerank a larger pool so we have headroom for the diversity filter.
-    reranked = rerank(query, candidates, top_n=max(top_k * 3, 12))
+    # Pass doc-type-hinted text to Cohere so it can see the source type
+    # (bracketed prefix — see _rerank_hint).
+    rerank_texts = [_rerank_hint(c) for c in candidates]
+    reranked = rerank(query, candidates, top_n=max(top_k * 3, 12), texts=rerank_texts)
 
-    # Per-document diversity: cap each document at MAX_PER_DOC chunks. Prevents
-    # a single oversized document (e.g. תקנון בנים נסמכים at 83 chunks) from
-    # monopolizing the final top-K and starving other relevant bylaws.
-    MAX_PER_DOC = 2
+    # Per-document diversity: cap each document at _FINAL_CAP[doc_type] chunks.
+    # Bylaws at 2 (self-contained sections), protocols/decisions at 5
+    # (context spans multiple consecutive chunks).
     per_doc: dict[UUID, int] = {}
     final: list[Chunk] = []
     for c in reranked:
+        cap = _cap_for(c.document.doc_type if c.document else None, _FINAL_CAP)
         n = per_doc.get(c.document_id, 0)
-        if n >= MAX_PER_DOC:
+        if n >= cap:
             continue
         per_doc[c.document_id] = n + 1
         final.append(c)

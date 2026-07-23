@@ -69,6 +69,8 @@ SECTION_RE = re.compile(
     r"|פרק\s+(?:[א-ת]{1,3}|\d[\dא-ת./\-]*)"              # פרק א, פרק 1
     r"|נוהל\s+(?:[א-ת]{1,3}|\d[\dא-ת./\-]*)"             # נוהל א, נוהל 1
     r"|החלטה\s+(?:מספר\s+)?\d[\dא-ת./\-]*"               # החלטה 5, החלטה מספר 5/2024
+    r"|החלטה(?=\s*[:.])"                                 # bare "החלטה:" — common in unstructured protocols
+    r"|הוחלט(?:\s+פה\s+אחד|\s+ברוב|\s+כי|\s+ש)?(?=\s*[:.])"   # "הוחלט:", "הוחלט פה אחד:", "הוחלט ברוב:"
     r"|פרוטוקול\s+(?:מספר\s+)?\d[\dא-ת./\-]*"            # פרוטוקול 12
     r"|\d+(?:\.\d+){1,3}(?=\s+[א-ת])"                    # dotted decimal: 1.1, 2.13, 3.4.2 — only if followed by Hebrew text
     r"|\d+\.(?=\s+[א-ת])"                                # top-level numbered: 1.  כותרת
@@ -90,7 +92,7 @@ def canonical_section_ref(section_path: str | None) -> str | None:
     sp = section_path.strip()
     # Chapter / decision / procedure / protocol headers are not amendable
     # targets — the amendment graph only tracks סעיף-level edits.
-    if sp.startswith(("פרק", "החלטה", "נוהל", "פרוטוקול")):
+    if sp.startswith(("פרק", "החלטה", "הוחלט", "נוהל", "פרוטוקול")):
         return None
     m = _CANONICAL_SECTION_RE.match(sp)
     return m.group(1) if m else None
