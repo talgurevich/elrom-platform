@@ -17,6 +17,9 @@ python -m scripts.backfill_lexicon || true
 echo "▶ Backfilling documents.content_sha256 from stored source files (idempotent)…"
 python -m scripts.backfill_content_hash || true
 
+echo "▶ Re-chunking protocols + decisions with the new הוחלט: markers (idempotent — marker guarded)…"
+python -m scripts.rechunk_protocols || true
+
 echo "▶ Backfilling folder_taxonomy from existing documents.folder values (idempotent)…"
 python -m scripts.backfill_folder_taxonomy || true
 
