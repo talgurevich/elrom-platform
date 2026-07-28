@@ -38,6 +38,9 @@ class DocumentItem(BaseModel):
     doc_type: str | None
     # Lifecycle maturity: proposal | draft | discussion | adopted | None.
     doc_status: str | None = None
+    # Set when a reviewer linked this doc as an old version of another
+    # (האחרון קובע) — excluded from retrieval for current-state questions.
+    superseded_by_id: UUID | None = None
     chunks: int
     chars: int
     ingested_at: str
@@ -101,6 +104,7 @@ def list_documents(
             Document.filename,
             Document.doc_type,
             Document.doc_status,
+            Document.superseded_by_id,
             Document.ingested_at,
             Document.doc_metadata,
             Document.extractor,
@@ -131,6 +135,7 @@ def list_documents(
             filename=r.filename,
             doc_type=r.doc_type,
             doc_status=r.doc_status,
+            superseded_by_id=r.superseded_by_id,
             chunks=int(r.chunks),
             chars=int(r.chars),
             ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",

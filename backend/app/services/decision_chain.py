@@ -169,6 +169,7 @@ def _open_escalations_below(
             Chunk.tenant_id == tenant_id,
             Document.forum.in_(forums),
             Document.id != exclude_doc_id,
+            Document.superseded_by_id.is_(None),
             Chunk.chunk_metadata["decision_type"].as_string() == "escalation",
         )
         .options(joinedload(Chunk.document))
@@ -196,6 +197,7 @@ def _terminal_candidates_for(
         .filter(
             Chunk.tenant_id == tenant_id,
             Document.forum.in_(forums),
+            Document.superseded_by_id.is_(None),
             Chunk.embedding.isnot(None),
             Chunk.document_id != escalation.document_id,
         )

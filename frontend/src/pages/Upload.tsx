@@ -1242,6 +1242,14 @@ function DocumentRow({
                 {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
               </span>
             )}
+            {doc.superseded_by_id && (
+              <span
+                className="text-[10px] tracking-[0.2em] uppercase font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 line-through"
+                title="קושר כגרסה ישנה של מסמך אחר — לא משתתף בתשובות על המצב הנוכחי"
+              >
+                גרסה ישנה
+              </span>
+            )}
             {doc.doc_status && doc.doc_status !== "adopted" && (
               <span
                 className={`text-[10px] tracking-[0.2em] uppercase font-bold border px-1.5 py-0.5 ${DOC_STATUS_STYLES[doc.doc_status] || "text-ink-soft border-line-strong"}`}

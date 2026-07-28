@@ -363,11 +363,16 @@ def hybrid_retrieve(
 
     vector_q = (
         db.query(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("dist"))
+        .join(Document, Chunk.document_id == Document.id)
         .filter(Chunk.tenant_id == tenant_id)
         .filter(Chunk.embedding.isnot(None))
     )
     if not include_superseded:
+        # Two supersession layers: section-level (amendments flip the
+        # chunk) and document-level (a reviewer linked two docs as
+        # versions — האחרון קובע — flipping documents.superseded_by_id).
         vector_q = vector_q.filter(Chunk.superseded_by_amendment_id.is_(None))
+        vector_q = vector_q.filter(Document.superseded_by_id.is_(None))
     raw_vector = (
         vector_q.order_by("dist")
         .limit(VECTOR_RAW)
@@ -404,7 +409,15 @@ def hybrid_retrieve(
     # alternative normalized form of the same source word. Recall collapsed
     # to zero on real Hebrew queries (see project_bm25_hebrew_gap memo).
     bm25_query = normalize_hebrew_to_tsquery(query)
-    superseded_clause = "" if include_superseded else " AND superseded_by_amendment_id IS NULL"
+    superseded_clause = (
+        ""
+        if include_superseded
+        else (
+            " AND superseded_by_amendment_id IS NULL"
+            " AND NOT EXISTS (SELECT 1 FROM documents d"
+            "   WHERE d.id = chunks.document_id AND d.superseded_by_id IS NOT NULL)"
+        )
+    )
     bm25_sql = text(
         f"""
         SELECT id, ts_rank(text_search, to_tsquery('simple', :q)) AS rank
@@ -486,6 +499,7 @@ def hybrid_retrieve(
             )
             if not include_superseded:
                 yr_q = yr_q.filter(Chunk.superseded_by_amendment_id.is_(None))
+                yr_q = yr_q.filter(Document.superseded_by_id.is_(None))
             for c, _dist in yr_q.limit(YEAR_SEED_PER_YEAR).all():
                 year_seed.append(c)
                 if len(year_seed) >= YEAR_SEED_MAX_TOTAL:

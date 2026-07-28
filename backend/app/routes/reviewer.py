@@ -1099,6 +1099,9 @@ class CorpusFlagItem(BaseModel):
     confidence: float | None
     status: str
     created_at: str
+    # True when the two docs are already linked as versions (one's
+    # superseded_by_id points at the other) — via this flag or a mirror.
+    versions_linked: bool = False
 
 
 @router.get("/flags", response_model=list[CorpusFlagItem])
@@ -1127,6 +1130,12 @@ def list_corpus_flags(
         c = chunks.get(cid) if cid else None
         return c.section_path if c else None
 
+    def _linked(f) -> bool:
+        a, b = docs.get(f.new_doc_id), docs.get(f.existing_doc_id)
+        if a is None or b is None:
+            return False
+        return a.superseded_by_id == b.id or b.superseded_by_id == a.id
+
     return [
         CorpusFlagItem(
             id=f.id,
@@ -1146,6 +1155,7 @@ def list_corpus_flags(
             confidence=f.confidence,
             status=f.status,
             created_at=f.created_at.isoformat(),
+            versions_linked=_linked(f),
         )
         for f in rows
     ]
@@ -1246,3 +1256,113 @@ def list_decision_gaps(
             )
         )
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Version linking — "האחרון קובע". Confirming a duplicates/supersedes
+# flag can additionally link the two docs as versions: the older doc's
+# superseded_by_id points at the newer, and retrieval stops serving the
+# old version for current-state questions (include_superseded still
+# exposes it for historical ones).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _version_order(a: Document, b: Document) -> tuple[Document, Document]:
+    """Return (older, newer). effective_date decides; ingested_at breaks
+    ties and covers missing dates — same convention as the circular-parent
+    repair in the amendment extractor."""
+
+    def _key(d: Document):
+        return (d.effective_date or d.ingested_at.date(), d.ingested_at)
+
+    older, newer = sorted([a, b], key=_key)
+    return older, newer
+
+
+@router.post("/flags/{flag_id}/link-versions")
+def link_flag_versions(
+    flag_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    """Confirm the flag AND mark the two documents as versions of the same
+    underlying doc — the later one wins. Mirror flags between the same doc
+    pair are auto-confirmed so the queue doesn't show the settled pair again."""
+    from datetime import datetime, timezone
+
+    from app.models import CorpusFlag
+
+    f = db.get(CorpusFlag, flag_id)
+    if f is None or f.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Flag not found")
+    if f.kind not in ("duplicates", "supersedes"):
+        raise HTTPException(400, "Only duplicates/supersedes flags can link versions")
+    a = db.get(Document, f.new_doc_id)
+    b = db.get(Document, f.existing_doc_id)
+    if a is None or b is None:
+        raise HTTPException(404, "One of the documents no longer exists")
+
+    older, newer = _version_order(a, b)
+    older.superseded_by_id = newer.id
+
+    now = datetime.now(timezone.utc)
+    f.status = "confirmed"
+    f.reviewed_at = now
+    # Auto-confirm mirror flags on the same pair (the checker sees the pair
+    # from both directions across two ingest runs).
+    mirrors = (
+        db.query(CorpusFlag)
+        .filter(
+            CorpusFlag.tenant_id == user.tenant_id,
+            CorpusFlag.id != f.id,
+            CorpusFlag.status == "pending",
+            CorpusFlag.kind.in_(["duplicates", "supersedes"]),
+            CorpusFlag.new_doc_id.in_([a.id, b.id]),
+            CorpusFlag.existing_doc_id.in_([a.id, b.id]),
+        )
+        .all()
+    )
+    for m in mirrors:
+        m.status = "confirmed"
+        m.reviewed_at = now
+    db.commit()
+    log.info(
+        "reviewer.versions_linked",
+        flag_id=str(flag_id),
+        superseded=str(older.id),
+        current=str(newer.id),
+        mirrors_confirmed=len(mirrors),
+    )
+    return {
+        "status": "ok",
+        "superseded_doc": older.filename,
+        "current_doc": newer.filename,
+        "mirrors_confirmed": len(mirrors),
+    }
+
+
+@router.post("/flags/{flag_id}/unlink-versions")
+def unlink_flag_versions(
+    flag_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    """Undo a version link made from this flag: clear superseded_by_id on
+    whichever of the pair points at the other, and reopen the flag."""
+    from app.models import CorpusFlag
+
+    f = db.get(CorpusFlag, flag_id)
+    if f is None or f.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Flag not found")
+    a = db.get(Document, f.new_doc_id)
+    b = db.get(Document, f.existing_doc_id)
+    cleared = 0
+    for d, other in ((a, b), (b, a)):
+        if d is not None and other is not None and d.superseded_by_id == other.id:
+            d.superseded_by_id = None
+            cleared += 1
+    f.status = "pending"
+    f.reviewed_at = None
+    db.commit()
+    log.info("reviewer.versions_unlinked", flag_id=str(flag_id), cleared=cleared)
+    return {"status": "ok", "links_cleared": cleared}

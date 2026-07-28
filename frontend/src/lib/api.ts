@@ -426,6 +426,7 @@ export type CorpusFlagItem = {
   confidence: number | null;
   status: "pending" | "confirmed" | "dismissed";
   created_at: string;
+  versions_linked?: boolean;
 };
 
 export type GapItem = {
@@ -461,6 +462,8 @@ export type DocumentItem = {
   doc_type: string | null;
   // Lifecycle maturity: proposal | draft | discussion | adopted | null.
   doc_status?: string | null;
+  // Set when a reviewer linked this doc as an old version of another.
+  superseded_by_id?: string | null;
   chunks: number;
   chars: number;
   ingested_at: string;
@@ -1019,6 +1022,18 @@ export const api = {
     request<{ status: string }>(`/api/reviewer/flags/${id}/dismiss`, {
       method: "POST",
     }),
+  linkFlagVersions: (id: string) =>
+    request<{
+      status: string;
+      superseded_doc: string;
+      current_doc: string;
+      mirrors_confirmed: number;
+    }>(`/api/reviewer/flags/${id}/link-versions`, { method: "POST" }),
+  unlinkFlagVersions: (id: string) =>
+    request<{ status: string; links_cleared: number }>(
+      `/api/reviewer/flags/${id}/unlink-versions`,
+      { method: "POST" },
+    ),
 
   // Gap report — escalations still awaiting a terminal decision
   listDecisionGaps: () => request<GapItem[]>(`/api/reviewer/gaps`),

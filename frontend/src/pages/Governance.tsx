@@ -319,7 +319,24 @@ export default function Governance() {
                   )}
 
                   {f.status === "pending" ? (
-                    <div className="flex gap-2 justify-end">
+                    <div className="flex gap-2 justify-end items-center">
+                      {(f.kind === "duplicates" || f.kind === "supersedes") && (
+                        <button
+                          onClick={() =>
+                            act(f.id, async () => {
+                              const r = await api.linkFlagVersions(f.id);
+                              alert(
+                                `קושר: "${r.superseded_doc}" סומן כגרסה ישנה — "${r.current_doc}" קובע.`,
+                              );
+                            })
+                          }
+                          disabled={busyId === f.id}
+                          className="text-xs px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                          title="קשר את שני המסמכים כגרסאות של אותו מסמך — המאוחר קובע והישן יוצא מהחיפוש"
+                        >
+                          קשר כגרסאות — האחרון קובע
+                        </button>
+                      )}
                       <button
                         onClick={() => act(f.id, () => api.confirmCorpusFlag(f.id))}
                         disabled={busyId === f.id}
@@ -336,8 +353,28 @@ export default function Governance() {
                       </button>
                     </div>
                   ) : (
-                    <div className="text-xs text-ink-soft text-left">
-                      {f.status === "confirmed" ? "אושר" : "נדחה"}
+                    <div className="flex gap-2 justify-end items-center">
+                      {f.versions_linked && (
+                        <span className="text-xs bg-emerald-100 text-emerald-900 px-2 py-1 rounded">
+                          מקושר כגרסאות
+                        </span>
+                      )}
+                      {f.versions_linked && (
+                        <button
+                          onClick={() => {
+                            if (confirm("לבטל את קישור הגרסאות? המסמך הישן יחזור לחיפוש.")) {
+                              void act(f.id, () => api.unlinkFlagVersions(f.id));
+                            }
+                          }}
+                          disabled={busyId === f.id}
+                          className="text-xs px-3 py-1 rounded text-red-700 hover:bg-red-50"
+                        >
+                          בטל קישור
+                        </button>
+                      )}
+                      <span className="text-xs text-ink-soft">
+                        {f.status === "confirmed" ? "אושר" : "נדחה"}
+                      </span>
                     </div>
                   )}
                 </div>

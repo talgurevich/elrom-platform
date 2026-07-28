@@ -161,6 +161,7 @@ def _neighbor_pairs(db: Session, doc: Document, new_chunks: list[Chunk]) -> list
                 Chunk.document_id != doc.id,
                 Chunk.embedding.isnot(None),
                 Chunk.superseded_by_amendment_id.is_(None),
+                Document.superseded_by_id.is_(None),
                 Document.doc_type.in_(RECONCILED_DOC_TYPES),
             )
             .order_by("dist")
