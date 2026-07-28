@@ -18,6 +18,7 @@ Run from the backend directory:
 """
 import argparse
 import json
+import re
 import sys
 
 from sqlalchemy.orm import Session
@@ -51,10 +52,14 @@ def _classify_llm(client, *, filename: str, summary: str | None, body: str) -> s
         messages=[{"role": "user", "content": user}],
     )
     raw = resp.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`").lstrip("json").strip()
+    # The model fences the JSON and appends a rationale despite the
+    # JSON-only instruction — pull the first {...} object out instead of
+    # parsing the whole reply.
+    m = re.search(r"\{.*?\}", raw, re.S)
+    if not m:
+        return None
     try:
-        v = str(json.loads(raw).get("doc_status") or "").strip()
+        v = str(json.loads(m.group(0)).get("doc_status") or "").strip()
     except (json.JSONDecodeError, AttributeError):
         return None
     return v if v in ALLOWED_DOC_STATUS else None
