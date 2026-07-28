@@ -38,8 +38,11 @@ from app.models import Chunk, DecisionResolution, Document
 
 log = structlog.get_logger()
 
-# Below this the link is written but needs_review=True — it will not
-# affect retrieval until approved.
+# At or below this the link is written but needs_review=True — it will
+# not affect retrieval until approved. Strictly-greater on purpose: the
+# matcher hedges with exactly 0.75 on plausible-but-wrong links (first
+# production run auto-applied several admission escalations "resolved"
+# by an unrelated org-structure doc, all at exactly 0.75).
 AUTO_APPLY_CONFIDENCE = 0.75
 
 # Forums that participate in the escalation chain, in rank order.
@@ -294,7 +297,7 @@ def _write_resolutions(
             dates_ok = term.doc.effective_date >= esc.doc.effective_date
 
         needs_review = (
-            confidence < AUTO_APPLY_CONFIDENCE or not forum_ok or not dates_ok
+            confidence <= AUTO_APPLY_CONFIDENCE or not forum_ok or not dates_ok
         )
         db.add(
             DecisionResolution(
