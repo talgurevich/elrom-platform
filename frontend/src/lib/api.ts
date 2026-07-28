@@ -969,6 +969,16 @@ export const api = {
     const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
     return request<DebugQueueItem[]>(`/api/admin/debug-queue${qs}`);
   },
+
+  // Per-tenant engagement analytics. Super-admin only; one call returns the
+  // whole panel (tiles + user table + weekly series) so the page renders in
+  // a single round trip.
+  adminAnalytics: (tenantId: string, opts?: { weeks?: number; includeStaff?: boolean }) => {
+    const p = new URLSearchParams({ tenant_id: tenantId });
+    if (opts?.weeks) p.set("weeks", String(opts.weeks));
+    if (opts?.includeStaff) p.set("include_staff", "true");
+    return request<TenantAnalytics>(`/api/admin/analytics?${p.toString()}`);
+  },
   adminDismissDebug: (conversationId: string) =>
     request<{ status: string; dismissed: number }>(
       `/api/admin/debug-queue/conversation/${encodeURIComponent(conversationId)}/dismiss`,
@@ -1050,4 +1060,68 @@ export type DebugQueueItem = {
   turns: DebugTurn[];
   retrieval_debug: RetrievalDebug | null;
   source_chunks: DebugChunk[];
+};
+
+// ── Engagement analytics (super-admin) ──────────────────────────────────
+// Mirrors backend/app/routes/analytics.py. Rates arrive as 0..1 fractions,
+// not percentages — the UI formats them.
+
+export type AnalyticsOverview = {
+  total_questions: number;
+  questions_30d: number;
+  questions_prev_30d: number;
+  trend_pct: number | null;
+  active_users_7d: number;
+  active_users_30d: number;
+  total_conversations: number;
+  avg_conversation_depth: number;
+  refusal_rate_30d: number;
+  negative_feedback_30d: number;
+  first_question_at: string | null;
+  last_question_at: string | null;
+};
+
+export type AnalyticsAdoption = {
+  provisioned_users: number;
+  users_ever_asked: number;
+  never_asked: string[];
+};
+
+export type AnalyticsUserRow = {
+  user_id: string | null;
+  display_name: string | null;
+  email: string | null;
+  role: string | null;
+  total_questions: number;
+  questions_30d: number;
+  first_question_at: string;
+  last_question_at: string;
+  days_since_last: number;
+  conversations: number;
+  avg_turns_per_conversation: number;
+  refusal_rate: number;
+  negative_feedback: number;
+  first_impression_n: number;
+  first_impression_refused: number;
+  is_dormant: boolean;
+};
+
+export type AnalyticsWeek = {
+  week_start: string;
+  questions: number;
+  active_users: number;
+  refused: number;
+};
+
+export type TenantAnalytics = {
+  tenant_id: string;
+  tenant_name: string | null;
+  generated_at: string;
+  include_staff: boolean;
+  dormant_after_days: number;
+  dormant_min_questions: number;
+  overview: AnalyticsOverview;
+  adoption: AnalyticsAdoption;
+  users: AnalyticsUserRow[];
+  weekly: AnalyticsWeek[];
 };

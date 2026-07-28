@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Admin from "./pages/Admin";
 import Amendments from "./pages/Amendments";
+import Analytics from "./pages/Analytics";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
 import Landing from "./pages/Landing";
@@ -25,6 +26,7 @@ type Tab =
   | "folders"
   | "amendments"
   | "eval"
+  | "analytics"
   | "admin";
 
 const SIDEBAR_COLLAPSED_KEY = "elrom.sidebarCollapsed";
@@ -87,6 +89,14 @@ const Icon = {
       <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
     </svg>
   ),
+  analytics: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <rect x="6" y="12" width="3" height="6" />
+      <rect x="11" y="8" width="3" height="10" />
+      <rect x="16" y="4" width="3" height="14" />
+    </svg>
+  ),
 } satisfies Record<Tab, ReactNode>;
 
 type TabDef = { id: Tab; label: string; superOnly?: boolean };
@@ -100,6 +110,7 @@ const ALL_TABS: TabDef[] = [
   { id: "amendments", label: "תיקונים" },
   { id: "review", label: "תור בדיקה", superOnly: true },
   { id: "eval", label: "הערכה", superOnly: true },
+  { id: "analytics", label: "נתוני שימוש", superOnly: true },
   { id: "admin", label: "פאנל ניהול", superOnly: true },
 ];
 
@@ -570,6 +581,7 @@ export default function App() {
           {tab === "folders" && <Folders />}
           {tab === "amendments" && <Amendments />}
           {tab === "eval" && <Eval onRunInChat={() => setTab("search")} />}
+          {tab === "analytics" && <Analytics tenants={tenants} />}
           {tab === "admin" && <Admin currentUserId={user.id} />}
         </main>
       </div>
