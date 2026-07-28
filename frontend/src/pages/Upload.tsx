@@ -23,6 +23,22 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 
 const DOC_TYPE_ORDER = ["bylaw", "sub_bylaw", "decision", "minutes", "other", "unclassified"];
 
+// Lifecycle maturity — how binding the doc is. Non-adopted docs are
+// demoted at retrieval and never cited as the operative rule.
+const DOC_STATUS_LABELS: Record<string, string> = {
+  adopted: "בתוקף",
+  proposal: "הצעה",
+  draft: "טיוטה",
+  discussion: "דיון",
+};
+
+const DOC_STATUS_STYLES: Record<string, string> = {
+  adopted: "text-emerald-900 bg-emerald-100 border-emerald-300",
+  proposal: "text-amber-900 bg-amber-100 border-amber-300",
+  draft: "text-slate-700 bg-slate-100 border-slate-300",
+  discussion: "text-sky-900 bg-sky-100 border-sky-300",
+};
+
 type FileStatus =
   | { kind: "queued" }
   | { kind: "uploading" }
@@ -1226,6 +1242,14 @@ function DocumentRow({
                 {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
               </span>
             )}
+            {doc.doc_status && doc.doc_status !== "adopted" && (
+              <span
+                className={`text-[10px] tracking-[0.2em] uppercase font-bold border px-1.5 py-0.5 ${DOC_STATUS_STYLES[doc.doc_status] || "text-ink-soft border-line-strong"}`}
+                title="מעמד המסמך — מסמך שאינו 'בתוקף' לא יצוטט כהכלל המחייב"
+              >
+                {DOC_STATUS_LABELS[doc.doc_status] || doc.doc_status}
+              </span>
+            )}
             {doc.folder && (
               <span className="text-[10px] tracking-[0.2em] uppercase font-bold bg-ink text-surface px-1.5 py-0.5">
                 {doc.folder}
@@ -1309,6 +1333,7 @@ function DocumentDrawer({
 
   const [form, setForm] = useState<DocumentMetadataPatch>({
     doc_type: doc.doc_type || undefined,
+    doc_status: doc.doc_status || undefined,
     folder: doc.folder || undefined,
     effective_date: doc.effective_date || undefined,
     document_date: doc.document_date || undefined,
@@ -1368,6 +1393,7 @@ function DocumentDrawer({
       const payload: DocumentMetadataPatch = {};
       const keys: (keyof DocumentMetadataPatch)[] = [
         "doc_type",
+        "doc_status",
         "folder",
         "effective_date",
         "document_date",
@@ -1386,6 +1412,7 @@ function DocumentDrawer({
       const patched: DocumentItem = {
         ...doc,
         doc_type: payload.doc_type ?? doc.doc_type,
+        doc_status: payload.doc_status ?? doc.doc_status,
         folder: payload.folder ?? doc.folder,
         effective_date: payload.effective_date ?? doc.effective_date,
         document_date: payload.document_date ?? doc.document_date,
@@ -1493,6 +1520,23 @@ function DocumentDrawer({
                   {docTypes.map((dt) => (
                     <option key={dt.value} value={dt.value}>
                       {dt.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="מעמד" hint="הצעה/טיוטה לא יצוטטו כהכלל המחייב">
+                <select
+                  value={form.doc_status ?? doc.doc_status ?? ""}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, doc_status: e.target.value }))
+                  }
+                  className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                >
+                  <option value="">—</option>
+                  {Object.entries(DOC_STATUS_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
                     </option>
                   ))}
                 </select>

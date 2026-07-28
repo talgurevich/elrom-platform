@@ -36,6 +36,8 @@ class DocumentItem(BaseModel):
     id: UUID
     filename: str
     doc_type: str | None
+    # Lifecycle maturity: proposal | draft | discussion | adopted | None.
+    doc_status: str | None = None
     chunks: int
     chars: int
     ingested_at: str
@@ -98,6 +100,7 @@ def list_documents(
             Document.id,
             Document.filename,
             Document.doc_type,
+            Document.doc_status,
             Document.ingested_at,
             Document.doc_metadata,
             Document.extractor,
@@ -127,6 +130,7 @@ def list_documents(
             id=r.id,
             filename=r.filename,
             doc_type=r.doc_type,
+            doc_status=r.doc_status,
             chunks=int(r.chunks),
             chars=int(r.chars),
             ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",
@@ -206,6 +210,7 @@ _CLASSIFY_SYSTEM_BASE = """אתה מסווג מסמכים של קיבוץ אל-�
   "title": "כותרת קצרה בעברית, 3-8 מילים, שמתארת את התוכן (למשל: 'תקנון שיוך דירות', 'פרוטוקול אסיפה 23.11.2022', 'החלטה על נוהל הקדמה לקומה שנייה')",
   "doc_type": "אחד מ: bylaw, sub_bylaw, minutes, decision, other",
   "forum": "הגוף שבו הופק המסמך. אחד מ: assembly, committee, ballot, sub_committee, external_law, external_ruling, contract, legal_opinion, report, notice, procedure, budget, agreement_internal, other. ראה כללים למטה.",
+  "doc_status": "מעמד המסמך במחזור החיים. אחד מ: proposal, draft, discussion, adopted. ראה כללים למטה.",
   "summary": "משפט אחד עד שניים על מה המסמך, בעברית",
   "document_date": "התאריך המופיע על המסמך (תאריך חתימה / הדפסה / כתיבה), פורמט ISO YYYY-MM-DD. null אם לא מופיע.",
   "effective_date": "תאריך תוקף של המסמך (מתי הוא נכנס לתוקף / קיבל אישור). לרוב שווה ל-document_date עבור החלטות ופרוטוקולים. פורמט YYYY-MM-DD. null אם לא ניתן להסיק.",
@@ -238,9 +243,35 @@ forum (מי הפיק את המסמך — קובע את דירוגו בשרשרת
 - agreement_internal — הסכם בין קיבוץ לחבר (למשל שנת חופש, קליטה, פרישה) או בין חברים.
 - other — כשבאמת אין התאמה טובה.
 
+doc_status (עד כמה המסמך מחייב — ציר נפרד מ-doc_type ומ-forum):
+- proposal — הצעה שהוגשה לדיון/אישור וטרם אושרה. סימנים: "הצעה ל...", "הצעת...", "מוגש לאישור", "להצבעה".
+- draft — טיוטה בעבודה. סימנים: "טיוטה", "טיוטת", "גרסה לא סופית", סימוני עריכה.
+- discussion — סיכום דיון או מסמך רקע בלי הכרעה אופרטיבית. סימנים: "סיכום דיון", "לקראת דיון", "נייר עמדה".
+- adopted — המסמך המחייב: תקנון מאושר, החלטה שהתקבלה, פרוטוקול חתום, נוהל בתוקף, תוצאות קלפי. זו ברירת המחדל למסמך שאין בו סימני הצעה/טיוטה.
+🚨 שם הקובץ הוא רמז חזק: קובץ ששמו מתחיל ב"הצעה" הוא כמעט תמיד proposal גם אם גוף המסמך מנוסח כנוהל מוגמר. אם המסמך מכיל את ההצעה וגם את ההחלטה שאישרה אותה — adopted.
+
 תאריכים עבריים (למשל "כ״ב בחשוון תשפ״ג") — המר לגרגוריאני אם ברור, אחרת null.
 
 JSON בלבד, ללא הסברים, ללא ```fences."""
+
+
+# Valid doc_status values — anything else from the classifier is dropped.
+ALLOWED_DOC_STATUS = {"proposal", "draft", "discussion", "adopted"}
+
+
+def doc_status_from_filename(name: str | None) -> str | None:
+    """Deterministic filename cues for lifecycle status. Used as a fallback
+    when the LLM returned nothing, and by the backfill script as a cheap
+    first pass. A file named "הצעה ל..." is a proposal regardless of how
+    polished its body reads."""
+    n = (name or "").strip()
+    if n.startswith(("הצעה", "הצעת")):
+        return "proposal"
+    if "טיוט" in n[:20]:
+        return "draft"
+    if n.startswith(("סיכום דיון", "לקראת דיון", "נייר עמדה")):
+        return "discussion"
+    return None
 
 
 def _classify_system_prompt(_existing_folders: list[str]) -> str:
@@ -328,6 +359,16 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
         doc_type = str(data.get("doc_type") or "").strip() or doc.doc_type
         forum = str(data.get("forum") or "").strip() or doc.forum
         summary = str(data.get("summary") or "").strip()
+        doc_status = str(data.get("doc_status") or "").strip()
+        if doc_status not in ALLOWED_DOC_STATUS:
+            doc_status = ""
+        # Filename cue beats a missing/invalid LLM answer — and a filename
+        # that literally says הצעה/טיוטה overrides an LLM "adopted", which
+        # in practice means the model was fooled by polished body text.
+        cue = doc_status_from_filename(title or doc.filename)
+        if cue and doc_status in ("", "adopted"):
+            doc_status = cue
+        doc_status = doc_status or doc.doc_status
 
         # Second pass: bounded folder pick from the tenant's curated
         # taxonomy. Returns None on no_fit (side effect: FolderSuggestion
@@ -380,6 +421,8 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
             doc.doc_type = doc_type
         if forum:
             doc.forum = forum
+        if doc_status:
+            doc.doc_status = doc_status
         if folder:
             doc.folder = folder
         # effective_date lives on its own column — populate it if we extracted
@@ -738,6 +781,7 @@ def get_chunks(
 
 class MetadataPatch(BaseModel):
     doc_type: str | None = None
+    doc_status: str | None = None  # proposal | draft | discussion | adopted
     folder: str | None = None
     effective_date: str | None = None  # ISO YYYY-MM-DD or ""/null to clear
     document_date: str | None = None
@@ -767,6 +811,11 @@ def update_document_metadata(
 
     if "doc_type" in fields and fields["doc_type"] is not None:
         doc.doc_type = fields["doc_type"] or None
+    if "doc_status" in fields and fields["doc_status"] is not None:
+        v = (fields["doc_status"] or "").strip()
+        if v and v not in ALLOWED_DOC_STATUS:
+            raise HTTPException(400, f"doc_status must be one of {sorted(ALLOWED_DOC_STATUS)}")
+        doc.doc_status = v or None
     if "folder" in fields:
         doc.folder = fields["folder"] or None
     if "effective_date" in fields:

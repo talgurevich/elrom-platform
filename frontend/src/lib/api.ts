@@ -459,6 +459,8 @@ export type DocumentItem = {
   id: string;
   filename: string;
   doc_type: string | null;
+  // Lifecycle maturity: proposal | draft | discussion | adopted | null.
+  doc_status?: string | null;
   chunks: number;
   chars: number;
   ingested_at: string;
@@ -500,6 +502,7 @@ export type ChunkPreview = {
 
 export type DocumentMetadataPatch = Partial<{
   doc_type: string;
+  doc_status: string;
   folder: string;
   effective_date: string;
   document_date: string;

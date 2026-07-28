@@ -91,6 +91,34 @@ def _forum_boost(doc: Document | None) -> float:
     return _FORUM_BOOST.get(doc.forum, 0.0)
 
 
+# Lifecycle-status demotion — the inverse of the forum boost. A proposal
+# (הצעה) or draft (טיוטה) on some topic routinely reads *better* to the
+# embedding model than the adopted rule (cleaner prose, more keywords),
+# so without a penalty the unapproved version wins retrieval. Magnitude
+# mirrors the forum boost: enough to break same-topic ties in favor of
+# the adopted doc, not enough to bury a draft when it's the only
+# document on the topic. adopted / NULL (unclassified) get zero.
+
+_STATUS_DEMOTION = {
+    "proposal": -0.006,
+    "draft": -0.006,
+    "discussion": -0.003,
+}
+
+_STATUS_HE = {
+    "proposal": "הצעה",
+    "draft": "טיוטה",
+    "discussion": "דיון",
+    "adopted": "בתוקף",
+}
+
+
+def _status_demotion(doc: Document | None) -> float:
+    if doc is None or not doc.doc_status:
+        return 0.0
+    return _STATUS_DEMOTION.get(doc.doc_status, 0.0)
+
+
 def _recency_boost(doc: Document, today: date) -> float:
     """Returns a small positive number for recent decisions/protocols and
     zero for everything else. Linear ramp: today = full weight, 20+
@@ -195,6 +223,10 @@ def _rerank_hint(chunk: Chunk) -> str:
         tag_parts.append(doc.effective_date.isoformat())
     if chunk.section_path:
         tag_parts.append(f"סעיף {chunk.section_path}")
+    # Non-adopted lifecycle status is a signal the reranker should see:
+    # a הצעה chunk is usually a worse answer than the adopted rule.
+    if doc.doc_status and doc.doc_status != "adopted":
+        tag_parts.append(_STATUS_HE.get(doc.doc_status, doc.doc_status))
     if not tag_parts:
         return chunk.text
     return f"[{' · '.join(tag_parts)}] {chunk.text}"
@@ -475,7 +507,11 @@ def hybrid_retrieve(
         for cid, c in bm25_chunk_map.items():
             all_chunk_docs.setdefault(cid, c)
     for chunk_id, chunk_obj in all_chunk_docs.items():
-        boost = _recency_boost(chunk_obj.document, today) + _forum_boost(chunk_obj.document)
+        boost = (
+            _recency_boost(chunk_obj.document, today)
+            + _forum_boost(chunk_obj.document)
+            + _status_demotion(chunk_obj.document)
+        )
         if boost:
             combined[chunk_id] = combined.get(chunk_id, 0.0) + boost
 

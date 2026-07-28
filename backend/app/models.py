@@ -61,6 +61,11 @@ class Document(Base):
     # external_ruling, contract, legal_opinion, report, notice, procedure,
     # budget, agreement_internal, other. See migration 0018 for rationale.
     forum: Mapped[str | None] = mapped_column(String(32))
+    # Lifecycle maturity — the third classification axis: how BINDING the
+    # doc is. proposal (הצעה) | draft (טיוטה) | discussion (דיון) |
+    # adopted (החלטה/בתוקף). Non-adopted docs are demoted at retrieval
+    # and must never be cited as the operative rule. See migration 0021.
+    doc_status: Mapped[str | None] = mapped_column(String(32))
 
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 

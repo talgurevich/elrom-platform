@@ -79,6 +79,7 @@ SYSTEM_PROMPT = """אתה בודק עקביות של מאגר מסמכי ממש�
 כללים:
 1. סווג לפי מהות אופרטיבית: כללים, זכאויות, סכומים, מועדים, סמכויות. דיון כללי או אזכור אגבי של אותו נושא איננו סתירה.
 2. אל תסמן supersedes/contradicts כשקטע אחד הוא escalation (החלטה להעביר לפורום אחר) והשני הוא ההכרעה — זו שרשרת תקינה, סווג consistent.
+2ב. שים לב ל-מעמד= במטא-נתונים: הצעה (proposal) או טיוטה (draft) שסותרת מסמך מאושר (adopted) איננה סתירה — זה מהלך תקין של הצעת שינוי. סווג consistent. חריג: שתי גרסאות של אותו מסמך שבהן שתיהן adopted — שם supersedes/duplicates רלוונטי.
 3. topic — משפט קצר בעברית על הנושא המשותף. explanation — משפט או שניים שמסבירים את הקביעה, כולל מה גובר לדעתך ולמה.
 4. evidence_new / evidence_existing — ציטוט קצר מכל צד שמראה את אי-ההתאמה.
 5. confidence: 1.0 = ודאי. מתחת ל-0.5 — סווג consistent.
@@ -182,7 +183,10 @@ def _neighbor_pairs(db: Session, doc: Document, new_chunks: list[Chunk]) -> list
 
 def _doc_line(doc: Document) -> str:
     eff = doc.effective_date.isoformat() if doc.effective_date else "unknown"
-    return f"{doc.filename} | סוג={doc.doc_type or 'unknown'} | פורום={doc.forum or 'unknown'} | תאריך={eff}"
+    line = f"{doc.filename} | סוג={doc.doc_type or 'unknown'} | פורום={doc.forum or 'unknown'} | תאריך={eff}"
+    if doc.doc_status:
+        line += f" | מעמד={doc.doc_status}"
+    return line
 
 
 def _pairs_block(doc: Document, pairs: list[_Pair]) -> str:
