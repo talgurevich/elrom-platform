@@ -603,19 +603,13 @@ function TurnView({
             </article>
           )}
 
-          {/* Refused turn — reframed as integrity. The system chose not to
-              answer rather than guess. Give the user a next step and the
-              option to flag the case to super-admin (corpus may know). */}
+          {/* Refused turn — the answer speaks for itself, no framing copy.
+              Give the user a next step and the option to flag the case to
+              super-admin (corpus may know). */}
           {turn.confidence === "refused" && (
             <article className="border-2 border-ink bg-surface p-6 md:p-8">
-              <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
-                המערכת בחרה לא לענות
-              </div>
               <p className="font-display text-xl md:text-2xl text-ink leading-relaxed">
                 {turn.answer}
-              </p>
-              <p className="mt-5 text-sm text-ink-soft leading-relaxed">
-                המערכת מעדיפה להודות שאין לה תשובה מבוססת על פני לענות בניחוש.
               </p>
               {turn.feedback === null && !turn.retrying && (
                 <div className="mt-5 flex flex-wrap items-center gap-2">
