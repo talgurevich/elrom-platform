@@ -316,6 +316,7 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
         resp = client.messages.create(
             model=settings.claude_extract_model,
             max_tokens=500,
+            temperature=0,
             system=_classify_system_prompt([]),
             messages=[{"role": "user", "content": sample}],
         )
@@ -492,6 +493,44 @@ def classify_document_by_id_bg(document_id: UUID) -> None:
             except Exception as e:
                 log.error(
                     "documents.extract_bg.crashed",
+                    document_id=str(document_id),
+                    err=str(e)[:300],
+                )
+
+        # Chained decision-chain + reconciliation passes. Both need the
+        # classifier's forum/doc_type/effective_date, hence the ordering.
+        # Each is independently fenced — a crash in one must not cost the
+        # others (or the classification) their results.
+        doc = db.get(Document, document_id)
+        if doc is not None:
+            from app.services.decision_chain import resolve_chains_for_document
+            from app.services.reconciliation import reconcile_document
+
+            try:
+                chain_result = resolve_chains_for_document(db, doc)
+                log.info(
+                    "documents.decision_chain_bg.done",
+                    document_id=str(document_id),
+                    **chain_result,
+                )
+            except Exception as e:
+                db.rollback()
+                log.error(
+                    "documents.decision_chain_bg.crashed",
+                    document_id=str(document_id),
+                    err=str(e)[:300],
+                )
+            try:
+                recon_result = reconcile_document(db, doc)
+                log.info(
+                    "documents.reconcile_bg.done",
+                    document_id=str(document_id),
+                    **recon_result,
+                )
+            except Exception as e:
+                db.rollback()
+                log.error(
+                    "documents.reconcile_bg.crashed",
                     document_id=str(document_id),
                     err=str(e)[:300],
                 )

@@ -532,6 +532,7 @@ def answer_with_citations(
     corpus_stats_block: str = "",
     prior_turns: list[PriorTurn] | None = None,
     amendment_notes: list[str] | None = None,
+    resolution_notes: list[str] | None = None,
 ) -> LLMResult:
     """Ask Claude to produce a cited answer using tool-use for structured output.
 
@@ -577,6 +578,20 @@ def answer_with_citations(
             f"{joined}\n\n"
         )
 
+    resolution_block = ""
+    if resolution_notes:
+        # Decision-chain links found by the retriever: a retrieved chunk is
+        # an escalation whose terminal decision (higher forum) is also in
+        # the sources below. The system prompt's provenance-chain rules
+        # tell the answerer how to weigh these; this block makes each link
+        # explicit instead of hoping the model spots it.
+        joined = "\n".join(resolution_notes)
+        resolution_block = (
+            "שרשראות החלטות שאותרו במקורות למטה — ההחלטה הטרמינלית בפורום הגבוה היא "
+            "המקור המחייב; פריט ה-escalation נשאר כרקע (נימוקים, הצבעות) בלבד:\n"
+            f"{joined}\n\n"
+        )
+
     lexicon_section = (
         f"מילון מונחים רלוונטי (להתבסס עליו כשמופיע מונח כזה):\n{lexicon_block}\n\n"
         if lexicon_block
@@ -609,6 +624,7 @@ def answer_with_citations(
         f"{corpus_section}"
         f"{lexicon_section}"
         f"{amendment_block}"
+        f"{resolution_block}"
         f"קטעי הקשר ממסמכי הקיבוץ:\n\n{sources_block}\n\n"
         f"קרא את כל הסעיפים והפעל את הכלי `answer` עם הניסוח הקצר והדטרמיניסטי הדרוש."
     )
@@ -617,6 +633,10 @@ def answer_with_citations(
     resp = client.messages.create(
         model=settings.claude_answer_model,
         max_tokens=2048,
+        # Deterministic generation — the same question over the same
+        # retrieved set should produce the same answer. Sampling variety
+        # was a real source of "same question, different answer" reports.
+        temperature=0,
         system=build_system_prompt(tenant_name=tenant_name, tenant_context=tenant_context),
         tools=[_ANSWER_TOOL],
         tool_choice={"type": "tool", "name": "answer"},

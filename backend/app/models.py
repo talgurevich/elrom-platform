@@ -136,6 +136,87 @@ class Amendment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class DecisionResolution(Base):
+    """One (escalation chunk → terminal decision) link in the forum chain.
+
+    An escalation chunk is a protocol item whose decision is "pass it up"
+    (הוחלט להעביר לאסיפה / יובא לקלפי) — captured at chunking time as
+    ``chunk_metadata.decision_type == "escalation"``. The terminal decision
+    is the substantive outcome in a higher forum (committee → assembly →
+    ballot). Extracted post-ingest by ``services/decision_chain.py``.
+
+    Retrieval expands approved rows (``needs_review=False``): when an
+    escalation chunk is retrieved, the terminal chunk is injected into the
+    answerer's context and the escalation is annotated as resolved —
+    kept-but-demoted, never hidden. ``needs_review=True`` rows are inert
+    until a reviewer approves them.
+    """
+
+    __tablename__ = "decision_resolutions"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    escalation_chunk_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("chunks.id", ondelete="CASCADE"), index=True
+    )
+    escalation_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    terminal_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    # Best-matching chunk inside the terminal doc, when one was located.
+    # Nullable — retrieval falls back to the terminal doc's leading chunks.
+    terminal_chunk_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("chunks.id", ondelete="SET NULL")
+    )
+    # Short Hebrew summary of the subject — feeds the gap report and lets a
+    # reviewer eyeball a link without opening both documents.
+    topic: Mapped[str | None] = mapped_column(Text)
+    evidence_span: Mapped[str | None] = mapped_column(Text)
+    extractor_confidence: Mapped[float | None] = mapped_column(Float)
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    extractor_model: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CorpusFlag(Base):
+    """One reconciliation finding between a newly ingested document and the
+    existing corpus: the new material ``contradicts`` / ``supersedes`` /
+    ``duplicates`` something already there. Written by
+    ``services/reconciliation.py``, surfaced in the reviewer queue.
+    Deliberately has no effect on retrieval — a flag is a question for a
+    human, not a fact about the corpus.
+    """
+
+    __tablename__ = "corpus_flags"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    new_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    existing_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    new_chunk_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("chunks.id", ondelete="SET NULL")
+    )
+    existing_chunk_id: Mapped[UUID | None] = mapped_column(
+        SQLUUID(as_uuid=True), ForeignKey("chunks.id", ondelete="SET NULL")
+    )
+    kind: Mapped[str] = mapped_column(String(32))  # contradicts | supersedes | duplicates
+    topic: Mapped[str | None] = mapped_column(Text)
+    explanation: Mapped[str | None] = mapped_column(Text)
+    evidence_new: Mapped[str | None] = mapped_column(Text)
+    evidence_existing: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(
+        String(32), default="pending", server_default="pending"
+    )  # pending | confirmed | dismissed
+    extractor_model: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Conversation(Base):
     """A chat thread — groups successive Query rows into one user-facing
     conversation. The conversation is the unit the lexicon-learning job reads

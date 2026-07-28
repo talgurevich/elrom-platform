@@ -429,7 +429,7 @@ async def search_pipeline(
             return
 
         yield {"type": "stage", "stage": "searching"}
-        retrieved, debug, amendment_context = await asyncio.to_thread(
+        retrieved, debug, amendment_context, resolution_context = await asyncio.to_thread(
             hybrid_retrieve,
             db,
             tenant_id=tenant_id,
@@ -482,6 +482,7 @@ async def search_pipeline(
 
         yield {"type": "stage", "stage": "generating"}
         amendment_notes = [ac.format_for_prompt() for ac in amendment_context]
+        resolution_notes = [rc.format_for_prompt() for rc in resolution_context]
         # Corpus-at-a-glance block — lets the answerer serve meta-questions
         # ("how many protocols?", "what's the latest decision?") that can't
         # be answered from retrieved chunks alone.
@@ -498,6 +499,7 @@ async def search_pipeline(
             corpus_stats_block=corpus_stats_block,
             prior_turns=prior_turns,
             amendment_notes=amendment_notes or None,
+            resolution_notes=resolution_notes or None,
         )
 
         # Post-hoc safety net: if the answerer itself signals it didn't have

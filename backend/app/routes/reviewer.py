@@ -9,6 +9,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query as QParam
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -956,3 +957,292 @@ def reject_folder_suggestion(
     db.commit()
     log.info("folder_suggestion.rejected", sug_id=str(sug_id))
     return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Decision chains — escalation → terminal decision links (migration 0020)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class DecisionResolutionItem(BaseModel):
+    id: UUID
+    escalation_doc_id: UUID
+    escalation_doc_filename: str
+    escalation_section: str | None
+    escalation_text: str | None
+    terminal_doc_id: UUID
+    terminal_doc_filename: str
+    terminal_forum: str | None
+    terminal_text: str | None
+    topic: str | None
+    evidence_span: str | None
+    extractor_confidence: float | None
+    needs_review: bool
+    created_at: str
+
+
+@router.get("/resolutions", response_model=list[DecisionResolutionItem])
+def list_resolutions(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+    needs_review: bool | None = QParam(None, description="Filter by needs_review flag"),
+    limit: int = QParam(100, le=500),
+) -> list[DecisionResolutionItem]:
+    """List escalation→terminal decision links for review. Approved links
+    drive chain completion at retrieval; pending ones are inert."""
+    from app.models import DecisionResolution
+
+    q = db.query(DecisionResolution).filter(DecisionResolution.tenant_id == user.tenant_id)
+    if needs_review is not None:
+        q = q.filter(DecisionResolution.needs_review.is_(needs_review))
+    rows = (
+        q.order_by(DecisionResolution.needs_review.desc(), DecisionResolution.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    doc_ids = {r.escalation_doc_id for r in rows} | {r.terminal_doc_id for r in rows}
+    docs = {d.id: d for d in db.query(Document).filter(Document.id.in_(doc_ids)).all()}
+    chunk_ids = {r.escalation_chunk_id for r in rows} | {
+        r.terminal_chunk_id for r in rows if r.terminal_chunk_id
+    }
+    chunks = {c.id: c for c in db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()}
+
+    def _text(cid: UUID | None) -> str | None:
+        c = chunks.get(cid) if cid else None
+        return (c.text or "")[:500] if c else None
+
+    return [
+        DecisionResolutionItem(
+            id=r.id,
+            escalation_doc_id=r.escalation_doc_id,
+            escalation_doc_filename=docs[r.escalation_doc_id].filename
+            if r.escalation_doc_id in docs
+            else "?",
+            escalation_section=(
+                chunks[r.escalation_chunk_id].section_path
+                if r.escalation_chunk_id in chunks
+                else None
+            ),
+            escalation_text=_text(r.escalation_chunk_id),
+            terminal_doc_id=r.terminal_doc_id,
+            terminal_doc_filename=docs[r.terminal_doc_id].filename
+            if r.terminal_doc_id in docs
+            else "?",
+            terminal_forum=docs[r.terminal_doc_id].forum if r.terminal_doc_id in docs else None,
+            terminal_text=_text(r.terminal_chunk_id),
+            topic=r.topic,
+            evidence_span=r.evidence_span,
+            extractor_confidence=r.extractor_confidence,
+            needs_review=r.needs_review,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in rows
+    ]
+
+
+@router.post("/resolutions/{resolution_id}/approve")
+def approve_resolution(
+    resolution_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    """Clear ``needs_review`` — the link starts driving chain completion at
+    retrieval immediately. Safe no-op on an already-approved row."""
+    from app.models import DecisionResolution
+
+    r = db.get(DecisionResolution, resolution_id)
+    if r is None or r.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Resolution not found")
+    r.needs_review = False
+    db.commit()
+    log.info("reviewer.resolution_approved", resolution_id=str(resolution_id))
+    return {"status": "ok"}
+
+
+@router.post("/resolutions/{resolution_id}/reject")
+def reject_resolution(
+    resolution_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    """Delete a wrong link. The escalation chunk becomes 'open' again and
+    will appear in the gap report until a correct terminal doc arrives."""
+    from app.models import DecisionResolution
+
+    r = db.get(DecisionResolution, resolution_id)
+    if r is None or r.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Resolution not found")
+    db.delete(r)
+    db.commit()
+    log.info("reviewer.resolution_rejected", resolution_id=str(resolution_id))
+    return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Corpus flags — contradictions / de-facto supersessions / duplicates
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class CorpusFlagItem(BaseModel):
+    id: UUID
+    kind: str
+    topic: str | None
+    explanation: str | None
+    new_doc_id: UUID
+    new_doc_filename: str
+    new_section: str | None
+    evidence_new: str | None
+    existing_doc_id: UUID
+    existing_doc_filename: str
+    existing_section: str | None
+    evidence_existing: str | None
+    confidence: float | None
+    status: str
+    created_at: str
+
+
+@router.get("/flags", response_model=list[CorpusFlagItem])
+def list_corpus_flags(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+    status: str | None = QParam("pending", description="pending | confirmed | dismissed | all"),
+    limit: int = QParam(100, le=500),
+) -> list[CorpusFlagItem]:
+    """Reconciliation findings raised at ingest: the new doc contradicts /
+    de-facto supersedes / duplicates existing corpus material."""
+    from app.models import CorpusFlag
+
+    q = db.query(CorpusFlag).filter(CorpusFlag.tenant_id == user.tenant_id)
+    if status and status != "all":
+        q = q.filter(CorpusFlag.status == status)
+    rows = q.order_by(CorpusFlag.created_at.desc()).limit(limit).all()
+    doc_ids = {f.new_doc_id for f in rows} | {f.existing_doc_id for f in rows}
+    docs = {d.id: d for d in db.query(Document).filter(Document.id.in_(doc_ids)).all()}
+    chunk_ids = {f.new_chunk_id for f in rows if f.new_chunk_id} | {
+        f.existing_chunk_id for f in rows if f.existing_chunk_id
+    }
+    chunks = {c.id: c for c in db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()}
+
+    def _section(cid: UUID | None) -> str | None:
+        c = chunks.get(cid) if cid else None
+        return c.section_path if c else None
+
+    return [
+        CorpusFlagItem(
+            id=f.id,
+            kind=f.kind,
+            topic=f.topic,
+            explanation=f.explanation,
+            new_doc_id=f.new_doc_id,
+            new_doc_filename=docs[f.new_doc_id].filename if f.new_doc_id in docs else "?",
+            new_section=_section(f.new_chunk_id),
+            evidence_new=f.evidence_new,
+            existing_doc_id=f.existing_doc_id,
+            existing_doc_filename=docs[f.existing_doc_id].filename
+            if f.existing_doc_id in docs
+            else "?",
+            existing_section=_section(f.existing_chunk_id),
+            evidence_existing=f.evidence_existing,
+            confidence=f.confidence,
+            status=f.status,
+            created_at=f.created_at.isoformat(),
+        )
+        for f in rows
+    ]
+
+
+def _set_flag_status(db: Session, user: IdentityUser, flag_id: UUID, status: str) -> dict:
+    from datetime import datetime, timezone
+
+    from app.models import CorpusFlag
+
+    f = db.get(CorpusFlag, flag_id)
+    if f is None or f.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Flag not found")
+    f.status = status
+    f.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    log.info("reviewer.flag_status", flag_id=str(flag_id), status=status)
+    return {"status": "ok"}
+
+
+@router.post("/flags/{flag_id}/confirm")
+def confirm_corpus_flag(
+    flag_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    """Mark the finding as real. This records the human verdict; acting on
+    it (formal amendment, doc removal, a clarifying decision) stays a
+    separate human step — a flag never mutates the corpus."""
+    return _set_flag_status(db, user, flag_id, "confirmed")
+
+
+@router.post("/flags/{flag_id}/dismiss")
+def dismiss_corpus_flag(
+    flag_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> dict:
+    return _set_flag_status(db, user, flag_id, "dismissed")
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gap report — escalations still waiting for a terminal decision
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class GapItem(BaseModel):
+    chunk_id: UUID
+    doc_id: UUID
+    doc_filename: str
+    forum: str | None
+    effective_date: str | None
+    section_path: str | None
+    text: str
+
+
+@router.get("/gaps", response_model=list[GapItem])
+def list_decision_gaps(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+    limit: int = QParam(200, le=1000),
+) -> list[GapItem]:
+    """Escalation chunks with no decision-resolution row — topics a forum
+    passed upward where the corpus holds no record of the outcome. Either
+    the deciding document was never uploaded (missing doc) or the topic is
+    genuinely still pending. Newest first."""
+    from app.models import DecisionResolution
+
+    resolved_sq = select(DecisionResolution.escalation_chunk_id).where(
+        DecisionResolution.tenant_id == user.tenant_id
+    )
+    rows = (
+        db.query(Chunk)
+        .join(Document, Chunk.document_id == Document.id)
+        .filter(
+            Chunk.tenant_id == user.tenant_id,
+            Chunk.chunk_metadata["decision_type"].as_string() == "escalation",
+            ~Chunk.id.in_(resolved_sq),
+        )
+        .order_by(Document.effective_date.desc().nullslast())
+        .limit(limit)
+        .all()
+    )
+    doc_ids = {c.document_id for c in rows}
+    docs = {d.id: d for d in db.query(Document).filter(Document.id.in_(doc_ids)).all()}
+    out: list[GapItem] = []
+    for c in rows:
+        d = docs.get(c.document_id)
+        out.append(
+            GapItem(
+                chunk_id=c.id,
+                doc_id=c.document_id,
+                doc_filename=d.filename if d else "?",
+                forum=d.forum if d else None,
+                effective_date=d.effective_date.isoformat() if d and d.effective_date else None,
+                section_path=c.section_path,
+                text=(c.text or "")[:500],
+            )
+        )
+    return out

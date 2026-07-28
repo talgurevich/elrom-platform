@@ -18,7 +18,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Amendment, Chunk, Document
+from app.models import Amendment, Chunk, DecisionResolution, Document
 from app.services.hebrew_text import normalize_hebrew, normalize_hebrew_to_tsquery
 from app.services.reranker import rerank
 
@@ -67,6 +67,28 @@ def _cap_for(doc_type: str | None, table: dict[str, int]) -> int:
 
 _RECENCY_BOOSTED_TYPES = frozenset(["decision", "minutes"])
 _RECENCY_WEIGHT_PER_YEAR = 0.0005  # ~0.005 for a decade newer
+
+
+# Forum boost — the decision-making hierarchy: ballot > assembly >
+# committee > sub_committee. A committee protocol usually has more
+# discussion text and out-similarity-scores the short ballot result on
+# the same topic; this bump keeps the higher forum reliably in the
+# candidate pool. Same magnitude class as the recency boost — a
+# tiebreaker among comparably-relevant chunks, never an override of a
+# clearly better semantic match. Forums outside the chain get zero.
+
+_FORUM_BOOST = {
+    "ballot": 0.006,
+    "assembly": 0.004,
+    "committee": 0.002,
+    "sub_committee": 0.001,
+}
+
+
+def _forum_boost(doc: Document | None) -> float:
+    if doc is None or not doc.forum:
+        return 0.0
+    return _FORUM_BOOST.get(doc.forum, 0.0)
 
 
 def _recency_boost(doc: Document, today: date) -> float:
@@ -185,6 +207,7 @@ class RetrievalDebug:
     fused: list[dict] = field(default_factory=list)
     reranked: list[dict] = field(default_factory=list)
     amendments: list[dict] = field(default_factory=list)
+    resolutions: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -193,6 +216,7 @@ class RetrievalDebug:
             "fused": self.fused,
             "reranked": self.reranked,
             "amendments": self.amendments,
+            "resolutions": self.resolutions,
         }
 
 
@@ -230,6 +254,47 @@ class AmendmentContext:
         return header + ("\n" + "\n".join(body_parts) if body_parts else "")
 
 
+@dataclass
+class ResolutionContext:
+    """A decision-chain link touching one of the retrieved chunks.
+
+    Kept-but-demoted model: the escalation chunk stays in the results (it
+    carries the rationale and vote context), but the answerer is told
+    explicitly that it was resolved by a terminal decision in a higher
+    forum — and that terminal chunk is injected into the context so it
+    can be quoted and cited as the binding source.
+    """
+
+    escalation_chunk_id: UUID
+    escalation_doc_filename: str
+    escalation_section: str | None
+    terminal_doc_filename: str
+    terminal_forum: str | None
+    terminal_effective_date: str | None
+    topic: str | None
+
+    def format_for_prompt(self) -> str:
+        forum_he = {
+            "ballot": "קלפי",
+            "assembly": "אסיפה",
+            "committee": "ועד הנהלה",
+            "sub_committee": "ועדת משנה",
+        }.get(self.terminal_forum or "", self.terminal_forum or "פורום גבוה יותר")
+        src = self.escalation_doc_filename
+        if self.escalation_section:
+            src += f" ({self.escalation_section})"
+        topic_part = f'"{self.topic}" ' if self.topic else ""
+        line = (
+            f"[שרשרת החלטות] הפריט מ-{src} הוא escalation — הנושא "
+            f"{topic_part}הוכרע ב{forum_he} "
+            f"({self.terminal_doc_filename}"
+        )
+        if self.terminal_effective_date:
+            line += f", {self.terminal_effective_date}"
+        line += "). ההחלטה הטרמינלית היא המקור המחייב; הפריט המעביר הוא רקע בלבד."
+        return line
+
+
 def hybrid_retrieve(
     db: Session,
     *,
@@ -238,8 +303,9 @@ def hybrid_retrieve(
     query_embedding: list[float],
     top_k: int = 5,
     include_superseded: bool = False,
-) -> tuple[list[Chunk], RetrievalDebug, list[AmendmentContext]]:
-    """Return (top-k chunks, per-stage debug payload, active amendments touching those chunks).
+) -> tuple[list[Chunk], RetrievalDebug, list[AmendmentContext], list["ResolutionContext"]]:
+    """Return (top-k chunks, per-stage debug payload, active amendments
+    touching those chunks, decision-chain resolutions touching those chunks).
 
     ``include_superseded`` — when the query is historical ("מה היה כתוב לפני
     התיקון?"), the caller can set this to True and get the raw pre-amendment
@@ -409,7 +475,7 @@ def hybrid_retrieve(
         for cid, c in bm25_chunk_map.items():
             all_chunk_docs.setdefault(cid, c)
     for chunk_id, chunk_obj in all_chunk_docs.items():
-        boost = _recency_boost(chunk_obj.document, today)
+        boost = _recency_boost(chunk_obj.document, today) + _forum_boost(chunk_obj.document)
         if boost:
             combined[chunk_id] = combined.get(chunk_id, 0.0) + boost
 
@@ -419,7 +485,7 @@ def hybrid_retrieve(
     ]
 
     if not top_ids:
-        return [], debug
+        return [], debug, [], []
 
     candidates = (
         db.query(Chunk)
@@ -503,7 +569,98 @@ def hybrid_retrieve(
         }
         for ac in amendment_context
     ]
-    return final, debug, amendment_context
+
+    # Decision-chain completion — if any retrieved chunk is an escalation
+    # with an approved resolution, inject the terminal decision chunk and
+    # tell the answerer about the link. The escalation chunk stays in the
+    # results (kept-but-demoted): it carries the rationale/vote context,
+    # the terminal decision carries the binding outcome.
+    resolution_context = _resolution_chain_for_chunks(
+        db, tenant_id=tenant_id, chunks=final
+    )
+    debug.resolutions = [
+        {
+            "escalation_chunk_id": str(rc.escalation_chunk_id),
+            "escalation_doc": rc.escalation_doc_filename,
+            "terminal_doc": rc.terminal_doc_filename,
+            "terminal_forum": rc.terminal_forum,
+            "topic": rc.topic,
+        }
+        for rc in resolution_context
+    ]
+
+    return final, debug, amendment_context, resolution_context
+
+
+def _resolution_chain_for_chunks(
+    db: Session, *, tenant_id: UUID, chunks: list[Chunk]
+) -> list[ResolutionContext]:
+    """For retrieved escalation chunks with an approved DecisionResolution,
+    append the terminal decision chunk to ``chunks`` (in place, deduped) and
+    return the contexts for the answerer prompt.
+
+    ``needs_review=True`` rows are ignored — an unconfirmed link must not
+    promote a possibly-unrelated document to "the binding decision".
+    """
+    ids = [c.id for c in chunks]
+    if not ids:
+        return []
+    rows = (
+        db.query(DecisionResolution)
+        .filter(
+            DecisionResolution.tenant_id == tenant_id,
+            DecisionResolution.needs_review.is_(False),
+            DecisionResolution.escalation_chunk_id.in_(ids),
+        )
+        .all()
+    )
+    if not rows:
+        return []
+
+    chunk_by_id = {c.id: c for c in chunks}
+    contexts: list[ResolutionContext] = []
+    for r in rows:
+        esc = chunk_by_id.get(r.escalation_chunk_id)
+        if esc is None:
+            continue
+        terminal_chunk: Chunk | None = None
+        if r.terminal_chunk_id:
+            terminal_chunk = (
+                db.query(Chunk)
+                .filter(Chunk.id == r.terminal_chunk_id)
+                .options(joinedload(Chunk.document))
+                .first()
+            )
+        if terminal_chunk is None:
+            # Chunk was deleted/re-ingested — fall back to the terminal
+            # doc's first chunk so the answerer still sees the outcome.
+            terminal_chunk = (
+                db.query(Chunk)
+                .filter(Chunk.document_id == r.terminal_doc_id)
+                .order_by(Chunk.position)
+                .options(joinedload(Chunk.document))
+                .first()
+            )
+        if terminal_chunk is None or terminal_chunk.document is None:
+            continue
+        if terminal_chunk.id not in chunk_by_id:
+            chunks.append(terminal_chunk)
+            chunk_by_id[terminal_chunk.id] = terminal_chunk
+        tdoc = terminal_chunk.document
+        contexts.append(
+            ResolutionContext(
+                escalation_chunk_id=esc.id,
+                escalation_doc_filename=esc.document.filename if esc.document else "",
+                escalation_section=esc.section_path,
+                terminal_doc_filename=tdoc.filename,
+                terminal_forum=tdoc.forum,
+                terminal_effective_date=(
+                    tdoc.effective_date.isoformat() if tdoc.effective_date else None
+                ),
+                topic=r.topic,
+            )
+        )
+    return contexts
 
 
 def _amendment_chain_for_chunks(

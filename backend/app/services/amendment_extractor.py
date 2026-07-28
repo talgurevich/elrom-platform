@@ -349,6 +349,7 @@ def extract_amendments(db: Session, doc: Document) -> dict:
         resp = client.messages.create(
             model=settings.claude_extract_model,
             max_tokens=4096,
+            temperature=0,
             system=SYSTEM_PROMPT,
             tools=[_EXTRACT_TOOL],
             tool_choice={"type": "tool", "name": "extract_amendments"},

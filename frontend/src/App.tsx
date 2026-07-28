@@ -6,6 +6,7 @@ import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
 import Landing from "./pages/Landing";
 import Folders from "./pages/Folders";
+import Governance from "./pages/Governance";
 import Lexicon from "./pages/Lexicon";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -25,6 +26,7 @@ type Tab =
   | "lexicon"
   | "folders"
   | "amendments"
+  | "governance"
   | "eval"
   | "analytics"
   | "admin";
@@ -75,6 +77,14 @@ const Icon = {
       <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5" />
     </svg>
   ),
+  governance: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4v16" />
+      <path d="M5 8h14" />
+      <path d="M5 8l-2.5 5a3 3 0 0 0 5 0z" />
+      <path d="M19 8l-2.5 5a3 3 0 0 0 5 0z" />
+    </svg>
+  ),
   eval: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <line x1="4" y1="20" x2="20" y2="20" />
@@ -108,6 +118,7 @@ const ALL_TABS: TabDef[] = [
   { id: "lexicon", label: "מילון" },
   { id: "folders", label: "תיקיות" },
   { id: "amendments", label: "תיקונים" },
+  { id: "governance", label: "שרשראות וסתירות" },
   { id: "review", label: "תור בדיקה", superOnly: true },
   { id: "eval", label: "הערכה", superOnly: true },
   { id: "analytics", label: "נתוני שימוש", superOnly: true },
@@ -580,6 +591,7 @@ export default function App() {
           {tab === "lexicon" && <Lexicon />}
           {tab === "folders" && <Folders />}
           {tab === "amendments" && <Amendments />}
+          {tab === "governance" && <Governance />}
           {tab === "eval" && <Eval onRunInChat={() => setTab("search")} />}
           {tab === "analytics" && <Analytics tenants={tenants} />}
           {tab === "admin" && <Admin currentUserId={user.id} />}

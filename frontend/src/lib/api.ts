@@ -393,6 +393,51 @@ export type AmendmentItem = {
   created_at: string;
 };
 
+export type DecisionResolutionItem = {
+  id: string;
+  escalation_doc_id: string;
+  escalation_doc_filename: string;
+  escalation_section: string | null;
+  escalation_text: string | null;
+  terminal_doc_id: string;
+  terminal_doc_filename: string;
+  terminal_forum: string | null;
+  terminal_text: string | null;
+  topic: string | null;
+  evidence_span: string | null;
+  extractor_confidence: number | null;
+  needs_review: boolean;
+  created_at: string;
+};
+
+export type CorpusFlagItem = {
+  id: string;
+  kind: "contradicts" | "supersedes" | "duplicates";
+  topic: string | null;
+  explanation: string | null;
+  new_doc_id: string;
+  new_doc_filename: string;
+  new_section: string | null;
+  evidence_new: string | null;
+  existing_doc_id: string;
+  existing_doc_filename: string;
+  existing_section: string | null;
+  evidence_existing: string | null;
+  confidence: number | null;
+  status: "pending" | "confirmed" | "dismissed";
+  created_at: string;
+};
+
+export type GapItem = {
+  chunk_id: string;
+  doc_id: string;
+  doc_filename: string;
+  forum: string | null;
+  effective_date: string | null;
+  section_path: string | null;
+  text: string;
+};
+
 export type DuplicateGroupDoc = {
   id: string;
   filename: string;
@@ -945,6 +990,35 @@ export const api = {
     request<{ status: string }>(`/api/reviewer/amendments/${id}/reject`, {
       method: "POST",
     }),
+
+  // Decision chains — escalation → terminal decision links
+  listResolutions: (needsReview?: boolean) => {
+    const qs = needsReview === undefined ? "" : `?needs_review=${needsReview}`;
+    return request<DecisionResolutionItem[]>(`/api/reviewer/resolutions${qs}`);
+  },
+  approveResolution: (id: string) =>
+    request<{ status: string }>(`/api/reviewer/resolutions/${id}/approve`, {
+      method: "POST",
+    }),
+  rejectResolution: (id: string) =>
+    request<{ status: string }>(`/api/reviewer/resolutions/${id}/reject`, {
+      method: "POST",
+    }),
+
+  // Corpus flags — contradictions / de-facto supersessions / duplicates
+  listCorpusFlags: (status: "pending" | "confirmed" | "dismissed" | "all" = "pending") =>
+    request<CorpusFlagItem[]>(`/api/reviewer/flags?status=${status}`),
+  confirmCorpusFlag: (id: string) =>
+    request<{ status: string }>(`/api/reviewer/flags/${id}/confirm`, {
+      method: "POST",
+    }),
+  dismissCorpusFlag: (id: string) =>
+    request<{ status: string }>(`/api/reviewer/flags/${id}/dismiss`, {
+      method: "POST",
+    }),
+
+  // Gap report — escalations still awaiting a terminal decision
+  listDecisionGaps: () => request<GapItem[]>(`/api/reviewer/gaps`),
 
   // Super-admin management panel
   adminListTenants: () => request<AdminTenant[]>("/api/admin/tenants"),

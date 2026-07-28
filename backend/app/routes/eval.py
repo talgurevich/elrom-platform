@@ -113,7 +113,7 @@ def _to_out(g: GoldenQuestion) -> GoldenOut:
 def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunResult:
     """Re-run a single golden through the live pipeline and score."""
     q_emb = embed_texts([g.question], input_type="search_query")[0]
-    retrieved, _debug, amendment_context = hybrid_retrieve(
+    retrieved, _debug, amendment_context, resolution_context = hybrid_retrieve(
         db, tenant_id=tenant_id, query=g.question, query_embedding=q_emb, top_k=5
     )
     retrieved_filenames = [c.document.filename for c in retrieved]
@@ -122,11 +122,19 @@ def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunRes
         lex = find_relevant_terms(
             db, tenant_id=tenant_id, question=g.question, record_events=False
         )
+        # Same tenant identity/context injection as the live search path —
+        # goldens must be scored against the prompt users actually get.
+        from app.services.identity import get_tenant_cached
+
+        tenant = get_tenant_cached(tenant_id)
         llm = answer_with_citations(
             question=g.question,
             chunks=retrieved,
+            tenant_name=(tenant or {}).get("name") or "הארגון",
+            tenant_context=(tenant or {}).get("system_context"),
             lexicon_block=format_lexicon_block(lex),
             amendment_notes=[ac.format_for_prompt() for ac in amendment_context] or None,
+            resolution_notes=[rc.format_for_prompt() for rc in resolution_context] or None,
         )
         answer_text = llm.answer
         confidence = llm.confidence
