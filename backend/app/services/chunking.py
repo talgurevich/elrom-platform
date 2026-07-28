@@ -54,6 +54,25 @@ _ESCALATION_PHRASES = (
     "להביא בפני חברי הקיבוץ",
 )
 
+# Real protocols rarely use the exact phrases above — the object of the
+# transfer sits between the verb and the destination ("להעביר את הנושא
+# להצבעה בקלפי", "הנושא יועבר להחלטה בקלפי"). Match transfer-verb …
+# higher-forum within one sentence instead of exact adjacency. Corpus
+# audit 2026-07-28: the fixed list caught 1 escalation across 103
+# committee protocols; this pattern catches the rest.
+_TRANSFER_VERB = r"(?:להעביר|יועבר|תועבר|מעביר|הועבר|להביא|יובא|תובא|להעלות|יעלה|יועלה)"
+_HIGHER_FORUM = r"(?:אסיפה|קלפי|הצבעה)"
+_ESCALATION_RE = re.compile(_TRANSFER_VERB + r"[^.\n]{0,60}?" + _HIGHER_FORUM)
+
+# Mid-text decisions: "…שמות החברים… הוחלט להעביר את שלושת המשפחות
+# להצבעה בקלפי" — the הוחלט is not at a line start, so the section
+# splitter never made it a leading marker. Require הוחלט/החלטה shortly
+# before the transfer pattern so bylaw prose that merely *describes*
+# escalation rights ("רשאי להביא את ערעורו בפני האסיפה") stays unmarked.
+_MIDTEXT_ESCALATION_RE = re.compile(
+    r"(?:הוחלט|החלטה)\s*:?\s*[^.\n]{0,60}?" + _TRANSFER_VERB + r"[^.\n]{0,40}?" + _HIGHER_FORUM
+)
+
 
 def _classify_decision(text: str) -> str | None:
     """Return 'terminal', 'escalation', or None for a chunk. Only fires
@@ -68,6 +87,10 @@ def _classify_decision(text: str) -> str | None:
         return None
     head = text.lstrip()
     if not (head.startswith("הוחלט") or head.startswith("החלטה")):
+        # No leading decision marker — still catch a decision-to-escalate
+        # buried mid-paragraph (common in loosely structured protocols).
+        if _MIDTEXT_ESCALATION_RE.search(head):
+            return "escalation"
         return None
 
     # Trim to the leading decision's scope: stop at first blank line, or
@@ -89,6 +112,8 @@ def _classify_decision(text: str) -> str | None:
     for phrase in _ESCALATION_PHRASES:
         if phrase in leading:
             return "escalation"
+    if _ESCALATION_RE.search(leading):
+        return "escalation"
     return "terminal"
 
 

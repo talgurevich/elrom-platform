@@ -62,18 +62,19 @@ def backfill_for_tenant(
     limit: int | None,
     skip_reconcile: bool,
 ) -> dict:
-    docs = (
-        db.query(Document)
+    doc_ids = [
+        r[0]
+        for r in db.query(Document.id)
         .filter(Document.tenant_id == tenant.id)
         .order_by(Document.ingested_at)
         .all()
-    )
+    ]
     if limit:
-        docs = docs[:limit]
+        doc_ids = doc_ids[:limit]
 
-    print(f"\n[{tenant.name}] {len(docs)} docs to process")
+    print(f"\n[{tenant.name}] {len(doc_ids)} docs to process")
     totals = {
-        "docs": len(docs),
+        "docs": len(doc_ids),
         "chains_written": 0,
         "chains_review": 0,
         "flags_written": 0,
@@ -83,41 +84,53 @@ def backfill_for_tenant(
     if dry_run:
         return {"tenant": tenant.name, **totals}
 
-    for i, doc in enumerate(docs, 1):
+    for i, doc_id in enumerate(doc_ids, 1):
         started = time.time()
         line_parts = []
+        # Fresh session per doc — a dropped/poisoned connection (e.g. the
+        # server closing an idle socket during a slow LLM call) must not
+        # take down the rest of the run.
+        doc_db: Session = SessionLocal()
         try:
-            chain = resolve_chains_for_document(db, doc)
-            if chain.get("status") == "ok":
-                totals["chains_written"] += chain.get("written", 0)
-                totals["chains_review"] += chain.get("needs_review", 0)
-                line_parts.append(
-                    f"chains={chain.get('written', 0)} review={chain.get('needs_review', 0)}"
-                )
-            else:
-                line_parts.append(f"chains:{chain.get('reason') or chain.get('status')}")
-        except Exception as e:
-            db.rollback()
-            totals["errors"] += 1
-            line_parts.append(f"chains:ERROR {str(e)[:80]}")
-
-        if not skip_reconcile:
+            doc = doc_db.get(Document, doc_id)
+            if doc is None:
+                totals["skipped"] += 1
+                continue
+            filename = doc.filename
             try:
-                recon = reconcile_document(db, doc)
-                if recon.get("status") == "ok":
-                    totals["flags_written"] += recon.get("flags_written", 0)
+                chain = resolve_chains_for_document(doc_db, doc)
+                if chain.get("status") == "ok":
+                    totals["chains_written"] += chain.get("written", 0)
+                    totals["chains_review"] += chain.get("needs_review", 0)
                     line_parts.append(
-                        f"pairs={recon.get('pairs_checked', 0)} flags={recon.get('flags_written', 0)}"
+                        f"chains={chain.get('written', 0)} review={chain.get('needs_review', 0)}"
                     )
                 else:
-                    line_parts.append(f"recon:{recon.get('reason') or recon.get('status')}")
+                    line_parts.append(f"chains:{chain.get('reason') or chain.get('status')}")
             except Exception as e:
-                db.rollback()
+                doc_db.rollback()
                 totals["errors"] += 1
-                line_parts.append(f"recon:ERROR {str(e)[:80]}")
+                line_parts.append(f"chains:ERROR {str(e)[:80]}")
+
+            if not skip_reconcile:
+                try:
+                    recon = reconcile_document(doc_db, doc)
+                    if recon.get("status") == "ok":
+                        totals["flags_written"] += recon.get("flags_written", 0)
+                        line_parts.append(
+                            f"pairs={recon.get('pairs_checked', 0)} flags={recon.get('flags_written', 0)}"
+                        )
+                    else:
+                        line_parts.append(f"recon:{recon.get('reason') or recon.get('status')}")
+                except Exception as e:
+                    doc_db.rollback()
+                    totals["errors"] += 1
+                    line_parts.append(f"recon:ERROR {str(e)[:80]}")
+        finally:
+            doc_db.close()
 
         elapsed = time.time() - started
-        print(f"  [{i}/{len(docs)}] {_short(doc.filename):40s}  {'  '.join(line_parts)}  ({elapsed:.1f}s)")
+        print(f"  [{i}/{len(doc_ids)}] {_short(filename):40s}  {'  '.join(line_parts)}  ({elapsed:.1f}s)", flush=True)
 
     print(
         f"[{tenant.name}] done — chains={totals['chains_written']} "

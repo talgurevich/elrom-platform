@@ -240,10 +240,13 @@ def _call_matcher(
         f"הפעל את הכלי match_resolutions."
     )
     client = _claude_client()
+    # Bounded timeout — the default (10min × retries) once held a DB
+    # session open long enough for the server to drop the connection.
     resp = client.messages.create(
         model=settings.claude_extract_model,
         max_tokens=4096,
         temperature=0,
+        timeout=120.0,
         system=SYSTEM_PROMPT,
         tools=[_MATCH_TOOL],
         tool_choice={"type": "tool", "name": "match_resolutions"},

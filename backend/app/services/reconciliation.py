@@ -232,10 +232,12 @@ def reconcile_document(db: Session, doc: Document) -> dict:
     )
     try:
         client = _claude_client()
+        # Bounded timeout — see decision_chain._call_matcher rationale.
         resp = client.messages.create(
             model=settings.claude_extract_model,
             max_tokens=4096,
             temperature=0,
+            timeout=120.0,
             system=SYSTEM_PROMPT,
             tools=[_CLASSIFY_TOOL],
             tool_choice={"type": "tool", "name": "classify_pairs"},
