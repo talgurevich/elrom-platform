@@ -140,7 +140,7 @@ export default function Landing({ onLogin }: Props) {
         <div className="relative max-w-6xl mx-auto px-6 py-24 md:py-32 grid md:grid-cols-12 gap-10 items-center">
           <div className="md:col-span-8">
             <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-4">
-              Klaser · הפלטפורמה שהופכת מסמכים לזיכרון פעיל
+              קלסר · הפלטפורמה שהופכת מסמכים לזיכרון פעיל
             </div>
             <h1 className="font-display font-black leading-[0.95] text-5xl md:text-7xl text-ink">
               קלסר.
@@ -150,9 +150,9 @@ export default function Landing({ onLogin }: Props) {
               <span className="text-accent">במרחק שאלה.</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-ink-soft max-w-2xl leading-relaxed">
-              קלסר בונה כלים לארגונים שמנהלים ידע מסמכי — תקנונים, פרוטוקולים,
-              נהלים ותקדימים. במקום לחפש שעות בקבצים, שואלים שאלה ומקבלים תשובה
-              מבוססת מקור.
+              קלסר בונה כלים עבור ארגונים בהם יש ידע רב של שנים רבות, מבוסס
+              מסמכים — תקנונים, פרוטוקולים, נהלים ותקדימים. במקום לחפש שעות
+              בקבצים, שואלים שאלה ומקבלים תשובה מבוססת מקור.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
               <button
@@ -246,26 +246,16 @@ export default function Landing({ onLogin }: Props) {
       <section id="benefits" className="border-b border-ink">
         <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
           <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
-            למה קלסר
+            למה קלסר?
           </div>
           <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight max-w-3xl">
-            מהיר יותר. מדויק יותר. עם מקור.
+            יעיל יותר. נוח יותר. מדויק יותר.
           </h2>
-          <div className="mt-14 grid md:grid-cols-3 gap-px bg-ink border border-ink">
-            {BENEFITS.map((b) => (
-              <div key={b.title} className="bg-surface p-8">
-                <div className="text-4xl font-display font-black text-accent leading-none">
-                  {b.num}
-                </div>
-                <h3 className="mt-4 font-display font-black text-xl text-ink">
-                  {b.title}
-                </h3>
-                <p className="mt-3 text-sm text-ink-soft leading-relaxed">
-                  {b.body}
-                </p>
-              </div>
-            ))}
-          </div>
+          <p className="mt-8 text-lg md:text-xl text-ink-soft leading-relaxed max-w-3xl">
+            <strong className="text-ink font-bold">קלסר:</strong> פלטפורמה חכמה
+            לניהול הקהילה והאגודה, המשלבת בינה מלאכותית, מגבירה שקיפות ומשמרת
+            את הזיכרון הארגוני שלכם.
+          </p>
         </div>
       </section>
 
@@ -279,49 +269,35 @@ export default function Landing({ onLogin }: Props) {
             כלים ממוקדים. לא עוד פלטפורמה גנרית.
           </h2>
 
-          <div className="mt-14 grid md:grid-cols-3 gap-6">
+          <div className="mt-14 space-y-6">
             {/* Featured product — Takanon */}
-            <div className="md:col-span-2 border-2 border-ink bg-surface p-10 relative">
+            <div className="border-2 border-ink bg-surface p-10 relative">
               <span className="absolute top-6 left-6 text-[10px] tracking-[0.25em] uppercase text-surface bg-accent px-2 py-1 font-bold">
                 מוצר דגל
               </span>
-              <div className="text-[11px] tracking-[0.3em] uppercase text-ink-soft font-bold mb-2">
-                Takanon
-              </div>
               <h3 className="font-display font-black text-4xl md:text-5xl text-ink">
                 תקנון
               </h3>
               <p className="mt-4 text-base text-ink-soft leading-relaxed max-w-xl">
-                שיחה חכמה עם התקנון של הארגון שלכם. תקנון קורא, מבין וממפה את
-                המסמכים המחייבים — ומחזיר תשובות מדויקות עם ציטוט מהמקור, כולל
-                מעקב אחר תיקונים ואישורי ועדה.
+                שיחה חכמה עם מסמכי הארגון.{" "}
+                <strong className="text-ink font-bold">תקנון</strong> סורק ומבין
+                את מסמכי הקיבוץ ומחזיר תשובות מדויקות עם ציטוט מהמקור.
               </p>
-              <ul className="mt-6 grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm text-ink">
-                <li className="flex gap-2">
-                  <span className="text-accent font-bold">←</span>
-                  חיפוש סמנטי בעברית
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-accent font-bold">←</span>
-                  ציטוטים ישירים מהתקנון
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-accent font-bold">←</span>
-                  מעקב תיקונים ואמנדמנטים
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-accent font-bold">←</span>
-                  תשובות מאושרות ע"י ועדה
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-accent font-bold">←</span>
-                  מילון מונחים ארגוני
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-accent font-bold">←</span>
-                  תור בדיקה לאיכות תשובות
-                </li>
-              </ul>
+              <div className="mt-10 grid md:grid-cols-3 gap-px bg-ink border border-ink">
+                {BENEFITS.map((b) => (
+                  <div key={b.title} className="bg-surface p-8">
+                    <div className="text-4xl font-display font-black text-accent leading-none">
+                      {b.num}
+                    </div>
+                    <h4 className="mt-4 font-display font-black text-xl text-ink">
+                      {b.title}
+                    </h4>
+                    <p className="mt-3 text-sm text-ink-soft leading-relaxed">
+                      {b.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
               <button
                 onClick={onLogin}
                 className="mt-10 bg-ink text-surface px-6 py-3 text-sm font-bold hover:bg-accent transition-colors"
@@ -330,31 +306,25 @@ export default function Landing({ onLogin }: Props) {
               </button>
             </div>
 
-            {/* Coming soon */}
-            <div className="border-2 border-dashed border-line-strong bg-surface p-8 flex flex-col">
-              <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4">
-                בקרוב
-              </div>
-              <h3 className="font-display font-black text-2xl text-ink leading-tight">
-                מוצרים נוספים בפיתוח
+            {/* Featured product — Ogdan */}
+            <div className="border-2 border-ink bg-surface p-10 relative">
+              <span className="absolute top-6 left-6 text-[10px] tracking-[0.25em] uppercase text-surface bg-accent px-2 py-1 font-bold">
+                מוצר דגל
+              </span>
+              <h3 className="font-display font-black text-4xl md:text-5xl text-ink">
+                &quot;אוגדן&quot; ניהול אגודה
               </h3>
-              <p className="mt-3 text-sm text-ink-soft leading-relaxed flex-1">
-                אנחנו בונים כלים נוספים סביב זיכרון ארגוני — פרוטוקולים,
-                החלטות ועד, ניהול תקדימים ותשובות מאושרות בין-ארגוניות.
-              </p>
-              <div className="mt-6 pt-6 border-t border-line space-y-3 text-xs text-ink-soft">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-line-strong inline-block" />
-                  פרוטוקולים חכמים
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-line-strong inline-block" />
-                  ארכיון החלטות
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-line-strong inline-block" />
-                  מאגר תקדימים
-                </div>
+              <div className="mt-10 grid md:grid-cols-2 gap-px bg-ink border border-ink">
+                {OGDAN_FEATURES.map((f) => (
+                  <div key={f.title} className="bg-surface p-8">
+                    <h4 className="font-display font-black text-xl text-ink">
+                      {f.title}
+                    </h4>
+                    <p className="mt-3 text-sm text-ink-soft leading-relaxed">
+                      {f.body}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -369,20 +339,32 @@ export default function Landing({ onLogin }: Props) {
               עלינו
             </div>
             <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight">
-              נבנה עם ארגונים,
-              <br />
-              לא עבורם.
+              חיים בקיבוץ, מכירים את הצרכים, יוצרים פתרונות
             </h2>
           </div>
           <div className="md:col-span-7 text-lg text-ink-soft leading-relaxed space-y-6">
             <p>
-              קלסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים שבהם
-              המסמכים המחייבים — התקנון, הפרוטוקולים, ההחלטות — הם ליבת
-              ההתנהלות היומיומית.
+              <strong className="text-ink font-bold">אולפני אלרום</strong> הם
+              מותג קיבוצי עם ותק של חמישה עשורים בתחום של הפקת שלל מוצרים משפה
+              ומילים.
             </p>
             <p>
-              במקום להציע פלטפורמת AI גנרית, אנחנו בונים כלים ממוקדים לבעיות
-              אמיתיות: להביא את התשובה הנכונה, מהמקור הנכון, בזמן שצריך אותה.
+              <strong className="text-ink font-bold">קלסר</strong> נולד בקיבוץ,
+              מתוך חיי היום יום שלנו, ומהיכרות עמוקה עם קיבוצים ומושבים שבהם
+              המסמכים הם ליבת ההתנהלות היומיומית.
+            </p>
+            <p>
+              המטרה היא לרתום בינה מלאכותית מתקדמת כדי למנוע את אובדן הזיכרון
+              הארגוני בחילופי תפקידים, ולהפוך את ההיסטוריה, התקנונים ושרשרת
+              ההחלטות לנכס דיגיטלי נגיש ומאובטח.
+            </p>
+            <p>
+              <strong className="text-ink font-bold">קלסר</strong> מצעיד את
+              ניהול הקהילה והאגודה לעידן החכם, ומייעל את הניהול השוטף וחיי
+              היום-יום ביישוב.
+            </p>
+            <p>
+              במקום להציע פלטפורמת AI גנרית, בנינו כלים ממוקדים לבעיות אמיתיות.
             </p>
             <p className="text-ink font-semibold">
               הידע כבר קיים בארגון. אנחנו רק דואגים שהוא יהיה זמין.
@@ -671,18 +653,37 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
 const BENEFITS = [
   {
     num: "01",
-    title: "מקור לכל תשובה",
-    body: "כל תשובה מגיעה עם ציטוט ישיר וקישור למסמך המקור. לא ניחושים, לא הזיות — רק מה שכתוב.",
+    title: "חוסך זמן",
+    body: "חוסך שעות של חיפוש במסמכים.",
   },
   {
     num: "02",
-    title: "עברית שמבינה עברית",
-    body: "בנוי מהיסוד לעברית — מכיר את הטיות השורש, את הניואנסים ואת המונחים הארגוניים הייחודיים.",
+    title: "בשפה שלך",
+    body: "מדבר בשפה הקיבוצית — מכיר את הטיות השורש, את הניואנסים ואת המונחים הארגוניים הייחודיים.",
   },
   {
     num: "03",
-    title: "מעקב אחר שינויים",
-    body: "תיקונים ואישורי ועדה מסומנים אוטומטית. תמיד יודעים מה הגרסה התקפה של כל סעיף.",
+    title: "מקור מהימן לכל תשובה",
+    body: "כל תשובה מגיעה עם ציטוט ישיר וקישור למסמך המקור. לא ניחושים, לא הזיות, רק מה שכתוב.",
+  },
+];
+
+const OGDAN_FEATURES = [
+  {
+    title: "ניהול ישיבות דיגיטלי",
+    body: "נהלו ישיבות ואסיפות מקצה לקצה. שלבו זימונים לזום ושעון עצר לדיונים.",
+  },
+  {
+    title: "תמלול בינה מלאכותית",
+    body: "המערכת מקליטה, מתמללת ומסכמת ישיבות אוטומטית. סוף לפרוטוקול הידני.",
+  },
+  {
+    title: "מעקב ביצוע שקוף",
+    body: "הפכו החלטות למשימות עם אחראי ויעד. מובטחת שקיפות לקהילה.",
+  },
+  {
+    title: "מעורבות הקהילה",
+    body: "אפשרו לציבור להציע נושאים לדיונים בקלות.",
   },
 ];
 
