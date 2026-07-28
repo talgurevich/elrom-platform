@@ -656,10 +656,32 @@ def answer_with_citations(
         # retrieved set should produce the same answer. Sampling variety
         # was a real source of "same question, different answer" reports.
         temperature=0,
-        system=build_system_prompt(tenant_name=tenant_name, tenant_context=tenant_context),
+        # Prompt caching: the system prompt is several thousand tokens and
+        # byte-identical per tenant (prefix + tenants.system_context +
+        # suffix — nothing volatile is interpolated into it). The
+        # breakpoint on this block also covers the tool definition, which
+        # renders before system. Reads bill at ~0.1x input price; the
+        # 1.25x write premium breaks even on the second question inside
+        # the 5-minute TTL.
+        system=[
+            {
+                "type": "text",
+                "text": build_system_prompt(
+                    tenant_name=tenant_name, tenant_context=tenant_context
+                ),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         tools=[_ANSWER_TOOL],
         tool_choice={"type": "tool", "name": "answer"},
         messages=[{"role": "user", "content": user_message}],
+    )
+    log.info(
+        "llm.answer.usage",
+        input_tokens=resp.usage.input_tokens,
+        output_tokens=resp.usage.output_tokens,
+        cache_creation=getattr(resp.usage, "cache_creation_input_tokens", None),
+        cache_read=getattr(resp.usage, "cache_read_input_tokens", None),
     )
 
     # Find the tool_use block in the response
