@@ -25,6 +25,7 @@ type ChatTurn = {
   confidence: string;
   sources: Source[];
   references: StructuredReference[];
+  unverified_reference_count: number;
   retrieval_debug: RetrievalDebug | null;
   candidate_docs: string[];
   clarifying_message: string | null;
@@ -57,6 +58,7 @@ function responseToTurn(r: SearchResponse): ChatTurn {
     confidence: r.confidence,
     sources: r.sources,
     references: r.references || [],
+    unverified_reference_count: r.unverified_reference_count ?? 0,
     retrieval_debug: r.retrieval_debug,
     candidate_docs: r.candidate_docs || [],
     clarifying_message: r.clarifying_message,
@@ -112,6 +114,7 @@ export default function Search() {
             text: "",
           })),
           references: [],
+          unverified_reference_count: 0,
           retrieval_debug: null,
           candidate_docs: [],
           clarifying_message: t.mode === "clarify" ? t.answer : null,
@@ -396,6 +399,7 @@ async function hydrateAndLoad(
         text: "",
       })),
       references: [],
+      unverified_reference_count: 0,
       retrieval_debug: null,
       candidate_docs: [],
       clarifying_message: t.mode === "clarify" ? t.answer : null,
@@ -718,20 +722,22 @@ function TurnView({
               </div>
               <div className="grid gap-px bg-line border border-line">
                 {turn.references.map((r, i) => {
-                  // Try to match the reference title to a source's document so
-                  // we can offer "open source PDF" straight from the citation.
-                  const matched = turn.sources.find(
-                    (s) => s.document_filename === r.title && s.has_file && s.document_id
-                  );
+                  // The backend binds each reference to a real document and
+                  // returns its canonical filename as the title, so there is
+                  // nothing to match here. The previous version compared
+                  // r.title === s.document_filename, which broke for the 38%
+                  // of filenames containing double spaces — the model
+                  // collapses them when echoing the name.
+                  const openable = r.document_id && r.has_file;
                   return (
                     <div
                       key={`${r.title}-${r.section_number}-${i}`}
                       className="p-3 bg-surface"
                     >
                       <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
-                        {matched?.document_id ? (
+                        {openable && r.document_id ? (
                           <a
-                            href={documentFileUrl(matched.document_id)}
+                            href={documentFileUrl(r.document_id)}
                             target="_blank"
                             rel="noreferrer noopener"
                             className="font-semibold text-ink hover:text-accent underline underline-offset-4 decoration-line-strong hover:decoration-accent"
@@ -752,9 +758,9 @@ function TurnView({
                             {r.source_type}
                           </span>
                         )}
-                        {matched?.document_id && (
+                        {openable && r.document_id && (
                           <a
-                            href={documentFileUrl(matched.document_id)}
+                            href={documentFileUrl(r.document_id)}
                             target="_blank"
                             rel="noreferrer noopener"
                             className="text-[10px] tracking-[0.2em] uppercase text-accent font-bold hover:underline"
@@ -772,6 +778,13 @@ function TurnView({
                   );
                 })}
               </div>
+              {turn.unverified_reference_count > 0 && (
+                <p className="mt-2 text-xs text-ink-soft">
+                  {turn.unverified_reference_count === 1
+                    ? "סימוכין אחד לא נמצא במסמכים שנשלפו ולכן לא מוצג."
+                    : `${turn.unverified_reference_count} סימוכין לא נמצאו במסמכים שנשלפו ולכן אינם מוצגים.`}
+                </p>
+              )}
             </div>
           )}
 

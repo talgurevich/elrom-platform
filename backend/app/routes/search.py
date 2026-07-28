@@ -42,6 +42,7 @@ from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.corpus_stats import format_corpus_stats
 from app.services.llm import answer_with_citations
 from app.services.query_rewriter import PriorTurn
+from app.services.reference_resolver import resolve_references
 from app.services.retrieval import hybrid_retrieve
 
 log = structlog.get_logger()
@@ -75,10 +76,19 @@ class SourceCitation(BaseModel):
 
 
 class StructuredReference(BaseModel):
+    # Canonical filename read from the database, never the string the model
+    # emitted — see services/reference_resolver.py. A title that reaches the
+    # client therefore always names a document that exists.
     title: str
     section_number: str
     source_type: str
     excerpt: str
+    # Set whenever the reference was bound to a retrieved document, which is
+    # every reference except the corpus-meta one. The frontend renders the
+    # "open source" affordance off this instead of matching filenames.
+    document_id: UUID | None = None
+    has_file: bool = False
+    resolved: bool = True
 
 
 class NearMiss(BaseModel):
@@ -117,6 +127,10 @@ class SearchResponse(BaseModel):
     confidence: str  # confident | uncertain | refused | clarifying
     sources: list[SourceCitation]
     references: list[StructuredReference] = []
+    # References the model emitted that could not be bound to any document
+    # retrieved for this turn — i.e. a fabricated or unmatchable filename.
+    # They are withheld rather than shown; the count lets the UI say so.
+    unverified_reference_count: int = 0
     llm_used: bool
     served_from: str  # "hitl_cache" | "llm" | "no_documents" | "clarify"
     retrieval_debug: dict | None = None
@@ -584,14 +598,24 @@ async def search_pipeline(
         db.commit()
         db.refresh(query_log)
 
+        # Bind every reference to a document that actually fed this turn. The
+        # model's own title string is discarded in favour of the canonical
+        # filename, and anything that matches no retrieved document is
+        # withheld — see services/reference_resolver.py for the reasoning.
+        resolved_refs, unverified_count = resolve_references(
+            llm_result.references, sources
+        )
         references = [
             StructuredReference(
                 title=r.title,
                 section_number=r.section_number,
                 source_type=r.source_type,
                 excerpt=r.excerpt,
+                document_id=r.document_id,
+                has_file=r.has_file,
+                resolved=r.resolved,
             )
-            for r in llm_result.references
+            for r in resolved_refs
         ]
 
         answer_annotations = [
@@ -608,6 +632,7 @@ async def search_pipeline(
             confidence=llm_result.confidence,
             sources=sources,
             references=references,
+            unverified_reference_count=unverified_count,
             llm_used=True,
             served_from="llm",
             retrieval_debug=debug_dict,

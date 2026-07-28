@@ -99,10 +99,18 @@ export type RetrievalDebug = {
 };
 
 export type StructuredReference = {
+  // Canonical filename from the database. The backend resolves the model's
+  // free-text title to a real document and substitutes the stored filename,
+  // so this always names a document that exists — do not match on it.
   title: string;
   section_number: string;
   source_type: string;
   excerpt: string;
+  // Present for every reference except the corpus-meta one. Drive the
+  // "open source" link off this, never off a filename comparison.
+  document_id?: string | null;
+  has_file?: boolean;
+  resolved?: boolean;
 };
 
 export type NearMiss = {
@@ -142,6 +150,9 @@ export type SearchResponse = {
   confidence: "confident" | "uncertain" | "refused" | "clarifying";
   sources: Source[];
   references: StructuredReference[];
+  // References the model emitted that matched no retrieved document. They
+  // are withheld rather than displayed; this is how many were withheld.
+  unverified_reference_count?: number;
   llm_used: boolean;
   served_from: "hitl_cache" | "llm" | "no_documents" | "clarify";
   retrieval_debug: RetrievalDebug | null;
