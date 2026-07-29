@@ -41,6 +41,14 @@ class Document(Base):
     # until the backfill script fills them in — those keep working, they
     # just can't participate in the dedup check.
     content_sha256: Mapped[str | None] = mapped_column(String(64))
+    # Hash of the *normalized extracted text* (whitespace collapsed, nikud
+    # stripped, punctuation stripped). Lets us catch same-content duplicates
+    # across formats (PDF vs DOCX vs re-scanned PDF) that content_sha256
+    # misses because the raw bytes differ. Nullable for pre-migration rows;
+    # collisions become CorpusFlag(kind='duplicates') rows for reviewer
+    # confirmation — not a hard ingest reject, because near-duplicates are
+    # legitimately common (revised drafts, re-exports).
+    text_sha256: Mapped[str | None] = mapped_column(String(64))
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
     extractor: Mapped[str | None] = mapped_column(String)

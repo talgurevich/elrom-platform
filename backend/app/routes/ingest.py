@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Chunk, Document
+from app.models import Chunk, CorpusFlag, Document
 from app.services.identity import IdentityUser, current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
@@ -21,6 +21,7 @@ from app.services.embedding import embed_texts
 from app.services.hebrew_text import normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
 from app.services.storage import save_original
+from app.services.text_dedup import find_text_duplicate, hash_normalized
 from app.services.upload_dedup import (
     find_by_idempotency_key,
     find_by_sha256,
@@ -113,6 +114,8 @@ def ingest(
             f"Fix the source or pass force=true.",
         )
 
+    text_sha = hash_normalized(req.text)
+
     doc = Document(
         tenant_id=tenant_id,
         filename=req.filename,
@@ -124,6 +127,7 @@ def ingest(
         extraction_partial=req.extraction_partial,
         extraction_note=req.extraction_note,
         content_sha256=content_sha256,
+        text_sha256=text_sha,
     )
     db.add(doc)
     try:
@@ -173,6 +177,45 @@ def ingest(
 
     doc.chunks_created = len(structural_chunks)
     db.commit()
+
+    if text_sha:
+        try:
+            existing_dup = find_text_duplicate(
+                db,
+                tenant_id=tenant_id,
+                text_sha256=text_sha,
+                exclude_doc_id=doc.id,
+            )
+            if existing_dup is not None:
+                db.add(
+                    CorpusFlag(
+                        tenant_id=tenant_id,
+                        new_doc_id=doc.id,
+                        existing_doc_id=existing_dup.id,
+                        kind="duplicates",
+                        topic="duplicate_text_hash",
+                        explanation=(
+                            "טקסט מנורמל זהה למסמך קיים "
+                            f"({existing_dup.filename!r})."
+                        ),
+                        confidence=1.0,
+                        status="pending",
+                        extractor_model="text_sha256_exact",
+                    )
+                )
+                db.commit()
+                log.info(
+                    "ingest.text_hash_duplicate_flagged",
+                    document_id=str(doc.id),
+                    duplicate_of=str(existing_dup.id),
+                )
+        except Exception as e:
+            log.warning(
+                "ingest.text_hash_flag_failed",
+                document_id=str(doc.id),
+                error=str(e)[:200],
+            )
+            db.rollback()
 
     # Auto-classify in the background so cryptic filenames get human Hebrew
     # titles + a summary + doc_type without the user having to click anything.
@@ -321,6 +364,11 @@ async def ingest_upload(
             f"Refusing to ingest {filename}: extraction was partial. {extraction.note}",
         )
 
+    # Cross-format duplicate detection: hash the normalized extracted text.
+    # PDF/DOCX/re-scanned pairs share this hash even though content_sha256
+    # differs. Stored on the doc; collision → CorpusFlag after commit.
+    text_sha = hash_normalized(extraction.text)
+
     doc = Document(
         tenant_id=resolved_tenant,
         filename=filename,
@@ -332,6 +380,7 @@ async def ingest_upload(
         extraction_partial=extraction.partial,
         extraction_note=extraction.note,
         content_sha256=content_sha256,
+        text_sha256=text_sha,
     )
     db.add(doc)
     try:
@@ -400,6 +449,50 @@ async def ingest_upload(
 
     doc.chunks_created = len(structural_chunks)
     db.commit()
+
+    # Cross-format dup flag. Runs after commit so text_sha256 is visible
+    # to concurrent queries and any collision is filed as a soft flag
+    # (reviewer queue), never as a hard reject — near-duplicates like
+    # revised drafts or re-exports are legitimate. Non-fatal on error.
+    if text_sha:
+        try:
+            existing_dup = find_text_duplicate(
+                db,
+                tenant_id=resolved_tenant,
+                text_sha256=text_sha,
+                exclude_doc_id=doc.id,
+            )
+            if existing_dup is not None:
+                db.add(
+                    CorpusFlag(
+                        tenant_id=resolved_tenant,
+                        new_doc_id=doc.id,
+                        existing_doc_id=existing_dup.id,
+                        kind="duplicates",
+                        topic="duplicate_text_hash",
+                        explanation=(
+                            "טקסט מנורמל זהה למסמך קיים "
+                            f"({existing_dup.filename!r}). ייתכנו גרסאות "
+                            "PDF/DOCX של אותו מסמך, סריקה חוזרת, או ייצוא חוזר."
+                        ),
+                        confidence=1.0,
+                        status="pending",
+                        extractor_model="text_sha256_exact",
+                    )
+                )
+                db.commit()
+                log.info(
+                    "ingest.text_hash_duplicate_flagged",
+                    document_id=str(doc.id),
+                    duplicate_of=str(existing_dup.id),
+                )
+        except Exception as e:
+            log.warning(
+                "ingest.text_hash_flag_failed",
+                document_id=str(doc.id),
+                error=str(e)[:200],
+            )
+            db.rollback()
 
     # Auto-classify in the background — see /ingest for rationale.
     if auto_classify:

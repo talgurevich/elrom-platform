@@ -230,6 +230,7 @@ doc_type:
 - אם זה התקנון הראשי הכללי — doc_type = bylaw.
 - אם זה פרוטוקול אסיפה — doc_type = minutes.
 - אם זו החלטה ספציפית — doc_type = decision.
+- אם זה מסמך של תוצאות הצבעה / תוצאות קלפי / סיכום קלפי (כותרות כמו "תוצאות הצבעה בקלפי", "תוצאות קלפי", "סיכום הצבעה") — doc_type = decision, forum = ballot, doc_status = adopted. תוצאות הצבעה בקלפי הן החלטה מחייבת שהתקבלה על ידי חברי הקיבוץ.
 - אחרת — other.
 
 forum (מי הפיק את המסמך — קובע את דירוגו בשרשרת קבלת ההחלטות):
@@ -951,6 +952,15 @@ class DuplicateGroup(BaseModel):
     docs: list[DuplicateGroupDoc]
 
 
+class TextDuplicateGroup(BaseModel):
+    """Same shape as DuplicateGroup but grouped on the normalized-text hash
+    (documents.text_sha256), which catches PDF/DOCX pairs and re-scans that
+    content_sha256 misses. See services/text_dedup.py."""
+    text_sha256: str
+    count: int
+    docs: list[DuplicateGroupDoc]
+
+
 @router.get("/duplicates/by-hash", response_model=list[DuplicateGroup])
 def list_duplicates_by_hash(
     db: Session = Depends(get_db),
@@ -1022,6 +1032,91 @@ def list_duplicates_by_hash(
     return [
         DuplicateGroup(
             content_sha256=h,
+            count=len(rows),
+            docs=[
+                DuplicateGroupDoc(
+                    id=r.id,
+                    filename=r.filename,
+                    ingested_at=r.ingested_at.isoformat() if r.ingested_at else "",
+                    chunks_created=r.chunks_created,
+                    folder=r.folder,
+                    doc_type=r.doc_type,
+                    authoritative_ref_count=ref_counts.get(r.id, 0),
+                )
+                for r in rows
+            ],
+        )
+        for h, rows in sorted(grouped.items(), key=lambda kv: -len(kv[1]))
+    ]
+
+
+@router.get("/duplicates/by-text", response_model=list[TextDuplicateGroup])
+def list_duplicates_by_text(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> list[TextDuplicateGroup]:
+    """Group documents by (tenant_id, text_sha256) where count > 1.
+
+    Catches cross-format duplicates (PDF vs DOCX of the same document,
+    re-scans, re-exports) that content_sha256 misses because the raw
+    bytes differ. Docs without text_sha256 (pre-migration-0022 rows that
+    haven't been backfilled yet) are excluded — run
+    scripts/backfill_text_hash.py to populate them."""
+    from sqlalchemy import func as sa_func
+
+    tenant_id = user.tenant_id
+
+    dupe_hashes = (
+        db.query(Document.text_sha256, sa_func.count(Document.id))
+        .filter(Document.tenant_id == tenant_id)
+        .filter(Document.text_sha256.isnot(None))
+        .group_by(Document.text_sha256)
+        .having(sa_func.count(Document.id) > 1)
+        .all()
+    )
+    if not dupe_hashes:
+        return []
+
+    hashes = [h for (h, _) in dupe_hashes]
+    docs = (
+        db.query(Document)
+        .filter(Document.tenant_id == tenant_id)
+        .filter(Document.text_sha256.in_(hashes))
+        .order_by(Document.text_sha256, Document.ingested_at.asc())
+        .all()
+    )
+
+    from sqlalchemy import text as sa_text
+
+    doc_ids = [d.id for d in docs]
+    ref_counts: dict[UUID, int] = {}
+    if doc_ids:
+        rows = db.execute(
+            sa_text(
+                """
+                SELECT c.document_id, COUNT(DISTINCT aa.id) AS n
+                FROM authoritative_answers aa
+                CROSS JOIN LATERAL unnest(aa.source_chunk_ids) AS chunk_id
+                JOIN chunks c ON c.id = chunk_id
+                WHERE aa.tenant_id = :tid
+                  AND c.document_id = ANY(:doc_ids)
+                GROUP BY c.document_id
+                """
+            ),
+            {"tid": str(tenant_id), "doc_ids": [str(d) for d in doc_ids]},
+        ).all()
+        ref_counts = {r[0]: r[1] for r in rows}
+
+    from collections import defaultdict
+
+    grouped: dict[str, list[Document]] = defaultdict(list)
+    for d in docs:
+        if d.text_sha256:
+            grouped[d.text_sha256].append(d)
+
+    return [
+        TextDuplicateGroup(
+            text_sha256=h,
             count=len(rows),
             docs=[
                 DuplicateGroupDoc(

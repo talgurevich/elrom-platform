@@ -2,6 +2,9 @@
 
 Returns (text, used_ocr) so the caller can flag OCR-derived documents.
 """
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,7 +14,12 @@ from app.services import ocr as ocr_service
 
 log = structlog.get_logger()
 
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".docx", ".pdf"}
+# `.doc` is supported via LibreOffice headless conversion → `.docx`, then
+# the normal docx path. Requires libreoffice-core + libreoffice-writer to
+# be installed on the host (see render.yaml buildCommand). If soffice is
+# missing at runtime, .doc uploads return a clear ExtractionResult with a
+# note instead of crashing.
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".doc", ".docx", ".pdf"}
 
 
 @dataclass
@@ -60,6 +68,37 @@ def extract_text(path: Path, prefer_ocr: bool = False) -> ExtractionResult:
 
     if suffix == ".docx":
         return ExtractionResult(text=_extract_docx(path), used_ocr=False, extractor="docx")
+
+    if suffix == ".doc":
+        # Legacy binary Word format. python-docx can't read it; we shell out
+        # to LibreOffice headless to convert to .docx, then reuse the docx
+        # path. The alternative Python-only libs (antiword, olefile) handle
+        # Hebrew poorly; LibreOffice's docx exporter is the same one Office
+        # itself uses via the "Save As" round-trip.
+        converted = _convert_doc_to_docx(path)
+        if converted is None:
+            return ExtractionResult(
+                text="",
+                used_ocr=False,
+                extractor="doc_unconvertible",
+                note=(
+                    "קובץ .doc — נדרשת LibreOffice להמרה ל-.docx, אך היא לא "
+                    "מותקנת בשרת. שמור את הקובץ מחדש כ-.docx ונסה שוב."
+                ),
+            )
+        try:
+            return ExtractionResult(
+                text=_extract_docx(converted),
+                used_ocr=False,
+                extractor="doc_via_libreoffice",
+            )
+        finally:
+            try:
+                converted.unlink()
+                # soffice writes into a temp dir; clean the whole dir too.
+                converted.parent.rmdir()
+            except OSError:
+                pass
 
     if suffix == ".pdf":
         page_count = _pdf_page_count(path)
@@ -115,6 +154,64 @@ def extract_text(path: Path, prefer_ocr: bool = False) -> ExtractionResult:
         extractor="unsupported",
         note=f"Unsupported file type: {suffix}",
     )
+
+
+def _convert_doc_to_docx(path: Path) -> Path | None:
+    """Convert a legacy .doc file to .docx via LibreOffice headless.
+
+    Returns the path to the produced .docx (inside a fresh temp dir the
+    caller must delete), or None if soffice isn't installed or the
+    conversion failed. Bounded 60s timeout — a stuck soffice would
+    otherwise wedge the ingest request until Render's healthcheck kills
+    the worker.
+    """
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        log.warning("extraction.doc_soffice_missing", path=str(path))
+        return None
+    outdir = Path(tempfile.mkdtemp(prefix="doc2docx_"))
+    try:
+        result = subprocess.run(
+            [
+                soffice,
+                "--headless",
+                "--convert-to", "docx",
+                "--outdir", str(outdir),
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        log.warning("extraction.doc_conversion_timeout", path=str(path))
+        try:
+            outdir.rmdir()
+        except OSError:
+            pass
+        return None
+    if result.returncode != 0:
+        log.warning(
+            "extraction.doc_conversion_failed",
+            path=str(path),
+            stderr=(result.stderr or "")[:300],
+        )
+        try:
+            outdir.rmdir()
+        except OSError:
+            pass
+        return None
+    # LibreOffice writes <stem>.docx into outdir regardless of input name.
+    produced = outdir / f"{path.stem}.docx"
+    if not produced.exists():
+        # Fallback: pick the first .docx it wrote (some builds mangle stems
+        # containing non-ASCII characters).
+        candidates = list(outdir.glob("*.docx"))
+        if not candidates:
+            return None
+        produced = candidates[0]
+    return produced
 
 
 def _extract_docx(path: Path) -> str:
