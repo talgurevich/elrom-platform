@@ -31,11 +31,13 @@ from app.routes.documents import ALLOWED_DOC_STATUS, doc_status_from_filename
 MINI_PROMPT = """סווג את מעמד המסמך (עד כמה הוא מחייב) לפי הכללים:
 - proposal — הצעה שהוגשה לדיון/אישור וטרם אושרה ("הצעה ל...", "מוגש לאישור").
 - draft — טיוטה בעבודה ("טיוטה", גרסה לא סופית).
-- discussion — סיכום דיון או מסמך רקע בלי הכרעה אופרטיבית.
-- adopted — מסמך מחייב: תקנון מאושר, החלטה שהתקבלה, פרוטוקול חתום, נוהל בתוקף, תוצאות קלפי. ברירת המחדל כשאין סימני הצעה/טיוטה.
-שם קובץ שמתחיל ב"הצעה" הוא כמעט תמיד proposal. אם המסמך מכיל גם את ההחלטה שאישרה את ההצעה — adopted.
+- discussion — סיכום דיון בתהליך קבלת החלטות, בלי הכרעה אופרטיבית.
+- background — מסמך מידע/רקע: דוח (כספי, ביקורת, אקטוארי), סקירה, נייר עמדה, מצגת, נתונים, חוות דעת. מיידע — לא קובע כלל ולא מציע כלל.
+- invitation — הזמנה/זימון לישיבה, אסיפה או קלפי, כולל סדר יום. מעיד על מה שעמד על סדר היום, לא על מה שהוחלט.
+- adopted — מסמך מחייב: תקנון מאושר, החלטה שהתקבלה, פרוטוקול חתום, נוהל בתוקף, תוצאות קלפי. ברירת המחדל כשאין סימני הצעה/טיוטה/רקע/הזמנה.
+שם קובץ שמתחיל ב"הצעה" הוא כמעט תמיד proposal. אם המסמך קובע כללים/זכויות/חובות — adopted; אם הוא רק מדווח או מציג מידע — background, גם אם רשמי וחתום.
 
-החזר JSON בלבד: {"doc_status": "proposal|draft|discussion|adopted"}"""
+החזר JSON בלבד: {"doc_status": "proposal|draft|discussion|background|invitation|adopted"}"""
 
 
 def _classify_llm(client, *, filename: str, summary: str | None, body: str) -> str | None:
@@ -68,6 +70,16 @@ def _classify_llm(client, *, filename: str, summary: str | None, body: str) -> s
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Heuristics-only report, no LLM, no writes")
+    parser.add_argument(
+        "--reclassify-adopted",
+        action="store_true",
+        help=(
+            "Re-run the classifier over docs currently marked 'adopted' and "
+            "apply ONLY adopted→background / adopted→invitation flips (used "
+            "when new status values are introduced; never demotes a rule to "
+            "proposal/draft)."
+        ),
+    )
     args = parser.parse_args()
 
     from anthropic import Anthropic
@@ -76,9 +88,21 @@ def main() -> int:
 
     db: Session = SessionLocal()
     try:
-        docs = db.query(Document).filter(Document.doc_status.is_(None)).order_by(Document.ingested_at).all()
-        print(f"{len(docs)} docs without doc_status")
-        counts = {"proposal": 0, "draft": 0, "discussion": 0, "adopted": 0, "unclassified": 0}
+        if args.reclassify_adopted:
+            docs = (
+                db.query(Document)
+                .filter(Document.doc_status == "adopted")
+                .order_by(Document.ingested_at)
+                .all()
+            )
+            print(f"{len(docs)} adopted docs to re-evaluate")
+        else:
+            docs = db.query(Document).filter(Document.doc_status.is_(None)).order_by(Document.ingested_at).all()
+            print(f"{len(docs)} docs without doc_status")
+        counts = {
+            "proposal": 0, "draft": 0, "discussion": 0, "background": 0,
+            "invitation": 0, "adopted": 0, "unclassified": 0,
+        }
         for i, doc in enumerate(docs, 1):
             status = doc_status_from_filename(doc.filename)
             via = "filename"
@@ -99,6 +123,10 @@ def main() -> int:
                 except Exception as e:
                     print(f"  [{i}/{len(docs)}] ERROR {doc.filename[:50]}  {str(e)[:100]}")
                     continue
+            if args.reclassify_adopted and status not in ("background", "invitation"):
+                # Conservative gate: only informational flips apply here;
+                # anything else keeps its adopted status.
+                status = None
             counts[status or "unclassified"] += 1
             if status and not args.dry_run:
                 doc.doc_status = status

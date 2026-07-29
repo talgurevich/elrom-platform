@@ -215,7 +215,7 @@ _CLASSIFY_SYSTEM_BASE = """אתה מסווג מסמכים של קיבוץ אל-�
   "title": "כותרת קצרה בעברית, 3-8 מילים, שמתארת את התוכן (למשל: 'תקנון שיוך דירות', 'פרוטוקול אסיפה 23.11.2022', 'החלטה על נוהל הקדמה לקומה שנייה')",
   "doc_type": "אחד מ: bylaw, sub_bylaw, minutes, decision, other",
   "forum": "הגוף שבו הופק המסמך. אחד מ: assembly, committee, ballot, sub_committee, external_law, external_ruling, contract, legal_opinion, report, notice, procedure, budget, agreement_internal, other. ראה כללים למטה.",
-  "doc_status": "מעמד המסמך במחזור החיים. אחד מ: proposal, draft, discussion, adopted. ראה כללים למטה.",
+  "doc_status": "מעמד המסמך במחזור החיים. אחד מ: proposal, draft, discussion, background, invitation, adopted. ראה כללים למטה.",
   "summary": "משפט אחד עד שניים על מה המסמך, בעברית",
   "document_date": "התאריך המופיע על המסמך (תאריך חתימה / הדפסה / כתיבה), פורמט ISO YYYY-MM-DD. null אם לא מופיע.",
   "effective_date": "תאריך תוקף של המסמך (מתי הוא נכנס לתוקף / קיבל אישור). לרוב שווה ל-document_date עבור החלטות ופרוטוקולים. פורמט YYYY-MM-DD. null אם לא ניתן להסיק.",
@@ -251,8 +251,11 @@ forum (מי הפיק את המסמך — קובע את דירוגו בשרשרת
 doc_status (עד כמה המסמך מחייב — ציר נפרד מ-doc_type ומ-forum):
 - proposal — הצעה שהוגשה לדיון/אישור וטרם אושרה. סימנים: "הצעה ל...", "הצעת...", "מוגש לאישור", "להצבעה".
 - draft — טיוטה בעבודה. סימנים: "טיוטה", "טיוטת", "גרסה לא סופית", סימוני עריכה.
-- discussion — סיכום דיון או מסמך רקע בלי הכרעה אופרטיבית. סימנים: "סיכום דיון", "לקראת דיון", "נייר עמדה".
-- adopted — המסמך המחייב: תקנון מאושר, החלטה שהתקבלה, פרוטוקול חתום, נוהל בתוקף, תוצאות קלפי. זו ברירת המחדל למסמך שאין בו סימני הצעה/טיוטה.
+- discussion — סיכום דיון בתהליך קבלת החלטות, בלי הכרעה אופרטיבית. סימנים: "סיכום דיון", "לקראת דיון".
+- background — מסמך מידע/רקע: דוח (כספי, ביקורת, אקטוארי), סקירה, נייר עמדה, מצגת מידע, נתונים, חוות דעת. מטרתו ליידע — הוא לא קובע כלל ולא מציע כלל, ולעולם לא יהיה "מאושר" כי אין בו נורמה לאשר.
+- invitation — הזמנה או זימון לישיבה/אסיפה/קלפי, כולל סדר יום מצורף. סימנים: "הזמנה ל", "זימון ל", "סדר יום", "אסיפה שתתקיים ב". מעיד על מה שעמד על סדר היום — לא על מה שהוחלט.
+- adopted — המסמך המחייב: תקנון מאושר, החלטה שהתקבלה, פרוטוקול חתום, נוהל בתוקף, תוצאות קלפי. זו ברירת המחדל למסמך שאין בו סימני הצעה/טיוטה/רקע/הזמנה.
+🚨 ההבחנה adopted מול background: אם המסמך קובע כללים, זכויות או חובות — adopted. אם הוא רק מדווח, מסכם נתונים או מציג מידע — background, גם אם הוא רשמי וחתום.
 🚨 שם הקובץ הוא רמז חזק: קובץ ששמו מתחיל ב"הצעה" הוא כמעט תמיד proposal גם אם גוף המסמך מנוסח כנוהל מוגמר. אם המסמך מכיל את ההצעה וגם את ההחלטה שאישרה אותה — adopted.
 
 תאריכים עבריים (למשל "כ״ב בחשוון תשפ״ג") — המר לגרגוריאני אם ברור, אחרת null.
@@ -261,7 +264,7 @@ JSON בלבד, ללא הסברים, ללא ```fences."""
 
 
 # Valid doc_status values — anything else from the classifier is dropped.
-ALLOWED_DOC_STATUS = {"proposal", "draft", "discussion", "adopted"}
+ALLOWED_DOC_STATUS = {"proposal", "draft", "discussion", "background", "invitation", "adopted"}
 
 
 def doc_status_from_filename(name: str | None) -> str | None:
@@ -274,8 +277,12 @@ def doc_status_from_filename(name: str | None) -> str | None:
         return "proposal"
     if "טיוט" in n[:20]:
         return "draft"
-    if n.startswith(("סיכום דיון", "לקראת דיון", "נייר עמדה")):
+    if n.startswith(("סיכום דיון", "לקראת דיון")):
         return "discussion"
+    if n.startswith(("דוח", 'דו"ח', "סקירה", "נייר עמדה", "מצגת")):
+        return "background"
+    if n.startswith(("הזמנה", "זימון", "סדר יום")):
+        return "invitation"
     return None
 
 

@@ -30,6 +30,8 @@ const DOC_STATUS_LABELS: Record<string, string> = {
   proposal: "הצעה",
   draft: "טיוטה",
   discussion: "דיון",
+  background: "רקע",
+  invitation: "הזמנה",
 };
 
 const DOC_STATUS_STYLES: Record<string, string> = {
@@ -37,6 +39,8 @@ const DOC_STATUS_STYLES: Record<string, string> = {
   proposal: "text-amber-900 bg-amber-100 border-amber-300",
   draft: "text-slate-700 bg-slate-100 border-slate-300",
   discussion: "text-sky-900 bg-sky-100 border-sky-300",
+  background: "text-violet-900 bg-violet-100 border-violet-300",
+  invitation: "text-teal-900 bg-teal-100 border-teal-300",
 };
 
 type FileStatus =

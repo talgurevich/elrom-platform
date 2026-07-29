@@ -103,12 +103,21 @@ _STATUS_DEMOTION = {
     "proposal": -0.006,
     "draft": -0.006,
     "discussion": -0.003,
+    # Background reports/reviews are legitimate answers to informational
+    # questions ("כמה עלה X?"), so the demotion is mild — they only need
+    # to lose same-topic ties against the adopted rule.
+    "background": -0.003,
+    # Invitations carry agenda text that matches decision-topic queries
+    # strongly but answers nothing — demote harder.
+    "invitation": -0.006,
 }
 
 _STATUS_HE = {
     "proposal": "הצעה",
     "draft": "טיוטה",
     "discussion": "דיון",
+    "background": "רקע",
+    "invitation": "הזמנה",
     "adopted": "בתוקף",
 }
 
