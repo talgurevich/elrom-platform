@@ -510,16 +510,17 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
 
 def classify_document_by_id_bg(document_id: UUID) -> None:
     """Background-task entrypoint: opens its own DB session so it survives the
-    request lifecycle, then classifies the document and — as a chained step —
-    extracts any amendment edges to prior docs.
+    request lifecycle, then classifies the document and runs the chained
+    governance passes (decision chains + reconciliation).
 
-    Amendment extraction runs *after* classification so it sees the human
-    Hebrew title + doc_type, which materially help the extractor recognise
-    "this is a תקנון משנה that amends the main בבנון". If classification
-    fails, we still attempt extraction against whatever state the doc is in.
+    Amendment extraction was removed 2026-07-29 — the "שרשראות וסתירות"
+    reviewer surface (CorpusFlag + DecisionResolution) subsumes what the
+    amendment graph did, with more coverage and less false-positive noise.
+    Existing amendment rows and chunks.superseded_by_amendment_id filters
+    are still honoured at retrieval so prior human approvals don't silently
+    un-supersede.
     """
     from app.db import SessionLocal
-    from app.services.amendment_extractor import extract_amendments
 
     db: Session = SessionLocal()
     try:
@@ -534,24 +535,6 @@ def classify_document_by_id_bg(document_id: UUID) -> None:
             **{k: v for k, v in result.items() if k != "status"},
             status=result["status"],
         )
-        # Chained amendment extraction — same background task, so it never
-        # gets exposed as a separate button. Re-fetch the doc because
-        # classify_one_document commits and may have mutated fields.
-        doc = db.get(Document, document_id)
-        if doc is not None:
-            try:
-                extract_result = extract_amendments(db, doc)
-                log.info(
-                    "documents.extract_bg.done",
-                    document_id=str(document_id),
-                    **extract_result,
-                )
-            except Exception as e:
-                log.error(
-                    "documents.extract_bg.crashed",
-                    document_id=str(document_id),
-                    err=str(e)[:300],
-                )
 
         # Chained decision-chain + reconciliation passes. Both need the
         # classifier's forum/doc_type/effective_date, hence the ordering.

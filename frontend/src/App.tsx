@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Admin from "./pages/Admin";
-import Amendments from "./pages/Amendments";
 import Analytics from "./pages/Analytics";
 import Authoritative from "./pages/Authoritative";
 import Eval from "./pages/Eval";
@@ -25,7 +24,6 @@ type Tab =
   | "authoritative"
   | "lexicon"
   | "folders"
-  | "amendments"
   | "governance"
   | "eval"
   | "analytics"
@@ -71,12 +69,6 @@ const Icon = {
       <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
     </svg>
   ),
-  amendments: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 1 0-5.66-5.66l-1.5 1.5" />
-      <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5" />
-    </svg>
-  ),
   governance: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 4v16" />
@@ -117,7 +109,6 @@ const ALL_TABS: TabDef[] = [
   { id: "authoritative", label: "תשובות מאושרות" },
   { id: "lexicon", label: "מילון" },
   { id: "folders", label: "תיקיות" },
-  { id: "amendments", label: "תיקונים" },
   { id: "governance", label: "שרשראות וסתירות" },
   { id: "review", label: "תור בדיקה", superOnly: true },
   { id: "eval", label: "הערכה", superOnly: true },
@@ -590,7 +581,6 @@ export default function App() {
           {tab === "authoritative" && <Authoritative />}
           {tab === "lexicon" && <Lexicon />}
           {tab === "folders" && <Folders />}
-          {tab === "amendments" && <Amendments />}
           {tab === "governance" && <Governance />}
           {tab === "eval" && <Eval onRunInChat={() => setTab("search")} />}
           {tab === "analytics" && <Analytics tenants={tenants} />}
