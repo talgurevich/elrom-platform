@@ -1,10 +1,26 @@
 import { useEffect, useState } from "react";
 import {
   api,
+  documentFileUrl,
   type CorpusFlagItem,
   type DecisionResolutionItem,
   type GapItem,
 } from "../lib/api";
+
+function DocLink({ docId }: { docId: string }) {
+  return (
+    <a
+      href={documentFileUrl(docId)}
+      target="_blank"
+      rel="noreferrer noopener"
+      onClick={(e) => e.stopPropagation()}
+      className="ml-2 text-[10px] tracking-[0.2em] uppercase font-bold text-accent border border-accent px-1.5 py-0.5 hover:bg-accent hover:text-surface transition"
+      title="פתח את קובץ המקור בכרטיסייה חדשה"
+    >
+      פתח מקור ↗
+    </a>
+  );
+}
 
 type Section = "resolutions" | "flags" | "gaps";
 
@@ -172,10 +188,12 @@ export default function Governance() {
                         <span className="text-ink-soft">הועבר מ:</span>{" "}
                         {it.escalation_doc_filename}
                         {it.escalation_section ? ` (${it.escalation_section})` : ""}
+                        <DocLink docId={it.escalation_doc_id} />
                       </div>
                       <div className="text-sm text-ink mt-1">
                         <span className="text-ink-soft">הוכרע ב:</span>{" "}
                         {forumLabel(it.terminal_forum)} · {it.terminal_doc_filename}
+                        <DocLink docId={it.terminal_doc_id} />
                       </div>
                       <div className="text-xs text-ink-soft mt-2">
                         נוצר {new Date(it.created_at).toLocaleString("he-IL")} · מודל ביטחון{" "}
@@ -291,11 +309,13 @@ export default function Governance() {
                       <div className="text-sm text-ink">
                         <span className="text-ink-soft">מסמך חדש:</span> {f.new_doc_filename}
                         {f.new_section ? ` (${f.new_section})` : ""}
+                        <DocLink docId={f.new_doc_id} />
                       </div>
                       <div className="text-sm text-ink mt-1">
                         <span className="text-ink-soft">מול קיים:</span>{" "}
                         {f.existing_doc_filename}
                         {f.existing_section ? ` (${f.existing_section})` : ""}
+                        <DocLink docId={f.existing_doc_id} />
                       </div>
                       <div className="text-xs text-ink-soft mt-2">
                         נוצר {new Date(f.created_at).toLocaleString("he-IL")} · מודל ביטחון{" "}
@@ -405,6 +425,7 @@ export default function Governance() {
                     <div className="text-sm text-ink font-semibold">
                       {g.doc_filename}
                       {g.section_path ? ` · ${g.section_path}` : ""}
+                      <DocLink docId={g.doc_id} />
                     </div>
                     <div className="text-xs text-ink-soft mt-1">
                       {forumLabel(g.forum)}
