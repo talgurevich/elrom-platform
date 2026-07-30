@@ -1,6 +1,7 @@
 """Document management endpoints — list, delete, and AI-classify."""
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from uuid import UUID
 
@@ -18,6 +19,14 @@ from app.services.identity import IdentityUser, current_user
 from app.services.storage import guess_content_type, resolve_stored_file
 
 log = structlog.get_logger()
+
+# Post-upload enrichment runs here, off both the request path and Starlette's
+# threadpool. Keep well under the DB pool (10 + 20 overflow) so a bulk ingest
+# can never starve upload requests of connections.
+_CLASSIFY_WORKERS = 3
+_classify_pool = ThreadPoolExecutor(
+    max_workers=_CLASSIFY_WORKERS, thread_name_prefix="classify"
+)
 router = APIRouter()
 
 
@@ -509,9 +518,24 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
 
 
 def classify_document_by_id_bg(document_id: UUID) -> None:
-    """Background-task entrypoint: opens its own DB session so it survives the
-    request lifecycle, then classifies the document and runs the chained
-    governance passes (decision chains + reconciliation).
+    """Background-task entrypoint. Hands the work to a small dedicated pool
+    and returns immediately.
+
+    A bulk ingest queues one of these per file. Each run holds a DB
+    connection for minutes (Claude classify + chains + reconciliation), so
+    running them unbounded exhausted the connection pool and starved the
+    upload requests themselves. Bounding to `_CLASSIFY_WORKERS` caps how
+    many connections post-upload work can ever hold. Submitting to our own
+    pool (rather than blocking here) also keeps Starlette's threadpool free,
+    since this function runs on one of its threads.
+    """
+    _classify_pool.submit(_classify_document_by_id, document_id)
+
+
+def _classify_document_by_id(document_id: UUID) -> None:
+    """Opens its own DB session so it survives the request lifecycle, then
+    classifies the document and runs the chained governance passes
+    (decision chains + reconciliation).
 
     Amendment extraction was removed 2026-07-29 — the "שרשראות וסתירות"
     reviewer surface (CorpusFlag + DecisionResolution) subsumes what the
