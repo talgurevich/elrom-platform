@@ -12,8 +12,9 @@ middleware into the SDK's `current_user` dep — see
 `app.services.identity._is_allowed_in_switch_mode`.
 """
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.routes import (
@@ -38,6 +39,22 @@ app = FastAPI(
     description="Kibbutz bylaws & decisions search — Takanon backend",
     version="0.4.0",
 )
+
+# Registered BEFORE CORSMiddleware so it ends up *inside* it: Starlette's
+# own 500 handler sits outside the user middleware stack, so an unhandled
+# exception returns a response with no Access-Control-Allow-Origin and the
+# browser reports every server error as an opaque "Failed to fetch".
+@app.middleware("http")
+async def unhandled_errors_as_json(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        log.exception("unhandled_error", path=request.url.path, method=request.method)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"{type(exc).__name__}: {str(exc)[:500]}"},
+        )
+
 
 _origins = [o.strip() for o in settings.frontend_url.split(",") if o.strip()]
 app.add_middleware(
