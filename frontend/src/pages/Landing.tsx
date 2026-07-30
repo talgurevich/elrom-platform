@@ -134,405 +134,439 @@ export default function Landing({ onLogin }: Props) {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-ink">
-        <BackgroundMesh />
-        <div className="relative max-w-6xl mx-auto px-6 py-24 md:py-32 grid md:grid-cols-12 gap-10 items-center">
-          <div className="md:col-span-8">
-            <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-4">
-              קלסר · הפלטפורמה שהופכת מסמכים לזיכרון פעיל
-            </div>
-            <h1 className="font-display font-black leading-[0.95] text-5xl md:text-7xl text-ink">
-              קלסר.
-              <br />
-              הזיכרון של הארגון,
-              <br />
-              <span className="text-accent">במרחק שאלה.</span>
-            </h1>
-            <p className="mt-6 text-lg md:text-xl text-ink-soft max-w-2xl leading-relaxed">
-              קלסר בונה כלים עבור ארגונים בהם יש ידע רב של שנים רבות, מבוסס
-              מסמכים — תקנונים, פרוטוקולים, נהלים ותקדימים. במקום לחפש שעות
-              בקבצים, שואלים שאלה ומקבלים תשובה מבוססת מקור.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center gap-4">
-              <button
-                onClick={onLogin}
-                className="bg-accent text-surface px-8 py-4 text-base font-bold hover:bg-accent-dark transition-colors shadow-lift"
+      <main>
+        {/* Hero */}
+        <section
+          className="relative overflow-hidden border-b border-ink"
+          aria-labelledby="hero-title"
+        >
+          <BackgroundMesh />
+          <div className="relative max-w-6xl mx-auto px-6 py-24 md:py-32 grid md:grid-cols-12 gap-10 items-center">
+            <div className="md:col-span-8">
+              <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-4">
+                קלסר · הפלטפורמה שהופכת מסמכים לזיכרון פעיל
+              </div>
+              <h1
+                id="hero-title"
+                className="font-display font-black leading-[0.95] text-5xl md:text-7xl text-ink"
               >
-                כניסה למערכת ←
-              </button>
-              <button
-                onClick={() => scrollTo("products")}
-                className="border-2 border-ink text-ink px-8 py-4 text-base font-bold hover:bg-ink hover:text-surface transition-colors"
-              >
-                למה זה טוב לי?
-              </button>
-            </div>
-            <div className="mt-8 flex flex-wrap items-center gap-6 text-xs text-ink-soft">
-              <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-accent inline-block" />
-                תשובות עם ציטוטים מהמקור
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-accent inline-block" />
-                עברית מלאה · RTL
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-accent inline-block" />
-                מותאם לקיבוצים, מושבים וארגונים
-              </span>
-            </div>
-          </div>
-
-          <div className="md:col-span-4 hidden md:block">
-            <div className="border-2 border-ink bg-surface p-6 shadow-lift">
-              <div className="flex items-baseline justify-between mb-5">
-                <div className="font-display font-black text-2xl text-ink tracking-tight leading-none">
-                  דוגמה חיה
-                </div>
-                <span className="flex items-center gap-1.5" aria-hidden>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
-                  </span>
-                  <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold">
-                    Live
-                  </span>
-                </span>
-              </div>
-
-              {/* Fixed-height wrapper so cycling samples of different length
-                  don't jerk the layout around. */}
-              <div className="relative min-h-[240px]">
-                <div key={activeSample} className="animate-fade-up">
-                  <div className="border-r-2 border-accent pr-3 mb-4">
-                    <div className="text-xs text-ink-soft mb-1">שאלה:</div>
-                    <div className="text-sm font-semibold text-ink leading-snug">
-                      {HERO_SAMPLES[activeSample].question}
-                    </div>
-                  </div>
-                  <div className="border border-line p-3">
-                    <div className="text-xs text-ink-soft mb-1">תשובה מהמקור:</div>
-                    <div className="text-sm text-ink leading-relaxed">
-                      {HERO_SAMPLES[activeSample].answer}
-                    </div>
-                    <div className="mt-3 text-[10px] tracking-widest uppercase text-accent font-bold">
-                      מקור: {HERO_SAMPLES[activeSample].source}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-line flex items-center justify-center gap-2">
-                {HERO_SAMPLES.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveSample(i)}
-                    aria-label={`דוגמה ${i + 1}`}
-                    className={`h-1.5 transition-all ${
-                      i === activeSample
-                        ? "w-8 bg-accent"
-                        : "w-3 bg-line-strong hover:bg-ink-soft"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Benefits */}
-      <section id="benefits" className="border-b border-ink">
-        <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
-          <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
-            למה קלסר?
-          </div>
-          <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight max-w-3xl">
-            יעיל יותר. נוח יותר. מדויק יותר.
-          </h2>
-          <p className="mt-8 text-lg md:text-xl text-ink-soft leading-relaxed max-w-3xl">
-            <strong className="text-ink font-bold">קלסר:</strong> פלטפורמה חכמה
-            לניהול הקהילה והאגודה, המשלבת בינה מלאכותית, מגבירה שקיפות ומשמרת
-            את הזיכרון הארגוני שלכם.
-          </p>
-        </div>
-      </section>
-
-      {/* Products */}
-      <section id="products" className="border-b border-ink bg-line/20">
-        <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
-          <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
-            המוצרים שלנו
-          </div>
-          <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight max-w-3xl">
-            כלים ממוקדים. לא עוד פלטפורמה גנרית.
-          </h2>
-
-          <div className="mt-14 space-y-6">
-            {/* Featured product — Takanon */}
-            <div className="border-2 border-ink bg-surface p-10 relative">
-              <span className="absolute top-6 left-6 text-[10px] tracking-[0.25em] uppercase text-surface bg-accent px-2 py-1 font-bold">
-                מוצר דגל
-              </span>
-              <h3 className="font-display font-black text-4xl md:text-5xl text-ink">
-                תקנון
-              </h3>
-              <p className="mt-4 text-base text-ink-soft leading-relaxed max-w-xl">
-                שיחה חכמה עם מסמכי הארגון.{" "}
-                <strong className="text-ink font-bold">תקנון</strong> סורק ומבין
-                את מסמכי הקיבוץ ומחזיר תשובות מדויקות עם ציטוט מהמקור.
+                תקנונים ופרוטוקולים
+                <br />
+                לקיבוצים ומושבים,
+                <br />
+                <span className="text-accent">במרחק שאלה.</span>
+              </h1>
+              <p className="mt-6 text-lg md:text-xl text-ink-soft max-w-2xl leading-relaxed">
+                קלסר בונה כלים עבור ארגונים בהם יש ידע רב של שנים רבות, מבוסס
+                מסמכים — תקנונים, פרוטוקולים, נהלים ותקדימים. במקום לחפש שעות
+                בקבצים, שואלים שאלה ומקבלים תשובה מבוססת מקור.
               </p>
-              <div className="mt-10 grid md:grid-cols-3 gap-px bg-ink border border-ink">
-                {BENEFITS.map((b) => (
-                  <div key={b.title} className="bg-surface p-8">
-                    <div className="text-4xl font-display font-black text-accent leading-none">
-                      {b.num}
-                    </div>
-                    <h4 className="mt-4 font-display font-black text-xl text-ink">
-                      {b.title}
-                    </h4>
-                    <p className="mt-3 text-sm text-ink-soft leading-relaxed">
-                      {b.body}
-                    </p>
-                  </div>
-                ))}
+              <div className="mt-10 flex flex-wrap items-center gap-4">
+                <button
+                  onClick={onLogin}
+                  className="bg-accent text-surface px-8 py-4 text-base font-bold hover:bg-accent-dark transition-colors shadow-lift"
+                >
+                  כניסה למערכת ←
+                </button>
+                <button
+                  onClick={() => scrollTo("products")}
+                  className="border-2 border-ink text-ink px-8 py-4 text-base font-bold hover:bg-ink hover:text-surface transition-colors"
+                >
+                  למה זה טוב לי?
+                </button>
               </div>
-              <button
-                onClick={onLogin}
-                className="mt-10 bg-ink text-surface px-6 py-3 text-sm font-bold hover:bg-accent transition-colors"
-              >
-                כניסה לתקנון ←
-              </button>
-            </div>
-
-            {/* Featured product — Ogdan */}
-            <div className="border-2 border-ink bg-surface p-10 relative">
-              <span className="absolute top-6 left-6 text-[10px] tracking-[0.25em] uppercase text-surface bg-accent px-2 py-1 font-bold">
-                מוצר דגל
-              </span>
-              <h3 className="font-display font-black text-4xl md:text-5xl text-ink">
-                &quot;אוגדן&quot; ניהול אגודה
-              </h3>
-              <div className="mt-10 grid md:grid-cols-2 gap-px bg-ink border border-ink">
-                {OGDAN_FEATURES.map((f) => (
-                  <div key={f.title} className="bg-surface p-8">
-                    <h4 className="font-display font-black text-xl text-ink">
-                      {f.title}
-                    </h4>
-                    <p className="mt-3 text-sm text-ink-soft leading-relaxed">
-                      {f.body}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* About */}
-      <section id="about" className="border-b border-ink">
-        <div className="max-w-6xl mx-auto px-6 py-20 md:py-28 grid md:grid-cols-12 gap-10">
-          <div className="md:col-span-5">
-            <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
-              עלינו
-            </div>
-            <h2 className="font-display font-black text-4xl md:text-5xl text-ink leading-tight">
-              חיים בקיבוץ, מכירים את הצרכים, יוצרים פתרונות
-            </h2>
-          </div>
-          <div className="md:col-span-7 text-lg text-ink-soft leading-relaxed space-y-6">
-            <p>
-              <strong className="text-ink font-bold">אולפני אלרום</strong> הם
-              מותג קיבוצי עם ותק של חמישה עשורים בתחום של הפקת שלל מוצרים משפה
-              ומילים.
-            </p>
-            <p>
-              <strong className="text-ink font-bold">קלסר</strong> נולד בקיבוץ,
-              מתוך חיי היום יום שלנו, ומהיכרות עמוקה עם קיבוצים ומושבים שבהם
-              המסמכים הם ליבת ההתנהלות היומיומית.
-            </p>
-            <p>
-              המטרה היא לרתום בינה מלאכותית מתקדמת כדי למנוע את אובדן הזיכרון
-              הארגוני בחילופי תפקידים, ולהפוך את ההיסטוריה, התקנונים ושרשרת
-              ההחלטות לנכס דיגיטלי נגיש ומאובטח.
-            </p>
-            <p>
-              <strong className="text-ink font-bold">קלסר</strong> מצעיד את
-              ניהול הקהילה והאגודה לעידן החכם, ומייעל את הניהול השוטף וחיי
-              היום-יום ביישוב.
-            </p>
-            <p>
-              במקום להציע פלטפורמת AI גנרית, בנינו כלים ממוקדים לבעיות אמיתיות.
-            </p>
-            <p className="text-ink font-semibold">
-              הידע כבר קיים בארגון. אנחנו רק דואגים שהוא יהיה זמין.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="border-b border-ink">
-        <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
-          <div className="mb-10">
-            <div className="text-[10px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
-              שאלות נפוצות
-            </div>
-            <h2 className="font-display font-black text-3xl md:text-5xl leading-tight text-ink">
-              מה שאנשים שואלים אותנו הכי הרבה.
-            </h2>
-            <p className="mt-5 text-lg text-ink-soft max-w-2xl leading-relaxed">
-              שאלות תמימות זוכות לתשובות ישרות. חסר לכם משהו? כתבו לנו בטופס למטה.
-            </p>
-          </div>
-
-          <div className="border-t-2 border-ink">
-            {FAQ_ITEMS.map((item, i) => (
-              <details
-                key={i}
-                className="group border-b-2 border-ink"
-              >
-                <summary className="cursor-pointer list-none py-5 flex items-start justify-between gap-4 hover:bg-line/30 transition px-2">
-                  <span className="font-display font-bold text-lg md:text-xl text-ink leading-snug">
-                    {item.q}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="mt-1 shrink-0 text-2xl text-accent leading-none transition-transform group-open:rotate-45"
-                  >
-                    +
-                  </span>
-                </summary>
-                <div className="pb-6 px-2 text-base md:text-lg text-ink-soft leading-relaxed whitespace-pre-line">
-                  {item.a}
-                </div>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Contact */}
-      <section id="contact" className="border-b border-ink bg-line/20">
-        <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
-          <div className="mb-10">
-            <div className="text-[10px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
-              יצירת קשר
-            </div>
-            <h2 className="font-display font-black text-3xl md:text-5xl leading-tight text-ink">
-              מעוניינים לשמוע עוד?
-            </h2>
-            <p className="mt-4 text-ink-soft max-w-xl leading-relaxed">
-              השאירו פרטים ונחזור אליכם. אפשר גם לשלוח מייל ישירות ל־
-              <a href="mailto:tal.gurevich@elrom.tv" className="text-accent hover:underline">
-                tal.gurevich@elrom.tv
-              </a>
-              .
-            </p>
-          </div>
-
-          <form
-            onSubmit={submitContact}
-            className="bg-surface border border-line p-8 md:p-10 space-y-5"
-            noValidate
-          >
-            <div className="grid md:grid-cols-2 gap-5">
-              <label className="block">
-                <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">שם</span>
-                <input
-                  type="text"
-                  required
-                  maxLength={120}
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                  disabled={contactStatus === "sending"}
-                  className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">טלפון</span>
-                <input
-                  type="tel"
-                  maxLength={40}
-                  value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
-                  disabled={contactStatus === "sending"}
-                  className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
-                />
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">אימייל</span>
-              <input
-                type="email"
-                required
-                dir="ltr"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
-                disabled={contactStatus === "sending"}
-                className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">הודעה</span>
-              <textarea
-                required
-                rows={5}
-                maxLength={4000}
-                value={contactMessage}
-                onChange={(e) => setContactMessage(e.target.value)}
-                disabled={contactStatus === "sending"}
-                className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors resize-y"
-              />
-            </label>
-
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-2">
-              <button
-                type="submit"
-                disabled={contactStatus === "sending" || contactStatus === "sent"}
-                className="bg-ink text-surface px-8 py-3 text-sm font-bold hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {contactStatus === "sending" ? "שולח…" : contactStatus === "sent" ? "נשלח ✓" : "שלח הודעה ←"}
-              </button>
-
-              {contactStatus === "sent" && (
-                <span className="text-sm text-accent font-medium">
-                  תודה. נחזור אליכם בהקדם.
+              <div className="mt-8 flex flex-wrap items-center gap-6 text-xs text-ink-soft">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-accent inline-block" />
+                  תשובות עם ציטוטים מהמקור
                 </span>
-              )}
-              {contactStatus === "error" && contactError && (
-                <span className="text-sm text-red-600">{contactError}</span>
-              )}
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-accent inline-block" />
+                  עברית מלאה · RTL
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-accent inline-block" />
+                  מותאם לקיבוצים, מושבים וארגונים
+                </span>
+              </div>
             </div>
-          </form>
-        </div>
-      </section>
 
-      {/* Final CTA */}
-      <section className="bg-ink text-surface">
-        <div className="max-w-6xl mx-auto px-6 py-20 md:py-24 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-          <div>
-            <h2 className="font-display font-black text-3xl md:text-5xl leading-tight">
-              מוכנים להתחיל?
+            <div className="md:col-span-4 hidden md:block">
+              <div className="border-2 border-ink bg-surface p-6 shadow-lift">
+                <div className="flex items-baseline justify-between mb-5">
+                  <h2 className="font-display font-black text-2xl text-ink tracking-tight leading-none">
+                    דוגמה חיה
+                  </h2>
+                  <span className="flex items-center gap-1.5" aria-hidden>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+                    </span>
+                    <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold">
+                      Live
+                    </span>
+                  </span>
+                </div>
+
+                {/* Fixed-height wrapper so cycling samples of different length
+                    don't jerk the layout around. */}
+                <div className="relative min-h-[240px]">
+                  <div key={activeSample} className="animate-fade-up">
+                    <div className="border-r-2 border-accent pr-3 mb-4">
+                      <div className="text-xs text-ink-soft mb-1">שאלה:</div>
+                      <div className="text-sm font-semibold text-ink leading-snug">
+                        {HERO_SAMPLES[activeSample].question}
+                      </div>
+                    </div>
+                    <div className="border border-line p-3">
+                      <div className="text-xs text-ink-soft mb-1">תשובה מהמקור:</div>
+                      <div className="text-sm text-ink leading-relaxed">
+                        {HERO_SAMPLES[activeSample].answer}
+                      </div>
+                      <div className="mt-3 text-[10px] tracking-widest uppercase text-accent font-bold">
+                        מקור: {HERO_SAMPLES[activeSample].source}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-line flex items-center justify-center gap-2">
+                  {HERO_SAMPLES.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveSample(i)}
+                      aria-label={`דוגמה ${i + 1}`}
+                      className={`h-1.5 transition-all ${
+                        i === activeSample
+                          ? "w-8 bg-accent"
+                          : "w-3 bg-line-strong hover:bg-ink-soft"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Benefits */}
+        <section id="benefits" className="border-b border-ink" aria-labelledby="benefits-title">
+          <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
+            <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
+              למה קלסר?
+            </div>
+            <h2
+              id="benefits-title"
+              className="font-display font-black text-4xl md:text-5xl text-ink leading-tight max-w-3xl"
+            >
+              יעיל יותר. נוח יותר. מדויק יותר.
             </h2>
-            <p className="mt-3 text-surface/70 max-w-lg">
-              היכנסו למערכת עם חשבון Google מאושר. הגישה מוגבלת למשתמשים
-              רשומים בלבד.
+            <p className="mt-8 text-lg md:text-xl text-ink-soft leading-relaxed max-w-3xl">
+              <strong className="text-ink font-bold">קלסר:</strong> פלטפורמה חכמה
+              לניהול הקהילה והאגודה, המשלבת בינה מלאכותית, מגבירה שקיפות ומשמרת
+              את הזיכרון הארגוני שלכם.
             </p>
           </div>
-          <button
-            onClick={onLogin}
-            className="bg-accent text-surface px-10 py-5 text-lg font-bold hover:bg-accent-light transition-colors"
-          >
-            כניסה למערכת ←
-          </button>
-        </div>
-      </section>
+        </section>
+
+        {/* Products */}
+        <section
+          id="products"
+          className="border-b border-ink bg-line/20"
+          aria-labelledby="products-title"
+        >
+          <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
+            <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
+              המוצרים שלנו
+            </div>
+            <h2
+              id="products-title"
+              className="font-display font-black text-4xl md:text-5xl text-ink leading-tight max-w-3xl"
+            >
+              כלים ממוקדים. לא עוד פלטפורמה גנרית.
+            </h2>
+
+            <div className="mt-14 space-y-6">
+              {/* Featured product — Takanon */}
+              <div className="border-2 border-ink bg-surface p-10 relative">
+                <span className="absolute top-6 left-6 text-[10px] tracking-[0.25em] uppercase text-surface bg-accent px-2 py-1 font-bold">
+                  מוצר דגל
+                </span>
+                <h3 className="font-display font-black text-4xl md:text-5xl text-ink">
+                  תקנון
+                </h3>
+                <p className="mt-4 text-base text-ink-soft leading-relaxed max-w-xl">
+                  שיחה חכמה עם מסמכי הארגון.{" "}
+                  <strong className="text-ink font-bold">תקנון</strong> סורק ומבין
+                  את מסמכי הקיבוץ ומחזיר תשובות מדויקות עם ציטוט מהמקור.
+                </p>
+                <div className="mt-10 grid md:grid-cols-3 gap-px bg-ink border border-ink">
+                  {BENEFITS.map((b) => (
+                    <div key={b.title} className="bg-surface p-8">
+                      <div className="text-4xl font-display font-black text-accent leading-none">
+                        {b.num}
+                      </div>
+                      <h4 className="mt-4 font-display font-black text-xl text-ink">
+                        {b.title}
+                      </h4>
+                      <p className="mt-3 text-sm text-ink-soft leading-relaxed">
+                        {b.body}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={onLogin}
+                  className="mt-10 bg-ink text-surface px-6 py-3 text-sm font-bold hover:bg-accent transition-colors"
+                >
+                  כניסה לתקנון ←
+                </button>
+              </div>
+
+              {/* Featured product — Ogdan */}
+              <div className="border-2 border-ink bg-surface p-10 relative">
+                <span className="absolute top-6 left-6 text-[10px] tracking-[0.25em] uppercase text-surface bg-accent px-2 py-1 font-bold">
+                  מוצר דגל
+                </span>
+                <h3 className="font-display font-black text-4xl md:text-5xl text-ink">
+                  &quot;אוגדן&quot; ניהול אגודה
+                </h3>
+                <div className="mt-10 grid md:grid-cols-2 gap-px bg-ink border border-ink">
+                  {OGDAN_FEATURES.map((f) => (
+                    <div key={f.title} className="bg-surface p-8">
+                      <h4 className="font-display font-black text-xl text-ink">
+                        {f.title}
+                      </h4>
+                      <p className="mt-3 text-sm text-ink-soft leading-relaxed">
+                        {f.body}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* About */}
+        <section id="about" className="border-b border-ink" aria-labelledby="about-title">
+          <div className="max-w-6xl mx-auto px-6 py-20 md:py-28 grid md:grid-cols-12 gap-10">
+            <div className="md:col-span-5">
+              <div className="text-[11px] tracking-[0.3em] uppercase text-accent font-bold mb-3">
+                עלינו
+              </div>
+              <h2
+                id="about-title"
+                className="font-display font-black text-4xl md:text-5xl text-ink leading-tight"
+              >
+                חיים בקיבוץ, מכירים את הצרכים, יוצרים פתרונות
+              </h2>
+            </div>
+            <div className="md:col-span-7 text-lg text-ink-soft leading-relaxed space-y-6">
+              <p>
+                <strong className="text-ink font-bold">אולפני אלרום</strong> הם
+                מותג קיבוצי עם ותק של חמישה עשורים בתחום של הפקת שלל מוצרים משפה
+                ומילים.
+              </p>
+              <p>
+                <strong className="text-ink font-bold">קלסר</strong> נולד בקיבוץ,
+                מתוך חיי היום יום שלנו, ומהיכרות עמוקה עם קיבוצים ומושבים שבהם
+                המסמכים הם ליבת ההתנהלות היומיומית.
+              </p>
+              <p>
+                המטרה היא לרתום בינה מלאכותית מתקדמת כדי למנוע את אובדן הזיכרון
+                הארגוני בחילופי תפקידים, ולהפוך את ההיסטוריה, התקנונים ושרשרת
+                ההחלטות לנכס דיגיטלי נגיש ומאובטח.
+              </p>
+              <p>
+                <strong className="text-ink font-bold">קלסר</strong> מצעיד את
+                ניהול הקהילה והאגודה לעידן החכם, ומייעל את הניהול השוטף וחיי
+                היום-יום ביישוב.
+              </p>
+              <p>
+                במקום להציע פלטפורמת AI גנרית, בנינו כלים ממוקדים לבעיות אמיתיות.
+              </p>
+              <p className="text-ink font-semibold">
+                הידע כבר קיים בארגון. אנחנו רק דואגים שהוא יהיה זמין.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section id="faq" className="border-b border-ink" aria-labelledby="faq-title">
+          <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
+            <div className="mb-10">
+              <div className="text-[10px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+                שאלות נפוצות
+              </div>
+              <h2
+                id="faq-title"
+                className="font-display font-black text-3xl md:text-5xl leading-tight text-ink"
+              >
+                מה שאנשים שואלים אותנו הכי הרבה.
+              </h2>
+              <p className="mt-5 text-lg text-ink-soft max-w-2xl leading-relaxed">
+                שאלות תמימות זוכות לתשובות ישרות. חסר לכם משהו? כתבו לנו בטופס למטה.
+              </p>
+            </div>
+
+            <div className="border-t-2 border-ink">
+              {FAQ_ITEMS.map((item, i) => (
+                <details
+                  key={i}
+                  className="group border-b-2 border-ink"
+                >
+                  <summary className="cursor-pointer list-none py-5 flex items-start justify-between gap-4 hover:bg-line/30 transition px-2">
+                    <h3 className="font-display font-bold text-lg md:text-xl text-ink leading-snug">
+                      {item.q}
+                    </h3>
+                    <span
+                      aria-hidden="true"
+                      className="mt-1 shrink-0 text-2xl text-accent leading-none transition-transform group-open:rotate-45"
+                    >
+                      +
+                    </span>
+                  </summary>
+                  <div className="pb-6 px-2 text-base md:text-lg text-ink-soft leading-relaxed whitespace-pre-line">
+                    {item.a}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Contact */}
+        <section
+          id="contact"
+          className="border-b border-ink bg-line/20"
+          aria-labelledby="contact-title"
+        >
+          <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
+            <div className="mb-10">
+              <div className="text-[10px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+                יצירת קשר
+              </div>
+              <h2
+                id="contact-title"
+                className="font-display font-black text-3xl md:text-5xl leading-tight text-ink"
+              >
+                מעוניינים לשמוע עוד?
+              </h2>
+              <p className="mt-4 text-ink-soft max-w-xl leading-relaxed">
+                השאירו פרטים ונחזור אליכם. אפשר גם לשלוח מייל ישירות ל־
+                <a href="mailto:tal.gurevich@elrom.tv" className="text-accent hover:underline">
+                  tal.gurevich@elrom.tv
+                </a>
+                .
+              </p>
+            </div>
+
+            <form
+              onSubmit={submitContact}
+              className="bg-surface border border-line p-8 md:p-10 space-y-5"
+              noValidate
+            >
+              <div className="grid md:grid-cols-2 gap-5">
+                <label className="block">
+                  <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">שם</span>
+                  <input
+                    type="text"
+                    required
+                    maxLength={120}
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    disabled={contactStatus === "sending"}
+                    className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">טלפון</span>
+                  <input
+                    type="tel"
+                    maxLength={40}
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    disabled={contactStatus === "sending"}
+                    className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">אימייל</span>
+                <input
+                  type="email"
+                  required
+                  dir="ltr"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  disabled={contactStatus === "sending"}
+                  className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-bold text-ink-soft tracking-[0.15em] uppercase">הודעה</span>
+                <textarea
+                  required
+                  rows={5}
+                  maxLength={4000}
+                  value={contactMessage}
+                  onChange={(e) => setContactMessage(e.target.value)}
+                  disabled={contactStatus === "sending"}
+                  className="mt-2 w-full border border-line px-4 py-3 text-ink bg-surface focus:outline-none focus:border-ink transition-colors resize-y"
+                />
+              </label>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-2">
+                <button
+                  type="submit"
+                  disabled={contactStatus === "sending" || contactStatus === "sent"}
+                  className="bg-ink text-surface px-8 py-3 text-sm font-bold hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {contactStatus === "sending" ? "שולח…" : contactStatus === "sent" ? "נשלח ✓" : "שלח הודעה ←"}
+                </button>
+
+                {contactStatus === "sent" && (
+                  <span className="text-sm text-accent font-medium">
+                    תודה. נחזור אליכם בהקדם.
+                  </span>
+                )}
+                {contactStatus === "error" && contactError && (
+                  <span className="text-sm text-red-600">{contactError}</span>
+                )}
+              </div>
+            </form>
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="bg-ink text-surface" aria-labelledby="cta-title">
+          <div className="max-w-6xl mx-auto px-6 py-20 md:py-24 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+            <div>
+              <h2
+                id="cta-title"
+                className="font-display font-black text-3xl md:text-5xl leading-tight"
+              >
+                מוכנים להתחיל?
+              </h2>
+              <p className="mt-3 text-surface/70 max-w-lg">
+                היכנסו למערכת עם חשבון Google מאושר. הגישה מוגבלת למשתמשים
+                רשומים בלבד.
+              </p>
+            </div>
+            <button
+              onClick={onLogin}
+              className="bg-accent text-surface px-10 py-5 text-lg font-bold hover:bg-accent-light transition-colors"
+            >
+              כניסה למערכת ←
+            </button>
+          </div>
+        </section>
+      </main>
 
       {/* Footer */}
       <footer className="bg-surface border-t border-ink mt-auto">
@@ -545,9 +579,9 @@ export default function Landing({ onLogin }: Props) {
             </p>
           </div>
           <div>
-            <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3">
+            <h2 className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3">
               מוצרים
-            </div>
+            </h2>
             <ul className="space-y-2 text-sm text-ink">
               <li>
                 <button onClick={onLogin} className="hover:text-accent transition">
@@ -560,9 +594,9 @@ export default function Landing({ onLogin }: Props) {
             </ul>
           </div>
           <div>
-            <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3">
+            <h2 className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-3">
               יצירת קשר
-            </div>
+            </h2>
             <ul className="space-y-2 text-sm text-ink">
               <li>
                 <button onClick={() => scrollTo("contact")} className="hover:text-accent transition">
