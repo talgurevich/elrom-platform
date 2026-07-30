@@ -16,13 +16,14 @@ services:
     plan: starter
     region: frankfurt
     rootDir: backend
-    # LibreOffice is needed to convert legacy .doc → .docx at ingest
-    # (see backend/app/services/extraction.py::_convert_doc_to_docx).
-    # libreoffice-core + libreoffice-writer is the minimum that still
-    # handles Hebrew .doc files correctly (~200MB installed). If build
-    # time or image size becomes a concern, drop the apt-get and .doc
-    # uploads will return a clear reject message instead of extracting.
-    buildCommand: apt-get update && apt-get install -y --no-install-recommends libreoffice-core libreoffice-writer && pip install -r requirements.txt
+    # .doc uploads: extraction.py::_convert_doc_to_docx shells out to
+    # LibreOffice headless when it's present, otherwise returns a clear
+    # Hebrew reject message. Render's native Python runtime doesn't allow
+    # apt-get during build (buildCommand runs as non-root), so LibreOffice
+    # can't be installed here — a Docker-based service or the paid
+    # "system packages" tier would be needed. Until then, .doc uploads
+    # produce the reject message and users are asked to re-save as .docx.
+    buildCommand: pip install -r requirements.txt
     startCommand: bash start.sh
     healthCheckPath: /api/health
     disk:
