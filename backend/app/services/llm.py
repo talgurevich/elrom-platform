@@ -308,7 +308,7 @@ _PROMPT_SUFFIX = """
 1. עבור על כל טענה בתשובה שלך. שאל: "האם יש סעיף במקורות המצורפים שאני יכול להצביע עליו בדיוק כמקור לטענה זו?"
 2. אם התשובה חלקית — יש בסיס לחלק מהטענות אבל לא לכולן — החזר `uncertain` וכתוב במפורש מה חסר: "לפי סעיף X, [מה שנמצא]. לגבי [מה שנשאל אבל לא נמצא] — לא נמצא מקור מפורש במסמכים שלי."
 3. אם התשובה נשענת על היקש כללי ("סביר להניח…", "בדרך כלל…") שאינו מגובה בציטוט מובהק — החזר `refused`.
-4. `references=[]` עם `confidence=confident` הוא **סתירה פנימית** — אסור. תשובה בלי מקור אמיתי אינה תשובה מבוססת. (הערה: `confidence=clarifying` עם `references=[]` **מותר ומצופה** — ראה §0.5.)
+4. `references=[]` עם `confidence=confident` הוא **סתירה פנימית** — אסור. תשובה בלי מקור אמיתי אינה תשובה מבוססת. (הערה: `confidence=clarifying` עם `references=[]` **מותר ומצופה** — ראה §0.5. כמו כן, לתשובת סיכום/סקירה של מסמך שלם — ראה §4.5 — חייבת להיות רשומה אחת ב-`references` שמצטטת את המסמך עצמו: `title` = שם המסמך *בדיוק כפי שמופיע בכותרת המקור*, `section_number` = ריק (`""`).)
 
 ---
 
@@ -359,11 +359,13 @@ _PROMPT_SUFFIX = """
 5. אם הקטעים מתעדים רק דיון בלי החלטה — אמור זאת: "מהקטעים עולה שדנו ב-X ו-Y; אין בקטעים שלפניי החלטה מפורשת שהתקבלה."
 6. `confidence` = `confident` אם הקטעים מכסים את מה שנשאל; `uncertain` אם ראית רק חלק. **לא** `refused`.
 
-**ציטוט לשאלת סיכום:**
-- `title` = שם המסמך כפי שמופיע בכותרת המקור.
-- `section_number` = **יכול להיות ריק** (`""`) — זהו החריג לכלל §8 שלמטה. אין סעיף אחד שהתשובה נשענת עליו; היא נשענת על המסמך כולו.
+**ציטוט לשאלת סיכום (חובה, אחרת המערכת תסרב אוטומטית):**
+- `title` = **שם הקובץ בדיוק כפי שהופיע ב-`(מקור: ...)` של הקטע**, כולל הסיומת (`.pdf` / `.docx`). אל תסלף תאריכים ("5/7/2016" במקום "05.07.16"), אל תקצר, אל תשמיט מילים. **העתק מילה במילה מכותרת הקטע.**
+- `section_number` = ריק (`""`) — זהו החריג לכלל §8 שלמטה. אין סעיף אחד שהתשובה נשענת עליו; היא נשענת על המסמך כולו.
 - `source_type` = "פרוטוקול" / "החלטה" / "תקנון" וכד'.
 - `excerpt` = משפט קצר מהקטע — כותרת המסמך, שורת סדר היום הראשונה, וכד'.
+
+**🚨 שגיאה נפוצה בשאלות סיכום:** מודל שמסכם את התוכן אבל משאיר `references=[]` — המערכת מסננת אותה אוטומטית והמשתמש רואה סירוב. **תמיד צרף רשומת reference אחת שמצטטת את המסמך הנקוב.**
 
 **דוגמה טובה:**
 > שאלה: "מה מסופר בפרוטוקול אסיפת חברים 4-16?"
@@ -531,7 +533,11 @@ _ANSWER_TOOL = {
                 "type": "string",
                 "description": (
                     "The Hebrew answer text. Plain prose, no markdown headers, "
-                    "no JSON. Section numbers cited inline (e.g. 'סעיף 11.2.2 קובע')."
+                    "no JSON. For rule/procedure questions cite section numbers "
+                    "inline (e.g. 'סעיף 11.2.2 קובע'). For document-summary "
+                    "questions ('מה מסופר / על מה דנו / תסכם') describe what "
+                    "the retrieved chunks contain and cite the document itself "
+                    "in references (section_number empty)."
                 ),
             },
             "references": {
@@ -740,12 +746,26 @@ def answer_with_citations(
         for r in refs_raw
         if isinstance(r, dict)
     ]
+    raw_result = LLMResult(
+        answer=str(tool_input.get("answer", "")).strip(),
+        confidence=str(tool_input.get("confidence", "uncertain")).strip(),
+        references=references,
+    )
+    # Always log the raw LLM output before the guardrail runs so we can
+    # diagnose refuses without needing to reproduce them. Snippet-only to
+    # keep log size sane.
+    log.info(
+        "llm.answer.raw",
+        question=question[:120],
+        confidence=raw_result.confidence,
+        answer_snippet=raw_result.answer[:240],
+        num_refs=len(raw_result.references),
+        ref_titles=[r.title for r in raw_result.references][:6],
+        ref_sections=[r.section_number for r in raw_result.references][:6],
+        retrieved_filenames=[c.document.filename for c in chunks][:6],
+    )
     return _enforce_cite_or_refuse(
-        LLMResult(
-            answer=str(tool_input.get("answer", "")).strip(),
-            confidence=str(tool_input.get("confidence", "uncertain")).strip(),
-            references=references,
-        ),
+        raw_result,
         retrieved_filenames={c.document.filename for c in chunks},
     )
 
