@@ -232,3 +232,21 @@ def normalize_hebrew_to_tsquery(text: str) -> str:
         seen_groups.add(group)
         groups.append(group)
     return " & ".join(groups)
+
+
+def normalize_filename_for_tsvector(filename: str) -> str:
+    """Turn a document filename into normalized Hebrew lexemes for
+    ``to_tsvector('simple', ...)``. Strips the extension, replaces the
+    common word-separator punctuation (``-``, ``_``, ``,``, ``.``) with
+    whitespace so tokens like ``ענף_הסיידר`` and ``אחסניית,ענף-הסיידר.docx``
+    yield the same lexemes as their spaced form, then runs the standard
+    Hebrew normalizer.
+
+    Used by the doc-title lane in retrieval — see ``documents.title_search``.
+    """
+    if not filename:
+        return ""
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+    for ch in ("-", "_", ",", ".", "/", "\\", "(", ")", "[", "]"):
+        stem = stem.replace(ch, " ")
+    return normalize_hebrew(stem)

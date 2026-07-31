@@ -841,6 +841,8 @@ function DebugRow({ row }: { row: RetrievalDebugRow }) {
       ? `cos ${row.cosine_similarity}`
       : row.ts_rank !== undefined
       ? `bm25 ${row.ts_rank}`
+      : row.title_rank !== undefined
+      ? `title ${row.title_rank}`
       : row.fusion_score !== undefined
       ? `fused ${row.fusion_score}`
       : row.rank !== undefined
@@ -869,7 +871,7 @@ function DebugPanel({ debug }: { debug: RetrievalDebug | null }) {
       <summary className="px-3 py-2 cursor-pointer hover:bg-stone-50 text-xs font-semibold text-ink-soft flex items-center justify-between">
         <span>פירוט שליפה (debug)</span>
         <span className="text-xs text-ink-soft">
-          {debug.reranked.length} נשלפו · {debug.vector.length} וקטור · {debug.bm25.length} BM25
+          {debug.reranked.length} נשלפו · {debug.vector.length} וקטור · {debug.bm25.length} BM25 · {debug.title?.length ?? 0} כותרת
         </span>
       </summary>
       <div className="px-3 py-2 border-t border-stone-200 grid sm:grid-cols-2 gap-4 bg-stone-50/70">
@@ -903,6 +905,18 @@ function DebugPanel({ debug }: { debug: RetrievalDebug | null }) {
             ))}
           </ul>
         </div>
+        {debug.title && debug.title.length > 0 && (
+          <div>
+            <div className="text-[10px] tracking-wider uppercase text-accent font-bold mb-1">
+              כותרת (title_search)
+            </div>
+            <ul className="divide-y divide-stone-200/70">
+              {debug.title.map((r) => (
+                <DebugRow key={`t-${r.chunk_id}`} row={r} />
+              ))}
+            </ul>
+          </div>
+        )}
         <div>
           <div className="text-[10px] tracking-wider uppercase text-accent font-bold mb-1">
             איחוד (RRF)

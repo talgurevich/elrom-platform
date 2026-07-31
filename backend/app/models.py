@@ -74,6 +74,12 @@ class Document(Base):
     # adopted (החלטה/בתוקף). Non-adopted docs are demoted at retrieval
     # and must never be cited as the operative rule. See migration 0021.
     doc_status: Mapped[str | None] = mapped_column(String(32))
+    # Doc-level lexical index over the filename (extension stripped, Hebrew
+    # normalized). Populated at ingest and consumed by retrieval's title lane
+    # so narrow queries like "טורבינות רוח" or "ענף הסיידר" can hit docs
+    # where the term is in the name but rare in chunk bodies. Backfilled via
+    # scripts/backfill_title_search.py for pre-migration rows.
+    title_search: Mapped[str | None] = mapped_column(TSVECTOR)
 
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 

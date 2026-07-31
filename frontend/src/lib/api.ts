@@ -87,6 +87,7 @@ export type RetrievalDebugRow = {
   section_path: string | null;
   cosine_similarity?: number;
   ts_rank?: number;
+  title_rank?: number;
   fusion_score?: number;
   rank?: number;
 };
@@ -94,6 +95,7 @@ export type RetrievalDebugRow = {
 export type RetrievalDebug = {
   vector: RetrievalDebugRow[];
   bm25: RetrievalDebugRow[];
+  title?: RetrievalDebugRow[];
   fused: RetrievalDebugRow[];
   reranked: RetrievalDebugRow[];
 };

@@ -180,6 +180,28 @@ YEAR_SEED_MAX_TOTAL = 80
 # without silencing genuinely-better semantic matches.
 YEAR_MATCH_BOOST = 0.03
 
+# ─── Doc-title lane ──────────────────────────────────────────────────
+#
+# Narrow-topic queries ("טורבינות רוח", "ענף הסיידר") tend to fail on
+# vector-only retrieval — the term dilutes into the surrounding chunk's
+# theme — AND on chunk-level BM25 when the term barely appears in chunk
+# bodies but IS in the document filename. The title lane closes that gap
+# by searching documents.title_search (a per-doc tsvector populated from
+# the normalized filename at ingest) and injecting the top chunks of the
+# matched documents into the fusion pool.
+#
+# How many docs to match by title. Small — a title match is a strong
+# signal, so we don't need many. Larger values would just add rerank load.
+TITLE_MAX_DOCS = 5
+# Per matched doc, how many top-cosine chunks to inject. Enough to give
+# the reranker material to work with but not so many that a single title
+# match monopolizes the candidate pool.
+TITLE_CHUNKS_PER_DOC = 3
+# Boost on the fusion combined score for title-matched chunks. Same
+# magnitude as YEAR_MATCH_BOOST — a title hit is comparable evidence to
+# a year hit: strong signal, but the reranker still has final say.
+TITLE_MATCH_BOOST = 0.03
+
 
 def _extract_year_range(query: str) -> tuple[int, int] | None:
     """Return (from_year, to_year) if the query names a year or range,
@@ -245,6 +267,7 @@ def _rerank_hint(chunk: Chunk) -> str:
 class RetrievalDebug:
     vector: list[dict] = field(default_factory=list)
     bm25: list[dict] = field(default_factory=list)
+    title: list[dict] = field(default_factory=list)
     fused: list[dict] = field(default_factory=list)
     reranked: list[dict] = field(default_factory=list)
     amendments: list[dict] = field(default_factory=list)
@@ -254,6 +277,7 @@ class RetrievalDebug:
         return {
             "vector": self.vector,
             "bm25": self.bm25,
+            "title": self.title,
             "fused": self.fused,
             "reranked": self.reranked,
             "amendments": self.amendments,
@@ -465,6 +489,59 @@ def hybrid_retrieve(
             for row in bm25_rows[:8]
         ]
 
+    # Title lane — doc-level tsvector search over filenames. Reuses the
+    # same bm25_query (already Hebrew-normalized). For each matched doc we
+    # pull the top TITLE_CHUNKS_PER_DOC chunks by cosine similarity to the
+    # query and inject them into the pool with a fixed boost. Skips when
+    # the query normalized to empty (e.g. all-stopwords) or when no doc
+    # title matches.
+    title_seed: list[Chunk] = []
+    if bm25_query:
+        title_docs_sql = text(
+            f"""
+            SELECT id, ts_rank(title_search, to_tsquery('simple', :q)) AS rank
+            FROM documents
+            WHERE tenant_id = :tenant_id
+              AND title_search @@ to_tsquery('simple', :q)
+              {"" if include_superseded else "AND superseded_by_id IS NULL"}
+            ORDER BY rank DESC
+            LIMIT :limit
+            """
+        )
+        title_doc_rows = db.execute(
+            title_docs_sql,
+            {"q": bm25_query, "tenant_id": tenant_id, "limit": TITLE_MAX_DOCS},
+        ).fetchall()
+        if title_doc_rows:
+            matched_doc_ids = [r.id for r in title_doc_rows]
+            title_rank_by_doc = {r.id: float(r.rank) for r in title_doc_rows}
+            for did in matched_doc_ids:
+                doc_chunks_q = (
+                    db.query(
+                        Chunk,
+                        Chunk.embedding.cosine_distance(query_embedding).label("dist"),
+                    )
+                    .filter(Chunk.document_id == did)
+                    .filter(Chunk.embedding.isnot(None))
+                    .order_by("dist")
+                    .options(joinedload(Chunk.document))
+                )
+                if not include_superseded:
+                    doc_chunks_q = doc_chunks_q.filter(
+                        Chunk.superseded_by_amendment_id.is_(None)
+                    )
+                for c, _dist in doc_chunks_q.limit(TITLE_CHUNKS_PER_DOC).all():
+                    title_seed.append(c)
+            debug.title = [
+                {
+                    "chunk_id": str(c.id),
+                    "document_filename": c.document.filename,
+                    "section_path": c.section_path,
+                    "title_rank": round(title_rank_by_doc.get(c.document_id, 0.0), 4),
+                }
+                for c in title_seed[:8]
+            ]
+
     # Reciprocal-rank-fusion-style combination
     combined: dict[UUID, float] = {}
 
@@ -474,6 +551,13 @@ def hybrid_retrieve(
     bm25_sorted = sorted(bm25_scores.items(), key=lambda kv: kv[1], reverse=True)
     for i, (chunk_id, _) in enumerate(bm25_sorted):
         combined[chunk_id] = combined.get(chunk_id, 0.0) + 1.0 / (i + 60)
+
+    # Title seed — inject after vector/BM25 RRF so title-only hits also
+    # enter the pool. Also register in vector_chunks so downstream lookups
+    # (all_chunk_docs) see them.
+    for c in title_seed:
+        combined[c.id] = combined.get(c.id, 0.0) + TITLE_MATCH_BOOST
+        vector_chunks.setdefault(c.id, (c, 1.0))
 
     # Year-anchored seeding — when the query names a year or range, run
     # ONE vector search PER YEAR in the range (each returns top-N chunks

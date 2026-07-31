@@ -18,7 +18,7 @@ from app.services.identity import IdentityUser, current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
 from app.services.embedding import embed_texts
-from app.services.hebrew_text import normalize_hebrew
+from app.services.hebrew_text import normalize_filename_for_tsvector, normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
 from app.services.storage import save_original
 from app.services.text_dedup import find_text_duplicate, hash_normalized
@@ -143,6 +143,11 @@ def ingest(
                 f"(מזהה {winner.id}).",
             ) from None
         raise
+
+    db.execute(
+        text("UPDATE documents SET title_search = to_tsvector('simple', :norm) WHERE id = :did"),
+        {"did": doc.id, "norm": normalize_filename_for_tsvector(doc.filename)},
+    )
 
     structural_chunks = chunk_document(req.text)
     if not structural_chunks:
@@ -400,6 +405,11 @@ async def ingest_upload(
                 f"(מזהה {winner.id}).",
             ) from None
         raise
+
+    db.execute(
+        text("UPDATE documents SET title_search = to_tsvector('simple', :norm) WHERE id = :did"),
+        {"did": doc.id, "norm": normalize_filename_for_tsvector(doc.filename)},
+    )
 
     # Persist the original file for later in-browser viewing (click-a-citation
     # → open the source). Runs after extraction sanity-checks so failed
