@@ -29,6 +29,9 @@ python -m scripts.backfill_effective_date || true
 echo "▶ Backfilling folder_taxonomy from existing documents.folder values (idempotent)…"
 python -m scripts.backfill_folder_taxonomy || true
 
+echo "▶ Backfilling documents.title_search from filenames (idempotent)…"
+python -m scripts.backfill_title_search || true
+
 echo "▶ Starting uvicorn on 0.0.0.0:${PORT:-8000} with ${WEB_CONCURRENCY:-2} workers"
 # Run at least 2 workers so /api/health stays responsive while another worker
 # is busy on a long-running OCR upload. Render's default WEB_CONCURRENCY=1
