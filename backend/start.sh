@@ -32,6 +32,12 @@ python -m scripts.backfill_folder_taxonomy || true
 echo "▶ Backfilling documents.title_search from filenames (idempotent)…"
 python -m scripts.backfill_title_search || true
 
+echo "▶ Rebuilding chunks.text_search with acronym-aware normalization (idempotent)…"
+# The 2026-08-01 gershayim fix changed index-side lexemes (יו"ר now indexes
+# as יור). Re-normalize the whole corpus so queries and index agree. TODO:
+# replace this always-run with the versioned data-migration runner (task 8).
+python -m scripts.rebuild_text_search || true
+
 echo "▶ Starting uvicorn on 0.0.0.0:${PORT:-8000} with ${WEB_CONCURRENCY:-2} workers"
 # Run at least 2 workers so /api/health stays responsive while another worker
 # is busy on a long-running OCR upload. Render's default WEB_CONCURRENCY=1

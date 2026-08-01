@@ -146,6 +146,12 @@ def normalize_hebrew(text: str) -> str:
     """
     if not text:
         return ""
+    # Strip geresh/gershayim BEFORE tokenization — the quote chars are not
+    # in _TOKEN_RE, so without this pre-pass an acronym like יו"ר splits
+    # into two useless tokens (יו + ר) instead of indexing as יור. Found
+    # by test_gershayim_acronyms; per-token stripping inside
+    # _normalize_forms runs too late to help.
+    text = _strip_marks(text)
     out: list[str] = []
     for raw in _TOKEN_RE.findall(text):
         out.extend(_normalize_forms(raw))
@@ -170,6 +176,11 @@ _QUERY_STOPWORDS: set[str] = {
     "של", "את", "על", "אל", "עם", "לפי", "לגבי", "בגלל",
     "זה", "זו", "אלה", "אלו", "הוא", "היא", "הם", "הן",
     "אני", "אתה", "את", "אנחנו", "אתם", "אתן",
+    # Question-pattern verbs — "מה קורה עם X", "מה עושים כש-Y". Carry no
+    # retrieval signal but AND-constrain the tsquery, so a chunk about X
+    # that doesn't literally contain "קורה" was unfindable. Found by
+    # test_prefixed_query_matches_bare_index.
+    "קורה", "עושים", "עושה",
     # Latin question words that show up when users switch language
     "the", "and", "or", "is", "are", "what", "how",
 }
@@ -202,6 +213,9 @@ def normalize_hebrew_to_tsquery(text: str) -> str:
     """
     if not text:
         return ""
+    # Same pre-tokenization mark stripping as the index side — the two MUST
+    # agree or acronym queries (יו"ר) can never match acronym lexemes (יור).
+    text = _strip_marks(text)
     groups: list[str] = []
     seen_groups: set[str] = set()  # dedup identical source words (e.g. "חבר חבר")
     for raw in _TOKEN_RE.findall(text):
