@@ -9,7 +9,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query as QParam
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text as sa_text, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -312,7 +312,7 @@ def _reembed_document_chunks(db: Session, doc: Document) -> int:
     the number of chunks re-embedded.
     """
     from app.services.chunking import build_contextual_input
-    from app.services.embedding import embed_texts
+    from app.services.embedding import current_embedding_model, embed_texts
 
     chunks = (
         db.query(Chunk)
@@ -322,6 +322,7 @@ def _reembed_document_chunks(db: Session, doc: Document) -> int:
     )
     if not chunks:
         return 0
+    doc.embedding_model = current_embedding_model()
     inputs = [
         build_contextual_input(
             text=c.text or "",
@@ -488,6 +489,27 @@ def classify_one_document(db: Session, doc: Document, *, force: bool = False) ->
                 .where(Chunk.document_id == doc.id)
                 .values(effective_date=doc.effective_date)
             )
+
+        # Refresh the title-lane index with filename + AI title combined.
+        # Two cases this fixes: (a) classify just renamed a cryptic filename
+        # to a Hebrew title — the ingest-time title_search is stale; (b) the
+        # filename was already human but the AI title adds retrieval terms
+        # ("אחסניית אל-רום.docx" classified as "פרוטוקול ענף הסיידר").
+        from app.services.hebrew_text import (
+            normalize_filename_for_tsvector,
+            normalize_hebrew,
+        )
+
+        title_lexemes = normalize_filename_for_tsvector(doc.filename)
+        if title:
+            title_lexemes = f"{title_lexemes} {normalize_hebrew(title)}".strip()
+        db.execute(
+            sa_text(
+                "UPDATE documents SET title_search = to_tsvector('simple', :norm) "
+                "WHERE id = :did"
+            ),
+            {"did": doc.id, "norm": title_lexemes},
+        )
         db.commit()
 
         # If the filename just changed from a cryptic hash to a real Hebrew

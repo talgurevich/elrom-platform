@@ -74,6 +74,11 @@ class Document(Base):
     # adopted (החלטה/בתוקף). Non-adopted docs are demoted at retrieval
     # and must never be cited as the operative rule. See migration 0021.
     doc_status: Mapped[str | None] = mapped_column(String(32))
+    # Which embedding model produced this doc's chunk vectors, as
+    # "provider/model" (e.g. "cohere/embed-multilingual-v3.0"). Written at
+    # ingest and on re-embed; a provider/model switch re-embeds WHERE
+    # embedding_model != current instead of silently mixing vector spaces.
+    embedding_model: Mapped[str | None] = mapped_column(String(64))
     # Doc-level lexical index over the filename (extension stripped, Hebrew
     # normalized). Populated at ingest and consumed by retrieval's title lane
     # so narrow queries like "טורבינות רוח" or "ענף הסיידר" can hit docs

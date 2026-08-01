@@ -42,6 +42,7 @@ from app.services.chat_triage import (
 )
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
+from app.services.intent import classify_intent
 from app.services.answer_annotations import annotate_answer
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.corpus_stats import format_corpus_stats
@@ -531,6 +532,12 @@ async def search_pipeline(
         corpus_stats_block = await asyncio.to_thread(
             format_corpus_stats, db, tenant_id=tenant_id
         )
+        # Intent routing — classified from the user's RAW phrasing (the
+        # canonical rewrite can drop the surface cue, e.g. "תסכם"). Selects
+        # which sections of the system prompt ride along; "rules" (default)
+        # is byte-identical to the pre-routing prompt.
+        answer_intent = classify_intent(question)
+        debug_dict["answer_intent"] = answer_intent
         llm_result = await asyncio.to_thread(
             answer_with_citations,
             question=question,
@@ -542,6 +549,7 @@ async def search_pipeline(
             prior_turns=prior_turns,
             amendment_notes=amendment_notes or None,
             resolution_notes=resolution_notes or None,
+            intent=answer_intent,
         )
 
         # Post-hoc safety net: if the answerer itself signals it didn't have

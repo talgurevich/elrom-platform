@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.models import Document
-from app.services.hebrew_text import normalize_filename_for_tsvector
+from app.services.hebrew_text import normalize_filename_for_tsvector, normalize_hebrew
 from app.services.identity import get_tenant_row_by_name
 
 
@@ -26,7 +26,7 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        q = db.query(Document.id, Document.filename)
+        q = db.query(Document.id, Document.filename, Document.doc_metadata)
         if args.tenant:
             tenant = get_tenant_row_by_name(args.tenant)
             if tenant is None:
@@ -42,8 +42,13 @@ def main() -> None:
         updated = 0
         for i in range(0, len(rows), args.batch):
             batch = rows[i : i + args.batch]
-            for doc_id, filename in batch:
+            for doc_id, filename, meta in batch:
                 norm = normalize_filename_for_tsvector(filename or "")
+                # AI-classified Hebrew title adds retrieval terms the raw
+                # filename lacks — index both (tsvector dedups overlap).
+                ai_title = str((meta or {}).get("ai_title") or "").strip()
+                if ai_title:
+                    norm = f"{norm} {normalize_hebrew(ai_title)}".strip()
                 db.execute(
                     text(
                         "UPDATE documents SET title_search = to_tsvector('simple', :norm) "

@@ -17,7 +17,7 @@ from app.models import Chunk, CorpusFlag, Document, IngestJob
 from app.services.identity import IdentityUser, current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
-from app.services.embedding import embed_texts
+from app.services.embedding import current_embedding_model, embed_texts
 from app.services.corpus_stats import invalidate_corpus_stats
 from app.services.hebrew_text import normalize_filename_for_tsvector, normalize_hebrew
 from app.services.extraction import SUPPORTED_EXTENSIONS
@@ -129,6 +129,7 @@ def ingest(
         extraction_note=req.extraction_note,
         content_sha256=content_sha256,
         text_sha256=text_sha,
+        embedding_model=current_embedding_model(),
     )
     db.add(doc)
     try:

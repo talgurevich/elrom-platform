@@ -11,32 +11,11 @@ python -m scripts.seed_dev || true
 echo "▶ Backfilling אל-רום tenant.system_context (no-op if already set)…"
 python -m scripts.backfill_tenant_context || true
 
-echo "▶ Backfilling lexicon surface_forms (idempotent — skips rows already expanded)…"
-python -m scripts.backfill_lexicon || true
-
-echo "▶ Backfilling documents.content_sha256 from stored source files (idempotent)…"
-python -m scripts.backfill_content_hash || true
-
-echo "▶ Re-chunking protocols + decisions with the new הוחלט: markers (idempotent — marker guarded)…"
-python -m scripts.rechunk_protocols || true
-
-echo "▶ Backfilling documents.forum via mini-classifier (idempotent — marker guarded)…"
-python -m scripts.backfill_forum || true
-
-echo "▶ Backfilling documents.effective_date from filename patterns (idempotent — NULL-only)…"
-python -m scripts.backfill_effective_date || true
-
-echo "▶ Backfilling folder_taxonomy from existing documents.folder values (idempotent)…"
-python -m scripts.backfill_folder_taxonomy || true
-
-echo "▶ Backfilling documents.title_search from filenames (idempotent)…"
-python -m scripts.backfill_title_search || true
-
-echo "▶ Rebuilding chunks.text_search with acronym-aware normalization (idempotent)…"
-# The 2026-08-01 gershayim fix changed index-side lexemes (יו"ר now indexes
-# as יור). Re-normalize the whole corpus so queries and index agree. TODO:
-# replace this always-run with the versioned data-migration runner (task 8).
-python -m scripts.rebuild_text_search || true
+echo "▶ Running pending one-time data migrations…"
+# Versioned runner (scripts/run_data_migrations.py) — each backfill runs
+# exactly once ever and is recorded in the data_migrations table. Replaces
+# the old always-run pile that re-scanned the corpus on every deploy.
+python -m scripts.run_data_migrations || true
 
 echo "▶ Starting uvicorn on 0.0.0.0:${PORT:-8000} with ${WEB_CONCURRENCY:-2} workers"
 # Run at least 2 workers so /api/health stays responsive while another worker

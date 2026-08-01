@@ -33,7 +33,7 @@ from app.services.chunking import (
     chunk_document,
 )
 from app.services.corpus_stats import invalidate_corpus_stats
-from app.services.embedding import embed_texts
+from app.services.embedding import current_embedding_model, embed_texts
 from app.services.extraction import extract_text as extract_file
 from app.services.hebrew_text import normalize_filename_for_tsvector, normalize_hebrew
 from app.services.storage import save_original
@@ -152,6 +152,7 @@ def run_upload_pipeline(
         extraction_note=extraction.note,
         content_sha256=content_sha256,
         text_sha256=text_sha,
+        embedding_model=current_embedding_model(),
     )
     db.add(doc)
     try:

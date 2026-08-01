@@ -9,6 +9,14 @@ from app.config import settings
 log = structlog.get_logger()
 
 
+def current_embedding_model() -> str:
+    """Canonical "provider/model" marker written onto documents at ingest.
+    A provider or model switch re-embeds WHERE embedding_model != this."""
+    if settings.embedding_provider == "cohere":
+        return f"cohere/{settings.cohere_embed_model}"
+    return f"openai/{settings.openai_embed_model}"
+
+
 @lru_cache(maxsize=1)
 def _cohere_client():
     import cohere

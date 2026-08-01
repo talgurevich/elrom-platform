@@ -26,6 +26,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.models import EvalRun, GoldenQuestion
 from app.services.embedding import embed_texts
+from app.services.intent import classify_intent
 from app.services.lexicon import find_relevant_terms, format_lexicon_block
 from app.services.llm import answer_with_citations
 from app.services.retrieval import hybrid_retrieve
@@ -74,6 +75,9 @@ def score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> GoldenScore
             lexicon_block=format_lexicon_block(lex),
             amendment_notes=[ac.format_for_prompt() for ac in amendment_context] or None,
             resolution_notes=[rc.format_for_prompt() for rc in resolution_context] or None,
+            # Same intent routing as the live search path — goldens must be
+            # scored against the prompt users actually get.
+            intent=classify_intent(g.question),
         )
         answer_text = llm.answer
         confidence = llm.confidence

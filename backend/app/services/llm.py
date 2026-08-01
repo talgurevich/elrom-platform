@@ -474,20 +474,75 @@ _PROMPT_SUFFIX = """
 """
 
 
-def build_system_prompt(*, tenant_name: str, tenant_context: str | None) -> str:
+# ─── Intent-routed suffix assembly ───────────────────────────────────────
+#
+# _PROMPT_SUFFIX is split at runtime on its "## N" headers so each intent
+# can carry only the sections that apply to it. Splitting at runtime (not
+# into separate literals) keeps the prompt text greppable as one block and
+# guarantees "rules" composes byte-identically to the pre-routing prompt.
+#
+# Section keys present today: 2.5, 3, 4, 4.5, 6, 7, 8, 9 (+ "_head" for
+# the leading separator before the first header). §7 contains a "### " sub-
+# header which does not split — only "## " does.
+
+import re as _re
+
+_SECTION_SPLIT_RE = _re.compile(r"(?=\n## )")
+_SECTION_KEY_RE = _re.compile(r"\n## ([\d.]+)")
+
+
+def _split_suffix_sections(suffix: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for part in _SECTION_SPLIT_RE.split(suffix):
+        m = _SECTION_KEY_RE.match(part)
+        # rstrip(".") — headers like "## 3. איסור" capture "3." but keys
+        # must be "3". Without this the assembler silently dropped every
+        # integer-numbered section (caught by the byte-identity test).
+        out[m.group(1).rstrip(".") if m else "_head"] = part
+    return out
+
+
+_SUFFIX_SECTIONS = _split_suffix_sections(_PROMPT_SUFFIX)
+
+# Which suffix sections each intent carries. "rules" lists every section —
+# assembly for it reproduces _PROMPT_SUFFIX exactly (asserted in tests).
+# "summary" drops the rules-question intent table (§6) and the answer-
+# structure/register block (§7) — ~6K chars of rules-shaped examples that
+# drowned out §4.5 on its first deploy. "meta" additionally drops doc-status
+# (§2.5) and the summary flow (§4.5): corpus-count answers come from the
+# injected stats block, not from retrieved chunks.
+_INTENT_SUFFIX_KEYS: dict[str, list[str]] = {
+    "rules": ["_head", "2.5", "3", "4", "4.5", "6", "7", "8", "9"],
+    "summary": ["_head", "2.5", "3", "4", "4.5", "8", "9"],
+    "meta": ["_head", "3", "4", "8", "9"],
+}
+
+
+def _suffix_for_intent(intent: str) -> str:
+    keys = _INTENT_SUFFIX_KEYS.get(intent) or _INTENT_SUFFIX_KEYS["rules"]
+    return "".join(_SUFFIX_SECTIONS[k] for k in keys if k in _SUFFIX_SECTIONS)
+
+
+def build_system_prompt(
+    *, tenant_name: str, tenant_context: str | None, intent: str = "rules"
+) -> str:
     """Compose the full system prompt for one tenant.
 
     ``tenant_context`` is the free-text block edited by super-admin in the
     admin panel (stored on tenants.system_context). When None or blank we
     fall through to a generic template built from just the tenant's name —
     minimal, honest, no invented governance structure.
+
+    ``intent`` selects which suffix sections ride along (see
+    _INTENT_SUFFIX_KEYS). Default "rules" is byte-identical to the
+    pre-routing prompt; unknown intents fall back to it.
     """
     middle = (tenant_context or "").strip()
     if not middle:
         middle = _GENERIC_TENANT_CONTEXT_TEMPLATE.format(
             tenant_name=tenant_name.strip() or "הארגון"
         )
-    return _PROMPT_PREFIX + middle + _PROMPT_SUFFIX
+    return _PROMPT_PREFIX + middle + _suffix_for_intent(intent)
 
 
 @dataclass
@@ -589,6 +644,7 @@ def answer_with_citations(
     prior_turns: list[PriorTurn] | None = None,
     amendment_notes: list[str] | None = None,
     resolution_notes: list[str] | None = None,
+    intent: str = "rules",
 ) -> LLMResult:
     """Ask Claude to produce a cited answer using tool-use for structured output.
 
@@ -707,7 +763,7 @@ def answer_with_citations(
             {
                 "type": "text",
                 "text": build_system_prompt(
-                    tenant_name=tenant_name, tenant_context=tenant_context
+                    tenant_name=tenant_name, tenant_context=tenant_context, intent=intent
                 ),
                 "cache_control": {"type": "ephemeral"},
             }
@@ -767,7 +823,7 @@ def answer_with_citations(
                 {
                     "type": "text",
                     "text": build_system_prompt(
-                        tenant_name=tenant_name, tenant_context=tenant_context
+                        tenant_name=tenant_name, tenant_context=tenant_context, intent=intent
                     ),
                     "cache_control": {"type": "ephemeral"},
                 }
