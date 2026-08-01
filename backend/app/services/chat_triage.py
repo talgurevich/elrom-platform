@@ -63,6 +63,59 @@ class TriageDecision:
     reason: str = ""
 
 
+# Deixis / anaphora markers — words that reference something from a prior
+# turn. Their presence means the question is NOT self-contained and triage
+# must see the conversation. Space-padded variants avoid matching inside
+# longer words (Hebrew has no \b for these).
+_DEIXIS_MARKERS = (
+    " הם ", " הן ", " זה?", " זה ", " זאת ", "הזה", "הזאת", "ההוא", "ההיא",
+    " אלה", " אלו", "אותו ", "אותה ", "אותם ", "שאמרת", "הקודם", "הקודמת",
+    " שלו ", " שלה ", " שלהם ",
+)
+
+# Disagreement / confusion openers — always route to triage (rule 5 of the
+# triage prompt: clarify before arguing).
+_DISAGREEMENT_MARKERS = (
+    "אבל ", "לא נכון", "לא הבנתי", "אני לא בטוח", "זה לא ", "טעות",
+)
+
+_MIN_SKIP_WORDS = 6
+
+
+def can_skip_triage(
+    *,
+    question: str,
+    prior_turns: list[PriorTurn] | None,
+    lexicon_expansions: list[tuple[str, str]] | None,
+) -> bool:
+    """Heuristic pre-filter: True when the triage LLM call can't plausibly
+    change the outcome, so the pipeline may skip it (saves ~1s + one LLM
+    call on every crisp first-turn question).
+
+    Deliberately conservative — every condition below marks a case where
+    triage COULD matter, and any of them forces the full triage call:
+      * prior turns exist (context folding / disagreement detection)
+      * lexicon matched (triage folds expansions into the canonical query)
+      * short question (under _MIN_SKIP_WORDS words — likely fragmentary)
+      * deixis or disagreement markers present
+
+    False negatives (running triage when it wasn't needed) only cost
+    latency. False positives (skipping when clarify was warranted) are
+    caught downstream by the answerer's own §0.5 clarifying logic.
+    """
+    if prior_turns:
+        return False
+    if lexicon_expansions:
+        return False
+    q = " " + (question or "").strip() + " "
+    if len(q.split()) < _MIN_SKIP_WORDS:
+        return False
+    for marker in _DEIXIS_MARKERS + _DISAGREEMENT_MARKERS:
+        if marker in q:
+            return False
+    return True
+
+
 @lru_cache(maxsize=1)
 def _claude_client():
     from anthropic import Anthropic

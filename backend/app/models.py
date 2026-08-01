@@ -316,6 +316,54 @@ class GoldenQuestion(Base):
     last_confidence: Mapped[str | None] = mapped_column(String)
 
 
+class IngestJob(Base):
+    """One queued upload. POST /upload-async persists the file under
+    storage_dir/ingest-queue/ and inserts a row; the in-process worker
+    (services/ingest_worker.py) claims rows with FOR UPDATE SKIP LOCKED and
+    runs the shared pipeline. Interrupted jobs (worker restart mid-OCR) are
+    requeued by the stale-job sweep, capped by attempts."""
+
+    __tablename__ = "ingest_jobs"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    suffix: Mapped[str] = mapped_column(String(16), nullable=False)
+    stored_path: Mapped[str] = mapped_column(String, nullable=False)
+    content_sha256: Mapped[str | None] = mapped_column(String(64))
+    prefer_ocr: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    auto_classify: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    doc_type: Mapped[str | None] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16), default="queued", server_default="queued", index=True)
+    stage: Mapped[str | None] = mapped_column(String(24))
+    error: Mapped[str | None] = mapped_column(Text)
+    document_id: Mapped[UUID | None] = mapped_column(SQLUUID(as_uuid=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EvalRun(Base):
+    """One full pass over a tenant's goldens. Written by the post-deploy
+    eval task (trigger='deploy', claimed via the partial unique index on
+    tenant_id+git_sha) and by the manual batch endpoint (trigger='manual').
+    Regression detection compares consecutive finished rows per tenant."""
+
+    __tablename__ = "eval_runs"
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), index=True)
+    git_sha: Mapped[str | None] = mapped_column(String(64))
+    trigger: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    total: Mapped[int | None] = mapped_column(Integer)
+    avg_score: Mapped[float | None] = mapped_column(Float)
+    avg_retrieval: Mapped[float | None] = mapped_column(Float)
+    avg_keyword: Mapped[float | None] = mapped_column(Float)
+    confidence_counts: Mapped[dict | None] = mapped_column(JSON)
+    results: Mapped[list | None] = mapped_column(JSON)
+
+
 class Lexicon(Base):
     __tablename__ = "lexicon"
     id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, default=uuid4)

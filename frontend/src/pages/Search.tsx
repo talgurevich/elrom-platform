@@ -852,6 +852,11 @@ function DebugRow({ row }: { row: RetrievalDebugRow }) {
     <li className="flex items-baseline gap-3 py-1.5 text-xs">
       <span className="font-mono text-ink-soft min-w-[88px] text-left">{score}</span>
       <span className="text-ink truncate flex-1">{row.document_filename}</span>
+      {row.lanes && row.lanes.length > 0 && (
+        <span className="font-mono text-[10px] text-accent shrink-0">
+          {row.lanes.join("+")}
+        </span>
+      )}
       {row.section_path && (
         <span className="text-ink-soft truncate max-w-[200px]">⋅ {row.section_path}</span>
       )}

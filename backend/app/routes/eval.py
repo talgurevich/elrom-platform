@@ -8,23 +8,20 @@ Running the eval re-issues every golden through the live search pipeline and
 scores it. This is what turns "I think it got worse" into measurable signal
 after a prompt / embedding / chunking change.
 """
-from datetime import datetime, timezone
+from dataclasses import asdict
+from datetime import datetime
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from sqlalchemy import func
-
 from app.db import get_db
-from app.models import GoldenQuestion, Query
+from app.models import EvalRun, GoldenQuestion, Query
+from app.services.eval_runner import run_and_record, score_golden
 from app.services.identity import IdentityUser, current_user
-from app.services.embedding import embed_texts
-from app.services.lexicon import find_relevant_terms, format_lexicon_block
-from app.services.llm import answer_with_citations
-from app.services.retrieval import hybrid_retrieve
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -111,71 +108,8 @@ def _to_out(g: GoldenQuestion) -> GoldenOut:
 
 
 def _score_golden(db: Session, tenant_id: UUID, g: GoldenQuestion) -> EvalRunResult:
-    """Re-run a single golden through the live pipeline and score."""
-    q_emb = embed_texts([g.question], input_type="search_query")[0]
-    retrieved, _debug, amendment_context, resolution_context = hybrid_retrieve(
-        db, tenant_id=tenant_id, query=g.question, query_embedding=q_emb, top_k=5
-    )
-    retrieved_filenames = [c.document.filename for c in retrieved]
-
-    if retrieved:
-        lex = find_relevant_terms(
-            db, tenant_id=tenant_id, question=g.question, record_events=False
-        )
-        # Same tenant identity/context injection as the live search path —
-        # goldens must be scored against the prompt users actually get.
-        from app.services.identity import get_tenant_cached
-
-        tenant = get_tenant_cached(tenant_id)
-        llm = answer_with_citations(
-            question=g.question,
-            chunks=retrieved,
-            tenant_name=(tenant or {}).get("name") or "הארגון",
-            tenant_context=(tenant or {}).get("system_context"),
-            lexicon_block=format_lexicon_block(lex),
-            amendment_notes=[ac.format_for_prompt() for ac in amendment_context] or None,
-            resolution_notes=[rc.format_for_prompt() for rc in resolution_context] or None,
-        )
-        answer_text = llm.answer
-        confidence = llm.confidence
-    else:
-        answer_text = ""
-        confidence = "refused"
-
-    retrieval_score: float | None = None
-    missing_filenames: list[str] = []
-    if g.expected_doc_filenames:
-        hit = [f for f in g.expected_doc_filenames if f in retrieved_filenames]
-        missing_filenames = [f for f in g.expected_doc_filenames if f not in retrieved_filenames]
-        retrieval_score = len(hit) / len(g.expected_doc_filenames)
-
-    keyword_score: float | None = None
-    missing_keywords: list[str] = []
-    if g.expected_keywords:
-        hit_kw = [kw for kw in g.expected_keywords if kw in answer_text]
-        missing_keywords = [kw for kw in g.expected_keywords if kw not in answer_text]
-        keyword_score = len(hit_kw) / len(g.expected_keywords)
-
-    parts = [s for s in (retrieval_score, keyword_score) if s is not None]
-    composite = sum(parts) / len(parts) if parts else (1.0 if confidence == "confident" else 0.0)
-
-    g.last_run_at = datetime.now(timezone.utc)
-    g.last_score = composite
-    g.last_retrieval_score = retrieval_score
-    g.last_keyword_score = keyword_score
-    g.last_confidence = confidence
-
-    return EvalRunResult(
-        golden_id=g.id,
-        question=g.question,
-        score=composite,
-        retrieval_score=retrieval_score,
-        keyword_score=keyword_score,
-        confidence=confidence,
-        retrieved_filenames=retrieved_filenames,
-        missing_filenames=missing_filenames,
-        missing_keywords=missing_keywords,
-    )
+    """Score one golden via the shared runner (services/eval_runner.py)."""
+    return EvalRunResult(**asdict(score_golden(db, tenant_id, g)))
 
 
 # ─── Routes ────────────────────────────────────────────────────────────
@@ -484,34 +418,64 @@ def run_eval(
     user: IdentityUser = Depends(current_user),
 ) -> EvalRunSummary:
     """Batch runner. Kept for CLI/scripts, but the UI now uses /run/{id}
-    per-golden to avoid the proxy timeout on large golden sets."""
-    tenant_id = user.tenant_id
-    goldens = (
-        db.query(GoldenQuestion)
-        .filter(GoldenQuestion.tenant_id == tenant_id)
-        .all()
-    )
-    if not goldens:
+    per-golden to avoid the proxy timeout on large golden sets.
+
+    Records an EvalRun row (trigger='manual') so manual runs contribute
+    to the same regression history as post-deploy runs."""
+    run = run_and_record(db, tenant_id=user.tenant_id, trigger="manual", git_sha=None)
+    if run is None:
         raise HTTPException(400, "No golden questions defined yet")
 
-    results = [_score_golden(db, tenant_id, g) for g in goldens]
-    db.commit()
-
-    avg_score = sum(r.score for r in results) / len(results)
-    ret_scores = [r.retrieval_score for r in results if r.retrieval_score is not None]
-    kw_scores = [r.keyword_score for r in results if r.keyword_score is not None]
-    avg_retrieval = sum(ret_scores) / len(ret_scores) if ret_scores else None
-    avg_keyword = sum(kw_scores) / len(kw_scores) if kw_scores else None
-
-    confidence_counts: dict[str, int] = {}
-    for r in results:
-        confidence_counts[r.confidence] = confidence_counts.get(r.confidence, 0) + 1
-
     return EvalRunSummary(
-        total=len(results),
-        avg_score=avg_score,
-        avg_retrieval=avg_retrieval,
-        avg_keyword=avg_keyword,
-        confidence_counts=confidence_counts,
-        results=results,
+        total=run.total or 0,
+        avg_score=run.avg_score or 0.0,
+        avg_retrieval=run.avg_retrieval,
+        avg_keyword=run.avg_keyword,
+        confidence_counts=run.confidence_counts or {},
+        results=[EvalRunResult(**r) for r in (run.results or [])],
     )
+
+
+class EvalRunHistoryRow(BaseModel):
+    id: UUID
+    trigger: str
+    git_sha: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    total: int | None
+    avg_score: float | None
+    avg_retrieval: float | None
+    avg_keyword: float | None
+    confidence_counts: dict | None
+
+
+@router.get("/runs", response_model=list[EvalRunHistoryRow])
+def list_eval_runs(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+    limit: int = 20,
+) -> list[EvalRunHistoryRow]:
+    """Recent eval-run history — the score-over-time series that makes a
+    regression visible as a trend rather than a single alert email."""
+    rows = (
+        db.query(EvalRun)
+        .filter(EvalRun.tenant_id == user.tenant_id)
+        .order_by(EvalRun.started_at.desc())
+        .limit(min(limit, 100))
+        .all()
+    )
+    return [
+        EvalRunHistoryRow(
+            id=r.id,
+            trigger=r.trigger,
+            git_sha=r.git_sha,
+            started_at=r.started_at,
+            finished_at=r.finished_at,
+            total=r.total,
+            avg_score=r.avg_score,
+            avg_retrieval=r.avg_retrieval,
+            avg_keyword=r.avg_keyword,
+            confidence_counts=r.confidence_counts,
+        )
+        for r in rows
+    ]

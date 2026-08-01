@@ -16,6 +16,7 @@ newest-of-type, and doc_type distribution at a glance.
 """
 from __future__ import annotations
 
+import time
 from datetime import date
 from uuid import UUID
 
@@ -26,6 +27,18 @@ from sqlalchemy.orm import Session
 from app.models import Document
 
 log = structlog.get_logger()
+
+# Per-tenant TTL cache. The stats block was recomputed on EVERY query (4
+# DB queries each) although the corpus changes at most a few times a day.
+# 5 minutes matches the staleness we already accept for tenant context.
+_CACHE_TTL_SECONDS = 300
+_cache: dict[UUID, tuple[float, str]] = {}
+
+
+def invalidate_corpus_stats(tenant_id: UUID) -> None:
+    """Call after ingest/delete so meta-answers don't serve stale counts
+    for up to the TTL."""
+    _cache.pop(tenant_id, None)
 
 
 # Human-readable Hebrew labels for doc_type. Order matters — this is
@@ -64,7 +77,18 @@ def _pick_date(doc: Document) -> date | None:
 def format_corpus_stats(db: Session, *, tenant_id: UUID) -> str:
     """Return a short Hebrew block summarizing the tenant's corpus, or
     empty string if the corpus is empty. Injected into the answerer
-    prompt above the retrieved sources."""
+    prompt above the retrieved sources. Cached per tenant for
+    _CACHE_TTL_SECONDS; ingest calls invalidate_corpus_stats()."""
+    cached = _cache.get(tenant_id)
+    now = time.monotonic()
+    if cached is not None and now - cached[0] < _CACHE_TTL_SECONDS:
+        return cached[1]
+    block = _format_corpus_stats_uncached(db, tenant_id=tenant_id)
+    _cache[tenant_id] = (now, block)
+    return block
+
+
+def _format_corpus_stats_uncached(db: Session, *, tenant_id: UUID) -> str:
     # Counts by doc_type (NULL doc_type is counted separately as "ללא סיווג").
     rows = (
         db.query(Document.doc_type, sa_func.count(Document.id))

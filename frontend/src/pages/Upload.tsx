@@ -6,7 +6,7 @@ import {
   type DocumentItem,
   type DocumentMetadataPatch,
   type DuplicateGroup,
-  type UploadResponse,
+  type IngestJobStatus,
 } from "../lib/api";
 
 type SortKey = "recent" | "alpha" | "chunks";
@@ -46,8 +46,16 @@ const DOC_STATUS_STYLES: Record<string, string> = {
 type FileStatus =
   | { kind: "queued" }
   | { kind: "uploading" }
-  | { kind: "done"; result: UploadResponse }
+  | { kind: "processing"; stage: string | null }
+  | { kind: "done"; chunks: number | null }
   | { kind: "error"; message: string };
+
+const STAGE_LABELS: Record<string, string> = {
+  extracting: "מחלץ טקסט…",
+  chunking: "מפרק לקטעים…",
+  embedding: "מחשב הטמעות…",
+  finalizing: "מסיים…",
+};
 
 type Queued = {
   id: string;
@@ -240,6 +248,27 @@ export default function Upload() {
   // small "העלה" button next to each row).
   const inflightIds = useRef<Set<string>>(new Set());
 
+  // Poll a server-side job until it settles, pushing stage updates into
+  // the queue row. Processing survives page navigation server-side; this
+  // loop only drives the UI.
+  const waitForJob = async (
+    entryId: string,
+    jobId: string
+  ): Promise<IngestJobStatus> => {
+    for (;;) {
+      const j = await api.getIngestJob(jobId);
+      if (j.status === "done" || j.status === "failed") return j;
+      setQueue((q) =>
+        q.map((e) =>
+          e.id === entryId
+            ? { ...e, status: { kind: "processing", stage: j.stage } }
+            : e
+        )
+      );
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  };
+
   const upload = async (entry: Queued) => {
     if (inflightIds.current.has(entry.id)) return;  // per-file re-entry guard
     inflightIds.current.add(entry.id);
@@ -247,9 +276,25 @@ export default function Upload() {
       q.map((e) => (e.id === entry.id ? { ...e, status: { kind: "uploading" } } : e))
     );
     try {
-      const result = await api.uploadDocument(entry.file, entry.docType);
+      // Enqueue on the server (fast — returns 202 + job id), then poll.
+      // The heavy work (OCR, embedding) runs in the backend worker, so a
+      // dropped connection or page reload no longer kills the ingest.
+      const job = await api.uploadDocumentAsync(entry.file, entry.docType);
       setQueue((q) =>
-        q.map((e) => (e.id === entry.id ? { ...e, status: { kind: "done", result } } : e))
+        q.map((e) =>
+          e.id === entry.id ? { ...e, status: { kind: "processing", stage: job.stage } } : e
+        )
+      );
+      const settled = await waitForJob(entry.id, job.job_id);
+      if (settled.status === "failed") {
+        throw new Error(settled.error || "העיבוד נכשל");
+      }
+      setQueue((q) =>
+        q.map((e) =>
+          e.id === entry.id
+            ? { ...e, status: { kind: "done", chunks: settled.chunks_created } }
+            : e
+        )
       );
       loadDocs();
     } catch (err) {
@@ -277,13 +322,17 @@ export default function Upload() {
     const targets = queue.filter((e) => e.status.kind === "queued");
     setBatchProgress({ done: 0, total: targets.length });
     try {
+      // Server-side queue processes jobs one at a time per worker — fire
+      // all enqueues in parallel and let each row's poll loop track its
+      // own job. Progress ticks as each job settles.
       let done = 0;
-      for (const entry of targets) {
-        // eslint-disable-next-line no-await-in-loop
-        await upload(entry);
-        done += 1;
-        setBatchProgress({ done, total: targets.length });
-      }
+      await Promise.all(
+        targets.map(async (entry) => {
+          await upload(entry);
+          done += 1;
+          setBatchProgress({ done, total: targets.length });
+        })
+      );
     } finally {
       uploadingRef.current = false;
       setUploading(false);
@@ -739,26 +788,9 @@ export default function Upload() {
                     <div className="text-xs text-red-700 mt-1">{entry.status.message}</div>
                   )}
                   {entry.status.kind === "done" && (
-                    <div
-                      className={`text-xs mt-1 ${
-                        entry.status.result.partial
-                          ? "text-amber-700"
-                          : "text-emerald-700"
-                      }`}
-                    >
-                      {entry.status.result.partial ? "⚠" : "✓"}{" "}
-                      {entry.status.result.chunks_created} קטעים
-                      {entry.status.result.pages != null &&
-                        ` · ${entry.status.result.pages} עמ׳`}
-                      {entry.status.result.chars_extracted != null &&
-                        entry.status.result.pages
-                          ? ` · ${Math.round(
-                              entry.status.result.chars_extracted /
-                                entry.status.result.pages
-                            )} תווים/עמ׳`
-                          : ""}
-                      {entry.status.result.used_ocr && " · OCR"}
-                      {entry.status.result.note && ` · ${entry.status.result.note}`}
+                    <div className="text-xs mt-1 text-emerald-700">
+                      ✓ נקלט
+                      {entry.status.chunks != null && ` · ${entry.status.chunks} קטעים`}
                     </div>
                   )}
                 </div>
@@ -790,6 +822,11 @@ export default function Upload() {
                   )}
                   {entry.status.kind === "uploading" && (
                     <span className="text-xs text-ink-soft">מעלה...</span>
+                  )}
+                  {entry.status.kind === "processing" && (
+                    <span className="text-xs text-ink-soft">
+                      {(entry.status.stage && STAGE_LABELS[entry.status.stage]) || "בתור..."}
+                    </span>
                   )}
                   {(entry.status.kind === "done" || entry.status.kind === "error") && (
                     <button

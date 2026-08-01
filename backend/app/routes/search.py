@@ -34,7 +34,12 @@ from app.services.identity import (
     identity_service,
 )
 from app.services.mail import send_broken_answer_alert
-from app.services.chat_triage import peek_snippets, triage_turn
+from app.services.chat_triage import (
+    TriageDecision,
+    can_skip_triage,
+    peek_snippets,
+    triage_turn,
+)
 from app.services.embedding import embed_texts
 from app.services.hitl import find_cached_answer, find_near_misses
 from app.services.answer_annotations import annotate_answer
@@ -296,37 +301,64 @@ async def search_pipeline(
             for e in lexicon_entries
         ]
 
-        # Cheap doc index for triage: just titles, capped to keep prompt size
-        # bounded. The triage uses these to surface "did you mean doc X?".
-        doc_titles_rows = (
-            db.query(Document.filename)
-            .filter(Document.tenant_id == tenant_id)
-            .order_by(Document.ingested_at.desc())
-            .limit(60)
-            .all()
-        )
-        doc_titles = [r[0] for r in doc_titles_rows if r[0]]
-
-        # Peek at top-N FTS chunks so triage can tell whether the answer
-        # plausibly exists in the corpus. Prevents the "clarify a question
-        # that would refuse anyway" anti-pattern.
-        doc_snippets = await asyncio.to_thread(
-            peek_snippets, db, tenant_id=tenant_id, question=question
+        # Speculative embed — kicked off BEFORE triage so the two run
+        # concurrently. Reused whenever the canonical query equals the raw
+        # question (crisp questions, skip-heuristic path); re-embedded only
+        # when triage actually rewrote the query.
+        embed_task = asyncio.create_task(
+            asyncio.to_thread(
+                lambda: embed_texts([question], input_type="search_query")[0]
+            )
         )
 
-        triage = await asyncio.to_thread(
-            triage_turn,
+        if can_skip_triage(
             question=question,
             prior_turns=prior_turns,
             lexicon_expansions=lexicon_expansions,
-            doc_titles=doc_titles,
-            doc_snippets=doc_snippets,
-        )
+        ):
+            # Crisp first-turn question with no lexicon hits — the triage
+            # LLM call can't change the outcome. Saves ~1s + one LLM call.
+            # The answerer's own §0.5 clarifying logic is the downstream
+            # safety net if the question turns out under-specified.
+            triage = TriageDecision(
+                mode="answer",
+                canonical_query=question.strip(),
+                reason="skip_heuristic",
+            )
+            log.info("search_pipeline.triage_skipped", question=question[:120])
+        else:
+            # Cheap doc index for triage: just titles, capped to keep prompt
+            # size bounded. Triage uses these to surface "did you mean doc X?".
+            doc_titles_rows = (
+                db.query(Document.filename)
+                .filter(Document.tenant_id == tenant_id)
+                .order_by(Document.ingested_at.desc())
+                .limit(60)
+                .all()
+            )
+            doc_titles = [r[0] for r in doc_titles_rows if r[0]]
+
+            # Peek at top-N FTS chunks so triage can tell whether the answer
+            # plausibly exists in the corpus. Prevents the "clarify a question
+            # that would refuse anyway" anti-pattern.
+            doc_snippets = await asyncio.to_thread(
+                peek_snippets, db, tenant_id=tenant_id, question=question
+            )
+
+            triage = await asyncio.to_thread(
+                triage_turn,
+                question=question,
+                prior_turns=prior_turns,
+                lexicon_expansions=lexicon_expansions,
+                doc_titles=doc_titles,
+                doc_snippets=doc_snippets,
+            )
 
         # Clarify mode: short-circuit. No retrieval, no LLM-answer. We persist
         # the clarification as a Query turn so it shows up in the conversation
         # thread and feeds the lexicon-learning job later.
         if triage.mode == "clarify" and triage.clarifying_message:
+            embed_task.cancel()  # speculative embed unused on this path
             yield {"type": "stage", "stage": "generating"}
             yield {"type": "detail", "text": "מבקש הבהרה לפני שמחפש"}
             clar_message = triage.clarifying_message
@@ -376,9 +408,19 @@ async def search_pipeline(
                 "text": "ניסוח השאלה הורחב בהתבסס על השיחה והמילון",
             }
 
-        question_embedding = await asyncio.to_thread(
-            lambda: embed_texts([retrieval_query], input_type="search_query")[0]
-        )
+        # Reap the speculative embed. When triage kept the raw question (or
+        # was skipped) this is already done — zero added latency. Only a
+        # genuine rewrite pays for a second embed call.
+        try:
+            raw_question_embedding = await embed_task
+        except asyncio.CancelledError:
+            raw_question_embedding = None
+        if retrieval_query == question and raw_question_embedding is not None:
+            question_embedding = raw_question_embedding
+        else:
+            question_embedding = await asyncio.to_thread(
+                lambda: embed_texts([retrieval_query], input_type="search_query")[0]
+            )
 
         # HITL cache check — counts as part of "analyzing" since it's fast.
         cached = await asyncio.to_thread(

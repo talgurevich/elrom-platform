@@ -90,6 +90,8 @@ export type RetrievalDebugRow = {
   title_rank?: number;
   fusion_score?: number;
   rank?: number;
+  // Which retrieval lane(s) put this chunk into the pool (reranked rows only).
+  lanes?: string[];
 };
 
 export type RetrievalDebug = {
@@ -612,6 +614,18 @@ export type UploadResponse = {
   partial?: boolean;
 };
 
+export type IngestJobStatus = {
+  job_id: string;
+  filename: string;
+  status: "queued" | "processing" | "done" | "failed";
+  stage: string | null;
+  error: string | null;
+  document_id: string | null;
+  chunks_created: number | null;
+  created_at: string | null;
+  finished_at: string | null;
+};
+
 // ─── Endpoints ─────────────────────────────────────────────────────────
 export const api = {
   // Public contact form (unauthenticated)
@@ -853,6 +867,31 @@ export const api = {
       `/api/documents/classify${force ? "?force=true" : ""}`,
       { method: "POST" }
     ),
+  uploadDocumentAsync: async (file: File, docType?: string): Promise<IngestJobStatus> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (docType) fd.append("doc_type", docType);
+    // Same client-side hash as the sync path so the server can 409 cheap
+    // duplicates before enqueueing a job.
+    const bytes = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const sha256Hex = Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const r = await fetch(`${BASE}/api/ingest/upload-async`, {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+      headers: { "X-Content-SHA256": sha256Hex },
+    });
+    if (!r.ok) throw new ApiError(r.status, (await r.text()) || r.statusText);
+    return r.json();
+  },
+  getIngestJob: (jobId: string) =>
+    request<IngestJobStatus>(`/api/ingest/jobs/${jobId}`),
+  listIngestJobs: (limit = 30) =>
+    request<IngestJobStatus[]>(`/api/ingest/jobs?limit=${limit}`),
+
   uploadDocument: async (file: File, docType?: string): Promise<UploadResponse> => {
     const fd = new FormData();
     fd.append("file", file);

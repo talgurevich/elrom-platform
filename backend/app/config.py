@@ -76,5 +76,15 @@ class Settings(BaseSettings):
     # (see render.yaml). Locally, defaults to ./storage under backend/.
     storage_dir: str = "./storage"
 
+    # Post-deploy golden eval — after each deploy, a background task re-runs
+    # every golden per tenant, records an EvalRun row, and emails the
+    # super-admins if the average score regressed vs the previous run.
+    # RENDER_GIT_COMMIT is injected by Render automatically; empty (local
+    # dev) disables the deploy-triggered run.
+    eval_on_deploy: bool = True
+    eval_on_deploy_delay_seconds: int = 180
+    eval_regression_threshold: float = 0.05
+    render_git_commit: str = ""
+
 
 settings = Settings()

@@ -87,3 +87,19 @@ async def startup() -> None:
         embedding_provider=settings.embedding_provider,
         identity_url=settings.identity_url,
     )
+    import asyncio
+
+    from app.services.ingest_worker import ingest_worker_loop
+
+    # Ingestion job queue — one loop per uvicorn worker; FOR UPDATE SKIP
+    # LOCKED claiming makes concurrent loops safe (and doubles throughput).
+    asyncio.create_task(ingest_worker_loop())
+
+    if settings.eval_on_deploy:
+        from app.services.eval_runner import post_deploy_eval_task
+
+        # Post-deploy golden-eval regression watch. Waits for the service
+        # to settle, then scores every tenant's goldens for this deploy SHA
+        # and emails super-admins on regression. The partial unique index on
+        # eval_runs guards against WEB_CONCURRENCY>1 double-runs.
+        asyncio.create_task(post_deploy_eval_task())

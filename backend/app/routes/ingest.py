@@ -1,7 +1,6 @@
 """Ingest endpoints — text body or file upload, both share the same indexing path."""
 import asyncio
 import hashlib
-import tempfile
 from pathlib import Path
 from uuid import UUID
 
@@ -12,15 +11,17 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
-from app.models import Chunk, CorpusFlag, Document
+from app.models import Chunk, CorpusFlag, Document, IngestJob
 from app.services.identity import IdentityUser, current_user
 from app.routes.documents import classify_document_by_id_bg
 from app.services.chunking import build_contextual_input, canonical_section_ref, chunk_document
 from app.services.embedding import embed_texts
+from app.services.corpus_stats import invalidate_corpus_stats
 from app.services.hebrew_text import normalize_filename_for_tsvector, normalize_hebrew
-from app.services.extraction import SUPPORTED_EXTENSIONS, extract_text as extract_file
-from app.services.storage import save_original
+from app.services.extraction import SUPPORTED_EXTENSIONS
+from app.services.ingest_pipeline import IngestRejection, run_upload_pipeline
 from app.services.text_dedup import find_text_duplicate, hash_normalized
 from app.services.upload_dedup import (
     find_by_idempotency_key,
@@ -182,6 +183,7 @@ def ingest(
 
     doc.chunks_created = len(structural_chunks)
     db.commit()
+    invalidate_corpus_stats(tenant_id)
 
     if text_sha:
         try:
@@ -309,16 +311,123 @@ async def ingest_upload(
                 f"(מזהה {existing.id}). לא בוצעה קליטה כפולה.",
             )
 
-    # Read the raw upload bytes once — we need them for the dedup hash check
-    # BEFORE spending 30-60s on extraction, and again later to persist the
-    # original file to disk via save_original().
+    # Read the raw upload bytes once — dedup hash check + pipeline input.
     contents = await file.read()
 
-    # Layer 3 — Server-computed hash. Recheck (in case client didn't send
-    # X-Content-SHA256, or sent it wrong) BEFORE spending 30-60s on extraction.
+    # Default to OCR for PDFs — see docstring for rationale.
+    use_ocr = prefer_ocr if prefer_ocr is not None else (suffix == ".pdf")
+
+    # The shared pipeline (extraction → checks → persist → chunk → embed →
+    # index) is fully synchronous and can take 30-60s on a scanned PDF. Run
+    # it in a worker thread so the event loop stays free for /api/health.
+    # Identical logic to the async job path — see services/ingest_pipeline.
+    try:
+        outcome = await asyncio.to_thread(
+            run_upload_pipeline,
+            db,
+            tenant_id=resolved_tenant,
+            filename=filename,
+            suffix=suffix,
+            contents=contents,
+            prefer_ocr=use_ocr,
+            doc_type=doc_type,
+        )
+    except IngestRejection as e:
+        raise HTTPException(e.status_code, e.detail) from None
+
+    # Auto-classify in the background — see /ingest for rationale.
+    if auto_classify:
+        background_tasks.add_task(classify_document_by_id_bg, outcome.document_id)
+
+    response = IngestResponse(
+        document_id=outcome.document_id,
+        chunks_created=outcome.chunks_created,
+        used_ocr=outcome.used_ocr,
+        extractor=outcome.extractor,
+        note=outcome.note,
+        pages=outcome.pages,
+        chars_extracted=outcome.chars_extracted,
+        partial=outcome.partial,
+    )
+    record_idempotency(
+        db,
+        tenant_id=resolved_tenant,
+        key=x_idempotency_key,
+        document_id=outcome.document_id,
+        response_json=response.model_dump(mode="json"),
+    )
+    db.commit()
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Async upload — job queue. POST /upload-async persists the file and
+# returns 202 + job id immediately; the in-process worker (started at app
+# startup) runs the same pipeline off-request. GET /jobs powers the
+# server-side upload queue in the frontend.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class IngestJobOut(BaseModel):
+    job_id: UUID
+    filename: str
+    status: str  # queued | processing | done | failed
+    stage: str | None = None
+    error: str | None = None
+    document_id: UUID | None = None
+    chunks_created: int | None = None
+    created_at: str | None = None
+    finished_at: str | None = None
+
+
+def _job_out(j: IngestJob, *, chunks_created: int | None = None) -> IngestJobOut:
+    return IngestJobOut(
+        job_id=j.id,
+        filename=j.filename,
+        status=j.status,
+        stage=j.stage,
+        error=j.error,
+        document_id=j.document_id,
+        chunks_created=chunks_created,
+        created_at=j.created_at.isoformat() if j.created_at else None,
+        finished_at=j.finished_at.isoformat() if j.finished_at else None,
+    )
+
+
+def _chunks_for_job(db: Session, j: IngestJob) -> int | None:
+    if j.document_id is None:
+        return None
+    doc = db.get(Document, j.document_id)
+    return doc.chunks_created if doc else None
+
+
+@router.post("/upload-async", response_model=IngestJobOut, status_code=202)
+async def ingest_upload_async(
+    file: UploadFile = File(...),
+    doc_type: str | None = Form(None),
+    prefer_ocr: bool | None = Form(None),
+    auto_classify: bool = Form(True),
+    x_content_sha256: str | None = Header(None),
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> IngestJobOut:
+    """Enqueue an upload for background processing. Returns immediately
+    with a job id; poll GET /api/ingest/jobs/{job_id} for status.
+
+    Duplicate rejection happens twice: cheaply here (content hash against
+    existing documents) and authoritatively in the pipeline when the job
+    runs — so racing identical uploads resolve to one document."""
+    filename = file.filename or "uploaded"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            400, f"Unsupported file type: {suffix}. Supported: {sorted(SUPPORTED_EXTENSIONS)}"
+        )
+
+    contents = await file.read()
     content_sha256 = hashlib.sha256(contents).hexdigest()
     existing = find_by_sha256(
-        db, tenant_id=resolved_tenant, content_sha256=content_sha256
+        db, tenant_id=user.tenant_id, content_sha256=content_sha256
     )
     if existing is not None:
         raise HTTPException(
@@ -327,213 +436,61 @@ async def ingest_upload(
             f"(מזהה {existing.id}). לא בוצעה קליטה כפולה.",
         )
 
-    # Save to a temp file so the existing extraction service can use Path-based APIs
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = Path(tmp.name)
+    queue_dir = Path(settings.storage_dir) / "ingest-queue"
+    queue_dir.mkdir(parents=True, exist_ok=True)
 
-    # Default to OCR for PDFs — see docstring for rationale.
-    use_ocr = prefer_ocr if prefer_ocr is not None else (suffix == ".pdf")
-
-    # Extraction is fully synchronous (Azure SDK + pymupdf + pdfplumber) and can
-    # take 30-60s on a multi-page scanned PDF. Run it in a worker thread so the
-    # event loop stays free to answer /api/health — otherwise Render thinks the
-    # instance is dead and restarts the worker mid-upload.
-    try:
-        extraction = await asyncio.to_thread(extract_file, tmp_path, prefer_ocr=use_ocr)
-    finally:
-        try:
-            tmp_path.unlink()
-        except OSError:
-            pass
-
-    if not extraction.text.strip():
-        raise HTTPException(
-            400,
-            extraction.note or "No text could be extracted from the file.",
-        )
-
-    # Density sanity check
-    if extraction.pages and extraction.pages > 0:
-        density = len(extraction.text) / extraction.pages
-        if density < MIN_CHARS_PER_PAGE:
-            raise HTTPException(
-                400,
-                f"Refusing to ingest {filename}: {len(extraction.text)} chars across "
-                f"{extraction.pages} pages ({density:.0f}/page < {MIN_CHARS_PER_PAGE}). "
-                f"Likely OCR failure. {extraction.note or ''}".strip(),
-            )
-    if extraction.partial:
-        raise HTTPException(
-            400,
-            f"Refusing to ingest {filename}: extraction was partial. {extraction.note}",
-        )
-
-    # Cross-format duplicate detection: hash the normalized extracted text.
-    # PDF/DOCX/re-scanned pairs share this hash even though content_sha256
-    # differs. Stored on the doc; collision → CorpusFlag after commit.
-    text_sha = hash_normalized(extraction.text)
-
-    doc = Document(
-        tenant_id=resolved_tenant,
+    job = IngestJob(
+        tenant_id=user.tenant_id,
         filename=filename,
-        doc_type=doc_type,
-        extractor=extraction.extractor,
-        used_ocr=extraction.used_ocr,
-        pages=extraction.pages,
-        chars_extracted=len(extraction.text),
-        extraction_partial=extraction.partial,
-        extraction_note=extraction.note,
+        suffix=suffix,
+        stored_path="",  # set below once we know the job id
         content_sha256=content_sha256,
-        text_sha256=text_sha,
+        prefer_ocr=prefer_ocr if prefer_ocr is not None else (suffix == ".pdf"),
+        auto_classify=auto_classify,
+        doc_type=doc_type,
     )
-    db.add(doc)
-    try:
-        db.flush()
-    except IntegrityError:
-        # Layer 3-final — the DB unique constraint (migration 0018, held
-        # until existing duplicates are cleaned) rejected our insert
-        # because a concurrent request slipped between our pre-check and
-        # this flush. Return the winner as a 409.
-        winner = handle_sha256_race(
-            db, tenant_id=resolved_tenant, content_sha256=content_sha256
-        )
-        if winner is not None:
-            raise HTTPException(
-                409,
-                f"קובץ עם תוכן זהה נקלט על ידי בקשה מקבילה: {winner.filename!r} "
-                f"(מזהה {winner.id}).",
-            ) from None
-        raise
-
-    db.execute(
-        text("UPDATE documents SET title_search = to_tsvector('simple', :norm) WHERE id = :did"),
-        {"did": doc.id, "norm": normalize_filename_for_tsvector(doc.filename)},
-    )
-
-    # Persist the original file for later in-browser viewing (click-a-citation
-    # → open the source). Runs after extraction sanity-checks so failed
-    # uploads don't fill the disk. Non-fatal — if the disk isn't reachable
-    # for some reason we still ingest the text.
-    try:
-        doc.source_uri = save_original(
-            tenant_id=resolved_tenant,
-            document_id=doc.id,
-            suffix=suffix,
-            contents=contents,
-        )
-    except OSError as e:
-        log.warning("ingest.save_original_failed", error=str(e), doc_id=str(doc.id))
-
-    # Chunking + embedding are also synchronous and can be slow (Cohere call
-    # latency + tokenizer). Push them off the event loop too.
-    structural_chunks = await asyncio.to_thread(chunk_document, extraction.text)
-    if not structural_chunks:
-        raise HTTPException(400, "Document produced no chunks.")
-
-    contextual_inputs = [
-        build_contextual_input(
-            text=sc.text, section_path=sc.section_path, document_title=filename
-        )
-        for sc in structural_chunks
-    ]
-    embeddings = await asyncio.to_thread(embed_texts, contextual_inputs)
-
-    for sc, embedding in zip(structural_chunks, embeddings, strict=True):
-        chunk = Chunk(
-            document_id=doc.id,
-            tenant_id=resolved_tenant,
-            position=sc.position,
-            section_path=sc.section_path,
-            section_ref=canonical_section_ref(sc.section_path),
-            text=sc.text,
-            embedding=embedding,
-            chunk_metadata={"decision_type": sc.decision_type} if sc.decision_type else None,
-        )
-        db.add(chunk)
-        db.flush()
-        db.execute(
-            text("UPDATE chunks SET text_search = to_tsvector('simple', :norm) WHERE id = :cid"),
-            {"cid": chunk.id, "norm": normalize_hebrew(sc.text)},
-        )
-
-    doc.chunks_created = len(structural_chunks)
+    db.add(job)
+    db.flush()
+    stored = queue_dir / f"{job.id}{suffix}"
+    stored.write_bytes(contents)
+    job.stored_path = str(stored)
     db.commit()
-
-    # Cross-format dup flag. Runs after commit so text_sha256 is visible
-    # to concurrent queries and any collision is filed as a soft flag
-    # (reviewer queue), never as a hard reject — near-duplicates like
-    # revised drafts or re-exports are legitimate. Non-fatal on error.
-    if text_sha:
-        try:
-            existing_dup = find_text_duplicate(
-                db,
-                tenant_id=resolved_tenant,
-                text_sha256=text_sha,
-                exclude_doc_id=doc.id,
-            )
-            if existing_dup is not None:
-                db.add(
-                    CorpusFlag(
-                        tenant_id=resolved_tenant,
-                        new_doc_id=doc.id,
-                        existing_doc_id=existing_dup.id,
-                        kind="duplicates",
-                        topic="duplicate_text_hash",
-                        explanation=(
-                            "טקסט מנורמל זהה למסמך קיים "
-                            f"({existing_dup.filename!r}). ייתכנו גרסאות "
-                            "PDF/DOCX של אותו מסמך, סריקה חוזרת, או ייצוא חוזר."
-                        ),
-                        confidence=1.0,
-                        status="pending",
-                        extractor_model="text_sha256_exact",
-                    )
-                )
-                db.commit()
-                log.info(
-                    "ingest.text_hash_duplicate_flagged",
-                    document_id=str(doc.id),
-                    duplicate_of=str(existing_dup.id),
-                )
-        except Exception as e:
-            log.warning(
-                "ingest.text_hash_flag_failed",
-                document_id=str(doc.id),
-                error=str(e)[:200],
-            )
-            db.rollback()
-
-    # Auto-classify in the background — see /ingest for rationale.
-    if auto_classify:
-        background_tasks.add_task(classify_document_by_id_bg, doc.id)
 
     log.info(
-        "ingest.upload_complete",
-        document_id=str(doc.id),
-        chunks=len(structural_chunks),
-        extractor=extraction.extractor,
-        used_ocr=extraction.used_ocr,
-        pages=extraction.pages,
-        chars=len(extraction.text),
-        auto_classify=auto_classify,
+        "ingest.job_enqueued",
+        job_id=str(job.id),
+        filename=filename,
+        bytes=len(contents),
     )
-    response = IngestResponse(
-        document_id=doc.id,
-        chunks_created=len(structural_chunks),
-        used_ocr=extraction.used_ocr,
-        extractor=extraction.extractor,
-        note=extraction.note,
-        pages=extraction.pages,
-        chars_extracted=len(extraction.text),
-        partial=extraction.partial,
+    return _job_out(job)
+
+
+@router.get("/jobs/{job_id}", response_model=IngestJobOut)
+def get_ingest_job(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+) -> IngestJobOut:
+    job = db.get(IngestJob, job_id)
+    if job is None or job.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Job not found")
+    return _job_out(job, chunks_created=_chunks_for_job(db, job))
+
+
+@router.get("/jobs", response_model=list[IngestJobOut])
+def list_ingest_jobs(
+    db: Session = Depends(get_db),
+    user: IdentityUser = Depends(current_user),
+    limit: int = 30,
+) -> list[IngestJobOut]:
+    """Recent jobs for the tenant, newest first — the server-side truth
+    behind the upload queue UI (survives page reloads, unlike the old
+    client-side queue)."""
+    rows = (
+        db.query(IngestJob)
+        .filter(IngestJob.tenant_id == user.tenant_id)
+        .order_by(IngestJob.created_at.desc())
+        .limit(min(limit, 100))
+        .all()
     )
-    record_idempotency(
-        db,
-        tenant_id=resolved_tenant,
-        key=x_idempotency_key,
-        document_id=doc.id,
-        response_json=response.model_dump(mode="json"),
-    )
-    db.commit()
-    return response
+    return [_job_out(j, chunks_created=_chunks_for_job(db, j)) for j in rows]

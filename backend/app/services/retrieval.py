@@ -272,6 +272,11 @@ class RetrievalDebug:
     reranked: list[dict] = field(default_factory=list)
     amendments: list[dict] = field(default_factory=list)
     resolutions: list[dict] = field(default_factory=list)
+    # Which lane(s) put each FINAL chunk into the candidate pool, aggregated:
+    # {"vector": 4, "bm25": 1, "title": 2, "year": 0}. Persisted per query in
+    # Query.retrieval_debug so analytics can measure lane contribution over
+    # time — the data that turns boost tuning from folklore into measurement.
+    lane_counts: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -282,6 +287,7 @@ class RetrievalDebug:
             "reranked": self.reranked,
             "amendments": self.amendments,
             "resolutions": self.resolutions,
+            "lane_counts": self.lane_counts,
         }
 
 
@@ -436,6 +442,13 @@ def hybrid_retrieve(
 
     vector_chunks = {c.id: (c, dist) for c, dist in vector_results}
 
+    # Lane attribution — which retrieval lane(s) put each chunk into the
+    # pool. Carried through to debug.reranked + lane_counts so we can
+    # measure, per query and in aggregate, which lanes actually win.
+    lane_of: dict[UUID, set[str]] = {}
+    for cid in vector_chunks:
+        lane_of.setdefault(cid, set()).add("vector")
+
     # Build a per-source-word OR / cross-source-word AND tsquery so the
     # BM25 lane actually retrieves. The old code passed the normalized flat
     # string to plainto_tsquery, which ANDs everything — including every
@@ -466,6 +479,8 @@ def hybrid_retrieve(
         bm25_sql, {"q": bm25_query, "tenant_id": tenant_id, "limit": top_k * 4}
     ).fetchall() if bm25_query else []
     bm25_scores = {row.id: row.rank for row in bm25_rows}
+    for row in bm25_rows:
+        lane_of.setdefault(row.id, set()).add("bm25")
 
     if bm25_rows:
         bm25_chunk_map = {
@@ -558,6 +573,7 @@ def hybrid_retrieve(
     for c in title_seed:
         combined[c.id] = combined.get(c.id, 0.0) + TITLE_MATCH_BOOST
         vector_chunks.setdefault(c.id, (c, 1.0))
+        lane_of.setdefault(c.id, set()).add("title")
 
     # Year-anchored seeding — when the query names a year or range, run
     # ONE vector search PER YEAR in the range (each returns top-N chunks
@@ -602,6 +618,7 @@ def hybrid_retrieve(
         for c in year_seed:
             combined[c.id] = combined.get(c.id, 0.0) + YEAR_MATCH_BOOST
             vector_chunks.setdefault(c.id, (c, 1.0))
+            lane_of.setdefault(c.id, set()).add("year")
 
     # Recency boost — small linear bump for decisions/protocols by
     # effective_date. Zero for bylaws (amendments handle their versioning).
@@ -697,9 +714,15 @@ def hybrid_retrieve(
             "document_filename": c.document.filename,
             "section_path": c.section_path,
             "rank": i + 1,
+            "lanes": sorted(lane_of.get(c.id, set())),
         }
         for i, c in enumerate(final)
     ]
+    lane_counts: dict[str, int] = {"vector": 0, "bm25": 0, "title": 0, "year": 0}
+    for c in final:
+        for lane in lane_of.get(c.id, set()):
+            lane_counts[lane] = lane_counts.get(lane, 0) + 1
+    debug.lane_counts = lane_counts
 
     amendment_context = _amendment_chain_for_chunks(db, tenant_id=tenant_id, chunks=final)
     debug.amendments = [

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Chunk, Document
+from app.services.corpus_stats import invalidate_corpus_stats
 from app.services.identity import IdentityUser, current_user
 from app.services.storage import guess_content_type, resolve_stored_file
 
@@ -198,6 +199,7 @@ def delete_all_documents(
     for d in docs:
         db.delete(d)
     db.commit()
+    invalidate_corpus_stats(tenant_id)
     log.info("documents.delete_all", tenant_id=str(tenant_id), docs=n_docs, chunks=n_chunks)
     return {"status": "ok", "documents_deleted": n_docs, "chunks_deleted": int(n_chunks)}
 
@@ -880,6 +882,7 @@ def delete_document(
         raise HTTPException(404, "Document not found")
     db.delete(doc)
     db.commit()
+    invalidate_corpus_stats(user.tenant_id)
     log.info("documents.deleted", document_id=str(document_id))
     return {"status": "ok"}
 
@@ -924,6 +927,7 @@ def batch_delete_documents(
         db.delete(doc)
         deleted.append(doc_id)
     db.commit()
+    invalidate_corpus_stats(user.tenant_id)
     log.info(
         "documents.batch_deleted",
         deleted=len(deleted),

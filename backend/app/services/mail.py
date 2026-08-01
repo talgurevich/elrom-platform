@@ -185,6 +185,83 @@ def send_broken_answer_alert(
         )
 
 
+# ─── Eval regression alert ──────────────────────────────────────────────
+
+
+def send_eval_regression_alert(
+    *,
+    to_emails: Iterable[str],
+    tenant_name: str,
+    prev_score: float,
+    new_score: float,
+    git_sha: str,
+    regressed: list[dict],
+) -> None:
+    """Post-deploy golden-eval score dropped beyond the threshold — tell
+    every super-admin which goldens broke, before a user notices."""
+    eval_url = f"{settings.klaser_app_url.rstrip('/')}/#eval"
+    sha_short = git_sha[:12]
+
+    rows_html = ""
+    for r in regressed[:10]:
+        missing_bits = []
+        if r.get("missing_filenames"):
+            missing_bits.append("מסמכים חסרים: " + ", ".join(r["missing_filenames"][:3]))
+        if r.get("missing_keywords"):
+            missing_bits.append("מילות מפתח חסרות: " + ", ".join(r["missing_keywords"][:5]))
+        missing_line = (
+            f'<div class="muted" style="font-size:12px;">{html.escape(" · ".join(missing_bits))}</div>'
+            if missing_bits
+            else ""
+        )
+        rows_html += (
+            '<li style="margin-bottom:10px;">'
+            f"<strong>{html.escape(r['question'][:160])}</strong><br>"
+            f'<span class="muted">{r["prev_score"]:.2f} ← {r["new_score"]:.2f}</span>'
+            f"{missing_line}</li>"
+        )
+
+    html_body = _wrap_html(
+        f"""
+        <div class="tag">Klaser · בקרת איכות</div>
+        <h1>ירידה בציון ה-Golden Set</h1>
+        <p>הרצת הבדיקה שאחרי הדיפלוי האחרון עבור
+        <strong>{html.escape(tenant_name)}</strong> הראתה ירידה בציון הממוצע:</p>
+        <blockquote><strong>{prev_score:.2f} ← {new_score:.2f}</strong></blockquote>
+        <p class="muted">דיפלוי: <code>{html.escape(sha_short)}</code></p>
+
+        <h2>שאלות שנפגעו</h2>
+        <ul style="margin:0; padding-right:20px;">{rows_html or "<li>—</li>"}</ul>
+
+        <p style="margin: 28px 0;">
+          <a href="{html.escape(eval_url)}" class="btn">פתח את מסך ההערכה ←</a>
+        </p>
+        """
+    )
+
+    text_lines = [
+        f"ירידה בציון ה-Golden Set ({tenant_name})",
+        f"{prev_score:.2f} -> {new_score:.2f} (deploy {sha_short})",
+        "",
+        "שאלות שנפגעו:",
+    ]
+    for r in regressed[:10]:
+        text_lines.append(f"  • {r['question'][:160]} ({r['prev_score']:.2f} -> {r['new_score']:.2f})")
+    text_lines.append("")
+    text_lines.append(f"מסך ההערכה: {eval_url}")
+    text_body = "\n".join(text_lines)
+
+    for addr in to_emails:
+        _send(
+            Message(
+                to=addr,
+                subject=f"[Klaser] ⚠ ירידת ציון eval · {tenant_name} ({prev_score:.2f}→{new_score:.2f})",
+                html_body=html_body,
+                text_body=text_body,
+            )
+        )
+
+
 # ─── Public contact form ────────────────────────────────────────────────
 
 

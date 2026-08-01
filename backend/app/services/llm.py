@@ -724,16 +724,104 @@ def answer_with_citations(
         cache_read=getattr(resp.usage, "cache_read_input_tokens", None),
     )
 
-    # Find the tool_use block in the response
+    retrieved_filenames = {c.document.filename for c in chunks}
+    raw_result, tool_use_id = _parse_answer_response(resp)
+    if raw_result is None:
+        log.warning("llm.tool_use_missing", raw=str(resp.content)[:400])
+        return LLMResult(answer="", confidence="uncertain", references=[])
+
+    # Always log the raw LLM output before the guardrail runs so we can
+    # diagnose refuses without needing to reproduce them. Snippet-only to
+    # keep log size sane.
+    log.info(
+        "llm.answer.raw",
+        question=question[:120],
+        confidence=raw_result.confidence,
+        answer_snippet=raw_result.answer[:240],
+        num_refs=len(raw_result.references),
+        ref_titles=[r.title for r in raw_result.references][:6],
+        ref_sections=[r.section_number for r in raw_result.references][:6],
+        retrieved_filenames=list(retrieved_filenames)[:6],
+    )
+
+    violation = _guardrail_violation(raw_result, retrieved_filenames=retrieved_filenames)
+    if violation is None:
+        return raw_result
+
+    # Retry-with-feedback: the model generated a full answer but broke a
+    # citation rule. Throwing that away (the old behavior) wasted a good
+    # answer over a fixable formatting failure — one corrective round-trip
+    # recovers most of them. Only if the retry ALSO violates do we refuse.
+    feedback = _guardrail_feedback(violation, raw_result, retrieved_filenames)
+    log.info(
+        "llm.guardrail.retry",
+        violation=violation,
+        question=question[:120],
+    )
+    if tool_use_id is not None:
+        retry_resp = client.messages.create(
+            model=settings.claude_answer_model,
+            max_tokens=2048,
+            temperature=0,
+            system=[
+                {
+                    "type": "text",
+                    "text": build_system_prompt(
+                        tenant_name=tenant_name, tenant_context=tenant_context
+                    ),
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            tools=[_ANSWER_TOOL],
+            tool_choice={"type": "tool", "name": "answer"},
+            messages=[
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": resp.content},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": feedback,
+                        }
+                    ],
+                },
+            ],
+        )
+        retry_result, _ = _parse_answer_response(retry_resp)
+        if retry_result is not None:
+            retry_violation = _guardrail_violation(
+                retry_result, retrieved_filenames=retrieved_filenames
+            )
+            log.info(
+                "llm.guardrail.retry_outcome",
+                recovered=retry_violation is None,
+                confidence=retry_result.confidence,
+                num_refs=len(retry_result.references),
+            )
+            if retry_violation is None:
+                return retry_result
+
+    return _enforce_cite_or_refuse(
+        raw_result, retrieved_filenames=retrieved_filenames
+    )
+
+
+def _parse_answer_response(resp) -> tuple[LLMResult | None, str | None]:
+    """Extract the `answer` tool call from a Messages response.
+
+    Returns (result, tool_use_id); (None, None) when the tool block is
+    missing or malformed."""
     tool_input: dict | None = None
+    tool_use_id: str | None = None
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "answer":
             tool_input = block.input  # type: ignore[attr-defined]
+            tool_use_id = getattr(block, "id", None)
             break
-
     if not isinstance(tool_input, dict):
-        log.warning("llm.tool_use_missing", raw=str(resp.content)[:400])
-        return LLMResult(answer="", confidence="uncertain", references=[])
+        return None, None
 
     refs_raw = tool_input.get("references") or []
     references = [
@@ -746,27 +834,38 @@ def answer_with_citations(
         for r in refs_raw
         if isinstance(r, dict)
     ]
-    raw_result = LLMResult(
-        answer=str(tool_input.get("answer", "")).strip(),
-        confidence=str(tool_input.get("confidence", "uncertain")).strip(),
-        references=references,
+    return (
+        LLMResult(
+            answer=str(tool_input.get("answer", "")).strip(),
+            confidence=str(tool_input.get("confidence", "uncertain")).strip(),
+            references=references,
+        ),
+        tool_use_id,
     )
-    # Always log the raw LLM output before the guardrail runs so we can
-    # diagnose refuses without needing to reproduce them. Snippet-only to
-    # keep log size sane.
-    log.info(
-        "llm.answer.raw",
-        question=question[:120],
-        confidence=raw_result.confidence,
-        answer_snippet=raw_result.answer[:240],
-        num_refs=len(raw_result.references),
-        ref_titles=[r.title for r in raw_result.references][:6],
-        ref_sections=[r.section_number for r in raw_result.references][:6],
-        retrieved_filenames=[c.document.filename for c in chunks][:6],
-    )
-    return _enforce_cite_or_refuse(
-        raw_result,
-        retrieved_filenames={c.document.filename for c in chunks},
+
+
+def _guardrail_feedback(
+    violation: str, result: LLMResult, retrieved_filenames: set[str]
+) -> str:
+    """Corrective message for the retry round-trip. Hebrew, specific, and
+    names the exact filenames the model may cite."""
+    filenames_list = "\n".join(f"- {f}" for f in sorted(retrieved_filenames))
+    if violation == "no_references":
+        return (
+            "החזרת confidence=confident עם references ריק — זו סתירה פנימית (§3.4). "
+            "אם התשובה מבוססת על הקטעים המצורפים, הפעל שוב את הכלי answer עם אותה תשובה "
+            "וצרף לפחות reference אחד: title = שם הקובץ *בדיוק* כפי שמופיע בכותרת (מקור: ...) "
+            "של הקטע שעליו נשענת. לתשובת סיכום מסמך — section_number ריק מותר. "
+            f"שמות הקבצים הזמינים לציטוט:\n{filenames_list}\n"
+            "אם אין באמת ביסוס בקטעים — החזר refused עם הנוסח המדויק מ-§4."
+        )
+    # unmatched_titles
+    bad = ", ".join(r.title for r in result.references if r.title)[:300]
+    return (
+        f"אף title ב-references שהחזרת ({bad}) לא תואם שם קובץ מהמקורות שנשלפו. "
+        "הפעל שוב את הכלי answer עם אותה תשובה, אבל העתק את title מילה במילה מכותרת "
+        f"(מקור: ...) של הקטע הרלוונטי. שמות הקבצים הזמינים:\n{filenames_list}\n"
+        "אם אף אחד מהקבצים אינו המקור האמיתי לתשובה — החזר refused עם הנוסח המדויק מ-§4."
     )
 
 
@@ -787,6 +886,31 @@ _GUARDRAIL_REFUSE_ANSWER = (
     "לא נמצאו מקורות מובהקים במסמכים שיתמכו בתשובה מבוססת. "
     "עדיף לפנות לגורם הרלוונטי בארגון מאשר לענות בניחוש."
 )
+
+
+def _guardrail_violation(
+    result: LLMResult, *, retrieved_filenames: set[str]
+) -> str | None:
+    """Return the violation kind ("no_references" | "unmatched_titles") when
+    a confident answer lacks grounding, else None. Pure check — enforcement
+    and the retry flow live in the callers."""
+    if result.confidence != "confident":
+        return None
+    if not result.references:
+        return "no_references"
+    has_meta_ref = any(
+        (r.source_type or "").strip().lower() == "meta"
+        and (r.title or "").strip() == "מאגר הארגון"
+        for r in result.references
+    )
+    if has_meta_ref:
+        return None
+    ref_titles = [r.title.strip() for r in result.references if r.title.strip()]
+    if ref_titles and not any(
+        _title_matches_any_filename(t, retrieved_filenames) for t in ref_titles
+    ):
+        return "unmatched_titles"
+    return None
 
 
 def _enforce_cite_or_refuse(
