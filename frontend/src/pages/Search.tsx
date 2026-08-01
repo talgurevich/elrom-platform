@@ -182,7 +182,9 @@ export default function Search() {
     setError(null);
     setStage(null);
     setStageDetail(null);
-    setQuestion("");
+    // Question stays in the composer during loading so the user can see what
+    // they asked while the ThinkingProgress bar takes over the page. Cleared
+    // only on success; on error it stays so the user can edit and retry.
     // Consume the pending golden_id (if any) so it's only attached to the
     // first run after landing on ?golden=. Follow-up turns run untagged.
     const goldenId = pendingGoldenIdRef.current;
@@ -199,6 +201,7 @@ export default function Search() {
       );
       if (!conversationId) setConversationId(fresh.conversation_id);
       setTurns((prev) => [...prev, responseToTurn(fresh)]);
+      setQuestion("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
