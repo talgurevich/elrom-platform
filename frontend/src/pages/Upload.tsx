@@ -1063,7 +1063,7 @@ function FilterSidebar({
   onClear: () => void;
 }) {
   return (
-    <aside className="lg:sticky lg:top-24 self-start border border-line bg-surface p-4 text-sm">
+    <aside className="lg:sticky lg:top-24 self-start border border-line bg-surface p-4 text-sm lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto overscroll-contain">
       <div className="flex items-center justify-between border-b border-line pb-2 mb-3">
         <span className="text-[10px] tracking-[0.25em] uppercase font-bold text-ink-soft">
           סינון
