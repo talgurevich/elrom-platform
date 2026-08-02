@@ -342,6 +342,16 @@ class IdentityServiceClient:
         r.raise_for_status()
         return r.json()
 
+    def update_tenant_name(self, tenant_id: str, name: str) -> dict:
+        r = httpx.patch(
+            f"{self.base_url}/api/service/tenants/{tenant_id}",
+            headers=self._headers(),
+            json={"name": name},
+            timeout=5.0,
+        )
+        r.raise_for_status()
+        return r.json()
+
     def update_tenant_system_context(
         self, tenant_id: str, system_context: str | None
     ) -> dict:

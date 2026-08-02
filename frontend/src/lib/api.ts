@@ -1092,6 +1092,11 @@ export const api = {
 
   adminGetTenant: (tenantId: string) =>
     request<TenantContext>(`/api/admin/tenants/${tenantId}`),
+  adminRenameTenant: (tenantId: string, name: string) =>
+    request<TenantContext>(`/api/admin/tenants/${tenantId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
   adminUpdateTenantContext: (tenantId: string, systemContext: string | null) =>
     request<TenantContext>(
       `/api/admin/tenants/${tenantId}/system-context`,

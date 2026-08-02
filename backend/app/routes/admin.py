@@ -29,6 +29,7 @@ viewing another tenant.
 from datetime import datetime
 from uuid import UUID
 
+import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -196,6 +197,52 @@ def update_tenant_system_context(
         tenant_id=tenant_id,
         length=len(val or ""),
     )
+    return TenantContext(
+        id=updated["id"],
+        name=updated["name"],
+        segment=updated["segment"],
+        system_context=updated.get("system_context"),
+    )
+
+
+class RenameTenantRequest(BaseModel):
+    name: str
+
+
+@router.patch("/tenants/{tenant_id}", response_model=TenantContext)
+def rename_tenant(
+    tenant_id: str,
+    req: RenameTenantRequest,
+    _: IdentityUser = Depends(_require_super_admin),
+) -> TenantContext:
+    """Rename a tenant via identity (source of truth) and invalidate the
+    local per-worker cache so the answerer prompt picks the new name up
+    immediately on this worker."""
+    try:
+        UUID(tenant_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, "Invalid tenant_id") from e
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(400, "שם הארגון לא יכול להיות ריק")
+    try:
+        updated = identity_service.update_tenant_name(tenant_id, name)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 409:
+            raise HTTPException(409, "כבר קיים ארגון בשם הזה") from e
+        log.warning("admin.rename_tenant_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשינוי שם הארגון מול שירות הזהויות: {e}",
+        ) from e
+    except Exception as e:
+        log.warning("admin.rename_tenant_via_identity_failed", error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail=f"שגיאה בשינוי שם הארגון מול שירות הזהויות: {e}",
+        ) from e
+    invalidate_tenant_cache(tenant_id)
+    log.info("admin.tenant_renamed", tenant_id=tenant_id, new_name=name)
     return TenantContext(
         id=updated["id"],
         name=updated["name"],

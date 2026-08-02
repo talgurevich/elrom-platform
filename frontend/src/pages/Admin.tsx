@@ -138,6 +138,10 @@ export default function Admin({ currentUserId }: { currentUserId: string }) {
           await reload();
           setSelectedTenantId(t.id);
         }}
+        onRenamed={async (newName) => {
+          flash("ok", `שם הארגון עודכן ל"${newName}"`);
+          await reload();
+        }}
         onError={flashError}
       />
 
@@ -228,6 +232,7 @@ function TenantsSection({
   selectedId,
   onSelect,
   onCreated,
+  onRenamed,
   onError,
 }: {
   tenants: AdminTenant[];
@@ -235,12 +240,35 @@ function TenantsSection({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreated: (t: AdminTenant) => Promise<void> | void;
+  onRenamed: (newName: string) => Promise<void> | void;
   onError: (msg: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [segment, setSegment] = useState<TenantSegment>("kibbutz_mitchadesh");
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  const saveRename = async (tenantId: string) => {
+    const trimmed = editName.trim();
+    const current = tenants.find((t) => t.id === tenantId);
+    if (!trimmed || (current && trimmed === current.name)) {
+      setEditingId(null);
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await api.adminRenameTenant(tenantId, trimmed);
+      setEditingId(null);
+      await onRenamed(trimmed);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setRenameBusy(false);
+    }
+  };
 
   const submit = async () => {
     if (!name.trim()) return;
@@ -327,15 +355,74 @@ function TenantsSection({
         ) : (
           tenants.map((t) => {
             const active = t.id === selectedId;
+            const editing = editingId === t.id;
             return (
-              <button
+              <div
                 key={t.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelect(t.id)}
-                className={`w-full grid grid-cols-12 px-4 py-4 text-right border-b border-line last:border-b-0 transition ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !editing) onSelect(t.id);
+                }}
+                className={`w-full grid grid-cols-12 px-4 py-4 text-right border-b border-line last:border-b-0 transition cursor-pointer ${
                   active ? "bg-ink text-surface" : "hover:bg-line/50"
                 }`}
               >
-                <div className="col-span-5 font-semibold">{t.name}</div>
+                <div className="col-span-5 font-semibold flex items-center gap-2">
+                  {editing ? (
+                    <span
+                      className="flex items-center gap-2 flex-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        value={editName}
+                        autoFocus
+                        disabled={renameBusy}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void saveRename(t.id);
+                          if (e.key === "Escape") setEditingId(null);
+                        }}
+                        className="flex-1 border border-line-strong px-2 py-1 text-sm bg-surface text-ink focus:outline-none focus:border-ink"
+                      />
+                      <button
+                        onClick={() => void saveRename(t.id)}
+                        disabled={renameBusy || !editName.trim()}
+                        className="text-xs font-bold text-accent hover:text-accent-dark disabled:opacity-50"
+                      >
+                        {renameBusy ? "שומר…" : "שמור"}
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        disabled={renameBusy}
+                        className={`text-xs ${active ? "text-surface/70 hover:text-surface" : "text-ink-soft hover:text-ink"}`}
+                      >
+                        בטל
+                      </button>
+                    </span>
+                  ) : (
+                    <>
+                      <span>{t.name}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingId(t.id);
+                          setEditName(t.name);
+                        }}
+                        title="שנה שם ארגון"
+                        aria-label={`שנה שם: ${t.name}`}
+                        className={`text-xs transition ${
+                          active
+                            ? "text-surface/60 hover:text-surface"
+                            : "text-ink-soft/50 hover:text-accent"
+                        }`}
+                      >
+                        ✎
+                      </button>
+                    </>
+                  )}
+                </div>
                 <div className={`col-span-3 text-sm ${active ? "opacity-80" : "text-ink-soft"}`}>
                   {SEGMENT_LABELS[t.segment as TenantSegment] || t.segment}
                 </div>
@@ -345,7 +432,7 @@ function TenantsSection({
                 <div className="col-span-2 text-center text-sm">
                   {t.document_count}
                 </div>
-              </button>
+              </div>
             );
           })
         )}
