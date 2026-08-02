@@ -1023,7 +1023,7 @@ function ThinkingProgress({
 
 // ─── Share (unchanged from v0.2) ───────────────────────────────────────
 
-const POWERED_BY = "Powered by זכרון ארגוני";
+const POWERED_BY = "Powered By Takanon, Organizational Memory";
 
 function buildShareText({
   question,
