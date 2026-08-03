@@ -563,8 +563,11 @@ export default function Landing({ onLogin }: Props) {
         </section>
 
         </div>
-        {/* Dark CTA — teal band, H2 white, Body white, white outlined button */}
-        <section className="bg-turquoise text-white" aria-labelledby="cta-title">
+        {/* Dark CTA — Klaser gradient (#19819A → #009299 at 267deg), white text */}
+        <section
+          className="bg-[linear-gradient(267deg,#19819A_0.01%,#009299_99.77%)] text-white"
+          aria-labelledby="cta-title"
+        >
           <div className="max-w-6xl mx-auto px-8 py-20 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
             <div>
               <h2
