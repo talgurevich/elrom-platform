@@ -6,6 +6,9 @@ export default {
       fontFamily: {
         sans: ['"Heebo"', '"Assistant"', "system-ui", "sans-serif"],
         display: ['"Heebo"', '"Assistant"', "system-ui", "sans-serif"],
+        // Klaser DS — Rubik for display/H*/Caption/Small; Heebo for Body/Body 2.
+        // Marketing site (Landing.tsx) only.
+        rubik: ['"Rubik"', '"Heebo"', "system-ui", "sans-serif"],
       },
       colors: {
         // Modernist palette — one strong accent, near-black ink, warm off-white
@@ -21,6 +24,11 @@ export default {
         surface: "#fafaf9",
         line: "#e7e5e4", // hairline border, replaces shadow-as-separator
         "line-strong": "#d6d3d1",
+        // Klaser DS turquoise — marketing site (Landing.tsx) only.
+        turquoise: {
+          DEFAULT: "#19819a",
+          dark: "#166b80",
+        },
       },
       backgroundImage: {
         // Solid wash — kept the token name for compat but it's no longer a
