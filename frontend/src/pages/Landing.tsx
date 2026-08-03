@@ -568,7 +568,7 @@ export default function Landing({ onLogin }: Props) {
           className="bg-[linear-gradient(267deg,#19819A_0.01%,#009299_99.77%)] text-white"
           aria-labelledby="cta-title"
         >
-          <div className="max-w-6xl mx-auto px-8 py-20 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+          <div className="max-w-6xl mx-auto px-8 py-20 flex flex-col md:flex-row items-start md:items-center md:justify-center gap-8 md:gap-[104px]">
             <div>
               <h2
                 id="cta-title"
