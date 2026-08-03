@@ -297,7 +297,7 @@ export default function Landing({ onLogin }: Props) {
         {/* Products — Coming Soon + Takanon flagship */}
         <section
           id="products"
-          className="bg-white"
+          className="bg-white border-t border-[#e7e5e4]"
           aria-labelledby="products-title"
         >
           <div className="max-w-6xl mx-auto px-8 py-24">
@@ -374,20 +374,7 @@ export default function Landing({ onLogin }: Props) {
         <section id="about" className="relative overflow-hidden bg-white border-y border-[#e7e5e4]" aria-labelledby="about-title">
           <BackgroundMesh />
           <div className="relative max-w-6xl mx-auto px-8 py-24 grid md:grid-cols-12 gap-12 items-start">
-            {/* Copy — DOM first → right in RTL */}
-            <div className="md:col-span-7">
-              <p className="text-lg leading-relaxed text-[#525252]">
-                קלסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים שבהם המסמכים המחייבים — התקנון, הפרוטוקולים, ההחלטות — הם ליבת ההתנהלות היומיומית.
-              </p>
-              <p className="mt-4 text-lg leading-relaxed text-[#525252]">
-                במקום להציע פלטפורמת AI גנרית, אנחנו בונים כלים ממוקדים לבעיות אמיתיות: להביא את התשובה הנכונה, מהמקור הנכון, בזמן שצריך אותה.
-              </p>
-              {/* Body 2 bold closer */}
-              <p className="mt-8 font-sans font-bold text-xl leading-relaxed text-[#191919]">
-                הידע כבר קיים בארגון. אנחנו רק דואגים שהוא יהיה זמין.
-              </p>
-            </div>
-            {/* Title — DOM last → left in RTL */}
+            {/* Title — DOM first → right in RTL */}
             <div className="md:col-span-5">
               <div className="font-rubik font-bold text-base uppercase tracking-[0.25em] text-turquoise mb-4">
                 עלינו
@@ -400,6 +387,19 @@ export default function Landing({ onLogin }: Props) {
                 <br />
                 לא עבורם.
               </h2>
+            </div>
+            {/* Copy — DOM last → left in RTL */}
+            <div className="md:col-span-7">
+              <p className="text-lg leading-relaxed text-[#525252]">
+                קלסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים שבהם המסמכים המחייבים — התקנון, הפרוטוקולים, ההחלטות — הם ליבת ההתנהלות היומיומית.
+              </p>
+              <p className="mt-4 text-lg leading-relaxed text-[#525252]">
+                במקום להציע פלטפורמת AI גנרית, אנחנו בונים כלים ממוקדים לבעיות אמיתיות: להביא את התשובה הנכונה, מהמקור הנכון, בזמן שצריך אותה.
+              </p>
+              {/* Body 2 bold closer */}
+              <p className="mt-8 font-sans font-bold text-xl leading-relaxed text-[#191919]">
+                הידע כבר קיים בארגון. אנחנו רק דואגים שהוא יהיה זמין.
+              </p>
             </div>
           </div>
         </section>
