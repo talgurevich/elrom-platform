@@ -407,7 +407,7 @@ export default function Landing({ onLogin }: Props) {
         {/* FAQ — H5 eyebrow, H2 centered title, Body intro, Body 2 bold questions */}
         <section id="faq" className="bg-white" aria-labelledby="faq-title">
           <div className="max-w-3xl mx-auto px-8 py-24">
-            <div className="mb-12 text-center">
+            <div className="mb-12 text-right">
               <div className="font-rubik font-bold text-base uppercase tracking-[0.25em] text-turquoise mb-4">
                 שאלות נפוצות
               </div>
@@ -417,7 +417,7 @@ export default function Landing({ onLogin }: Props) {
               >
                 מה שאנשים שואלים אותנו הכי הרבה.
               </h2>
-              <p className="mt-4 text-lg text-[#525252] leading-relaxed max-w-2xl mx-auto">
+              <p className="mt-4 text-lg text-[#525252] leading-relaxed max-w-2xl">
                 שאלות תמימות זוכות לתשובות ישרות. חסר לכם משהו? כתבו לנו בטופס למטה.
               </p>
             </div>
