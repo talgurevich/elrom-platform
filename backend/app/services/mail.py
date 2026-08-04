@@ -82,7 +82,7 @@ _BASE_STYLE = """
   <meta charset="utf-8">
   <style>
     body { margin: 0; padding: 0; background: #fafaf9; font-family: 'Heebo', 'Assistant', system-ui, sans-serif; color: #171717; direction: rtl; }
-    a { color: #b8412b; text-decoration: none; }
+    a { color: #19819A; text-decoration: none; }
     .btn { display: inline-block; background: #171717; color: #fafaf9 !important; text-decoration: none;
            padding: 14px 28px; font-weight: 700; letter-spacing: 0.02em; }
     .muted { color: #525252; font-size: 13px; line-height: 1.6; }
@@ -90,8 +90,8 @@ _BASE_STYLE = """
     h1 { font-size: 28px; font-weight: 900; margin: 0 0 12px; letter-spacing: -0.01em; }
     h2 { font-size: 18px; font-weight: 700; margin: 24px 0 6px; letter-spacing: -0.005em; }
     p  { line-height: 1.65; margin: 0 0 12px; font-size: 15px; }
-    .tag { display: inline-block; text-transform: uppercase; letter-spacing: 0.25em; font-size: 10px; font-weight: 700; color: #b8412b; margin-bottom: 12px; }
-    blockquote { margin: 12px 0; padding: 10px 14px; border-right: 3px solid #b8412b; background: #f2f0ee; font-size: 14px; }
+    .tag { display: inline-block; text-transform: uppercase; letter-spacing: 0.25em; font-size: 10px; font-weight: 700; color: #19819A; margin-bottom: 12px; }
+    blockquote { margin: 12px 0; padding: 10px 14px; border-right: 3px solid #19819A; background: #f2f0ee; font-size: 14px; }
     .foot { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e7e5e4; font-size: 12px; color: #525252; }
   </style>
 """
@@ -364,7 +364,7 @@ def send_support_request(
     transcript_html = ""
     for t in turns:
         role_label = "משתמש" if t.role == "user" else "מערכת"
-        role_color = "#171717" if t.role == "user" else "#b8412b"
+        role_color = "#171717" if t.role == "user" else "#19819A"
         safe_text = html.escape(t.text or "").replace("\n", "<br>")
         transcript_html += (
             f'<div style="margin: 10px 0; padding: 10px 14px; '
@@ -489,7 +489,7 @@ def _tenant_section_html(
     rejected: list[LexiconEntrySnapshot],
 ) -> str:
     body = ""
-    body += _lexicon_bucket_html("🟡 ממתינים לבדיקה", "#b8412b", pending)
+    body += _lexicon_bucket_html("🟡 ממתינים לבדיקה", "#19819A", pending)
     body += _lexicon_bucket_html("✅ חדשים ומאושרים", "#171717", active)
     body += _lexicon_bucket_html("❌ נדחו", "#525252", rejected)
     return (

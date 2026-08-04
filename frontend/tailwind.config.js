@@ -15,18 +15,20 @@ export default {
         // Modernist palette — one strong accent, near-black ink, warm off-white
         // surface. No second decorative color. Borders carry the weight that
         // soft shadows used to.
+        // The accent was clay red (#b8412b) until the Klaser rebrand; it now
+        // matches the DS teal, so `accent` and `turquoise` are the same color.
         accent: {
-          DEFAULT: "#b8412b", // clay red
-          dark: "#922f1f",
-          light: "#d96a52",
+          DEFAULT: "#19819A", // teal — same value as `turquoise`
+          dark: "#166b80", // hover pair, matches turquoise.dark
+          light: "#d96a52", // unused — still the old clay tint
         },
         ink: "#171717",
         "ink-soft": "#525252",
         surface: "#fafaf9",
         line: "#e7e5e4", // hairline border, replaces shadow-as-separator
         "line-strong": "#d6d3d1",
-        // Klaser DS turquoise — marketing site (Landing.tsx) plus the in-app
-        // Search header eyebrow. The rest of the app still runs on `accent`.
+        // Klaser DS turquoise. Kept as its own token for DS-explicit markup,
+        // though `accent` now resolves to the same teal app-wide.
         turquoise: {
           DEFAULT: "#19819a",
           dark: "#166b80",
@@ -35,13 +37,13 @@ export default {
       backgroundImage: {
         // Solid wash — kept the token name for compat but it's no longer a
         // 3-stop gradient. One color, end of story.
-        "brand-gradient": "linear-gradient(180deg, #b8412b 0%, #922f1f 100%)",
+        "brand-gradient": "linear-gradient(180deg, #19819A 0%, #166b80 100%)",
       },
       boxShadow: {
         // Used sparingly — modernist relies on borders + whitespace, not depth.
         soft: "0 1px 0 rgba(23, 23, 23, 0.04)",
         lift: "0 2px 0 rgba(23, 23, 23, 0.06)",
-        glow: "0 0 0 3px rgba(184, 65, 43, 0.18)",
+        glow: "0 0 0 3px rgba(25, 129, 154, 0.18)",
       },
       borderRadius: {
         // Sharper everything. The old default 2xl/full was the SaaS-template look.

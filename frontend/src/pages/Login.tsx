@@ -278,7 +278,7 @@ export function NeuralMesh() {
                 cx={n.x}
                 cy={n.y}
                 r={4}
-                fill="#b8412b"
+                fill="#19819A"
                 className={`neural-active ${
                   i % 4 === 1
                     ? "neural-active-2"
