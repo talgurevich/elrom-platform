@@ -269,7 +269,8 @@ export default function Search() {
     <>
       <header className="mb-8">
         <div className="flex items-baseline justify-between gap-4 flex-wrap mb-3">
-          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold">
+          {/* H5 — Rubik Bold 16, tracking 25% (Klaser DS) */}
+          <div className="font-rubik font-bold text-base uppercase tracking-[0.25em] text-turquoise">
             שיחה
           </div>
           {(turns.length > 0 || conversationId) && (
@@ -284,12 +285,14 @@ export default function Search() {
         </div>
         {turns.length === 0 ? (
           <>
-            <h1 className="font-display text-5xl md:text-6xl font-black text-ink leading-[0.95]">
+            {/* H1 — Rubik Bold 72/72 (Klaser DS) */}
+            <h1 className="font-rubik font-bold text-5xl md:text-[72px] md:leading-[72px] text-[#191919]">
               זיכרון ארגוני
               <br />
-              <span className="text-ink-soft">בשיחה.</span>
+              בשיחה.
             </h1>
-            <p className="text-ink-soft mt-5 text-base max-w-xl leading-relaxed">
+            {/* Body — Heebo Regular 18 */}
+            <p className="mt-5 font-sans text-lg leading-relaxed text-[#525252] max-w-xl">
               שאל שאלה בעברית. אם משהו לא ברור — המערכת תבקש הבהרה לפני שתחפש,
               ותלמד מההמשך כדי לענות טוב יותר בפעם הבאה.
             </p>
@@ -324,9 +327,17 @@ export default function Search() {
       <div ref={threadEndRef} />
 
       {/* Composer — sticky-ish at the bottom of the page. */}
+      {/* Empty state follows the Figma box: 722×180, no padding of its own,
+          column flex centered vertically, 8px gap, 8px radius. The inner rows
+          carry the inset instead, so nothing touches the border. Once the
+          thread starts, the composer goes back to a compact padded bar. */}
       <form
         onSubmit={submit}
-        className="mt-6 sticky bottom-4 bg-surface border-2 border-ink p-3 shadow-soft"
+        className={`mt-6 sticky bottom-4 bg-surface border-2 border-ink shadow-soft rounded-[8px] flex flex-col gap-2 ${
+          turns.length === 0
+            ? "justify-center items-start w-full max-w-[722px] h-[180px] p-0"
+            : "p-3"
+        }`}
       >
         <textarea
           value={question}
@@ -346,7 +357,11 @@ export default function Search() {
           disabled={loading}
           className="w-full px-3 py-2 bg-surface outline-none text-base resize-none placeholder:text-ink-soft/70 disabled:opacity-60"
         />
-        <div className="mt-2 flex items-center gap-3 flex-wrap">
+        <div
+          className={`flex items-center gap-3 flex-wrap ${
+            turns.length === 0 ? "px-3" : ""
+          }`}
+        >
           <button
             type="submit"
             disabled={loading || !question.trim()}
@@ -988,29 +1003,30 @@ function ThinkingProgress({
 
   return (
     <section
-      className="mb-6 py-4 border-y-2 border-ink animate-fade-up"
+      className="mb-6 py-4 animate-fade-up"
       role="status"
       aria-live="polite"
       aria-label="מתבצע חיפוש"
     >
       <div className="h-[3px] bg-line overflow-hidden mb-3">
         <div
-          className="h-full bg-accent transition-[width] duration-300 ease-out"
+          className="h-full bg-turquoise transition-[width] duration-300 ease-out"
           style={{ width: `${Math.min(pct, FINAL_PCT)}%` }}
         />
       </div>
-      <div className="grid grid-cols-4 gap-2 text-[11px] tracking-wider uppercase font-bold">
+      {/* Stage labels — H5 (Rubik Bold 16, tracking 25%) */}
+      <div className="grid grid-cols-4 gap-2 font-rubik font-bold text-base uppercase tracking-[0.25em]">
         {THINKING_STAGES.map((s, i) => {
           const state = i < currentIdx ? "done" : i === currentIdx ? "active" : "pending";
           const cls =
             state === "active"
-              ? "text-accent"
+              ? "text-turquoise"
               : state === "done"
               ? "text-ink"
               : "text-line-strong";
           return (
             <span key={s.key} className={cls}>
-              <span className="text-ink-soft font-mono ml-2">0{i + 1}</span>
+              <span className="text-ink-soft ml-2">0{i + 1}</span>
               {s.label}
             </span>
           );
@@ -1163,13 +1179,15 @@ function RecentConversations({ onPick }: { onPick: (id: string) => void }) {
         <span>שיחות אחרונות</span>
         <span className="flex-1 h-px bg-line" />
       </div>
-      <ul className="border border-line">
+      {/* Rows are separate boxes now: 722px max, 8px gap, 8px radius — the
+          shared container border and hairline dividers are gone. */}
+      <ul className="flex flex-col gap-2 w-full max-w-[722px]">
         {convs.map((c, i) => (
-          <li key={c.id} className={i > 0 ? "border-t border-line" : ""}>
+          <li key={c.id}>
             <button
               type="button"
               onClick={() => onPick(c.id)}
-              className="group w-full text-right px-4 py-3 hover:bg-line/40 transition flex items-baseline gap-4 text-sm text-ink"
+              className="group w-full text-right px-4 py-3 rounded-[8px] border border-line bg-white hover:bg-line/40 transition flex items-baseline gap-4 text-sm text-ink"
             >
               <span className="font-mono text-xs text-ink-soft group-hover:text-accent transition w-6 shrink-0">
                 {String(i + 1).padStart(2, "0")}
@@ -1230,20 +1248,28 @@ function HowItWorks() {
 
   return (
     <section className="mt-4 animate-fade-up">
-      <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4 flex items-center gap-3">
+      {/* H5 — Rubik Bold 16, tracking 25% (Klaser DS) */}
+      <div className="font-rubik font-bold text-base uppercase tracking-[0.25em] text-turquoise mb-4 flex items-center gap-3">
         <span>איך זה עובד</span>
         <span className="flex-1 h-px bg-line" />
       </div>
 
-      <p className="text-sm text-ink-soft leading-relaxed mb-6 max-w-2xl">
+      {/* Body — Heebo Regular 18 */}
+      <p className="font-sans text-lg leading-relaxed text-[#525252] mb-6 max-w-2xl">
         זו לא חיפוש חד-פעמי — זו שיחה. כשאתה מבהיר את הכוונה, המערכת לומדת
         מההמשך ועונה טוב יותר בפעם הבאה.
       </p>
 
-      <ol className="grid md:grid-cols-2 gap-px bg-line border border-line">
+      {/* Cards per Figma: 374px wide, 24px padding, 8px item gap, 12px radius,
+          3px teal-20% border on white. `items-start` is the RTL equivalent of
+          Figma's `align-items: flex-end` — both put content on the right edge. */}
+      <ol className="grid md:grid-cols-2 gap-4">
         {steps.map((s, i) => (
-          <li key={s.title} className="bg-surface p-5">
-            <div className="flex items-baseline gap-3 mb-2">
+          <li
+            key={s.title}
+            className="flex flex-col items-start gap-2 w-full max-w-[374px] p-6 rounded-[12px] border-[3px] border-turquoise/20 bg-white"
+          >
+            <div className="flex items-baseline gap-3">
               <span className="font-mono text-accent font-bold text-sm">0{i + 1}</span>
               <h3 className="font-display font-bold text-ink">{s.title}</h3>
             </div>

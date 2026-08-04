@@ -7,7 +7,8 @@ export default {
         sans: ['"Heebo"', '"Assistant"', "system-ui", "sans-serif"],
         display: ['"Heebo"', '"Assistant"', "system-ui", "sans-serif"],
         // Klaser DS — Rubik for display/H*/Caption/Small; Heebo for Body/Body 2.
-        // Marketing site (Landing.tsx) only.
+        // Started on the marketing site (Landing.tsx); now also used for the
+        // in-app Search header, which follows the same DS type scale.
         rubik: ['"Rubik"', '"Heebo"', "system-ui", "sans-serif"],
       },
       colors: {
@@ -24,7 +25,8 @@ export default {
         surface: "#fafaf9",
         line: "#e7e5e4", // hairline border, replaces shadow-as-separator
         "line-strong": "#d6d3d1",
-        // Klaser DS turquoise — marketing site (Landing.tsx) only.
+        // Klaser DS turquoise — marketing site (Landing.tsx) plus the in-app
+        // Search header eyebrow. The rest of the app still runs on `accent`.
         turquoise: {
           DEFAULT: "#19819a",
           dark: "#166b80",
