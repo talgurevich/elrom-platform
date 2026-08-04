@@ -389,7 +389,7 @@ export default function App() {
               </span>
             </button>
             {switcherOpen && isSuper && (
-              <div className="absolute right-0 mt-3 min-w-[240px] bg-surface border border-ink overflow-hidden animate-fade-up">
+              <div className="absolute right-0 mt-3 min-w-[240px] bg-surface text-ink border border-line-strong rounded-md shadow-lift overflow-hidden animate-fade-up">
                 <div className="px-3 py-2 text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold border-b border-line">
                   צפייה כארגון
                 </div>
@@ -442,7 +442,7 @@ export default function App() {
                 </span>
               </button>
               {menuOpen && (
-                <div className="absolute left-0 mt-2 w-56 bg-surface border border-ink overflow-hidden animate-fade-up">
+                <div className="absolute left-0 mt-2 w-56 bg-surface text-ink border border-line-strong rounded-md shadow-lift overflow-hidden animate-fade-up">
                   <div className="px-4 py-3 border-b border-line">
                     <div className="text-sm font-semibold text-ink truncate">
                       {user.display_name || "—"}
@@ -634,7 +634,7 @@ export default function App() {
               עדכוני פיתוח
             </a>
             <span className="text-line-strong">·</span>
-            <span>גרסה 0.4</span>
+            <span>גרסה 0.9</span>
           </span>
         </div>
       </footer>
