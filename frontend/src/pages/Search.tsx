@@ -279,10 +279,11 @@ export default function Search() {
           {(turns.length > 0 || conversationId) && (
             <button
               onClick={startNewConversation}
-              className="text-xs text-ink-soft hover:text-accent transition underline underline-offset-4"
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-md border border-turquoise text-sm font-semibold text-turquoise bg-white hover:bg-turquoise hover:text-white transition"
               title="התחל שיחה חדשה — מנקה את ההקשר"
             >
-              שיחה חדשה +
+              <span>שיחה חדשה</span>
+              <PlusCircle />
             </button>
           )}
         </div>
@@ -555,10 +556,45 @@ function ReportSupportButton({ queryId }: { queryId: string }) {
       onClick={send}
       disabled={sending}
       title="שולח מייל לצוות עם השאלה, התשובה, וקישור לשיחה"
-      className="px-4 py-2 text-sm font-semibold border-2 border-line-strong text-ink-soft bg-surface hover:border-ink hover:text-ink transition disabled:opacity-50"
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-warning-dark text-warning-dark bg-white hover:bg-warning-dark hover:text-white transition disabled:opacity-50"
     >
-      {sending ? "שולח…" : "🚩 דווח בעיה"}
+      {sending ? "שולח…" : <><span>דווח בעיה</span><span aria-hidden>⚑</span></>}
     </button>
+  );
+}
+
+/* Small ghost action under each chat bubble — copies that bubble's text. */
+function CopyLine({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {
+          /* clipboard blocked — nothing useful to say */
+        }
+      }}
+      className="inline-flex items-center gap-1.5 text-[11px] text-ink-soft hover:text-accent transition"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="2" />
+        <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <span>{copied ? "הועתק" : "העתק"}</span>
+    </button>
+  );
+}
+
+function PlusCircle() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -574,23 +610,20 @@ function TurnView({
   onPickCandidate: (doc: string) => void;
 }) {
   return (
-    <div className="animate-fade-up">
-      {/* User bubble */}
-      <div className="flex gap-3 mb-3">
-        <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold pt-1 w-16 shrink-0">
-          את/ה
-        </div>
-        <div className="text-base text-ink whitespace-pre-wrap leading-relaxed flex-1">
+    <div className="animate-fade-up space-y-3">
+      {/* User bubble — justify-start puts it on the RIGHT under RTL. */}
+      <div className="flex justify-start">
+        <div className="max-w-[80%] rounded-[12px] bg-turquoise/10 px-4 py-3 text-base text-ink whitespace-pre-wrap leading-relaxed">
           {turn.question}
         </div>
       </div>
+      <div className="flex justify-start">
+        <CopyLine text={turn.question} />
+      </div>
 
-      {/* Assistant bubble */}
-      <div className="flex gap-3">
-        <div className="text-[10px] tracking-[0.2em] uppercase text-accent font-bold pt-1 w-16 shrink-0">
-          המערכת
-        </div>
-        <div className="flex-1 space-y-4">
+      {/* Assistant side — justify-end puts it on the LEFT under RTL. */}
+      <div className="flex justify-end">
+        <div className="w-full max-w-[92%] space-y-4">
           {turn.just_retried && (
             <div className="px-3 py-2 bg-surface border-r-4 border-accent text-sm text-ink">
               התשובה הקודמת הוסרה מהמטמון. הנה ניסיון חדש מבוסס מקורות.
@@ -623,13 +656,12 @@ function TurnView({
               clarify turns. The clarify mode just has no sources/share below.
               Refused answers get a different treatment further below. */}
           {turn.confidence !== "refused" && (
-            <article className="relative bg-surface">
-              <div className="absolute -right-1 top-0 bottom-0 w-1 bg-accent" />
-              <div className="pr-5 py-1">
+            <>
+              <article className="rounded-[12px] bg-[#f4f4f5] px-5 py-4">
                 <p className={`whitespace-pre-wrap text-ink leading-relaxed ${
                   turn.mode === "clarify"
-                    ? "font-display text-lg md:text-xl"
-                    : "font-display text-xl md:text-2xl"
+                    ? "font-display text-base md:text-lg"
+                    : "font-display text-base md:text-lg"
                 }`}>
                   <AnnotatedAnswer
                     text={turn.answer}
@@ -637,8 +669,11 @@ function TurnView({
                     onAddCandidate={promptAddToLexicon}
                   />
                 </p>
+              </article>
+              <div className="flex justify-end">
+                <CopyLine text={turn.answer} />
               </div>
-            </article>
+            </>
           )}
 
           {/* Refused turn — the answer speaks for itself, no framing copy.
@@ -653,17 +688,19 @@ function TurnView({
                 <div className="mt-5 flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => onFeedback("positive")}
-                    className="px-4 py-2 text-sm font-semibold border-2 border-ink bg-surface hover:bg-ink hover:text-surface transition"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-success text-success bg-white hover:bg-success hover:text-white transition"
                     title="הסירוב היה נכון — הנושא באמת מחוץ למאגר"
                   >
-                    ✓ צדקת שסירבת
+                    <span>צדקת שסירבת</span>
+                    <span aria-hidden>✓</span>
                   </button>
                   <button
                     onClick={() => onFeedback("negative")}
-                    className="px-4 py-2 text-sm font-semibold border-2 border-accent text-accent bg-surface hover:bg-accent hover:text-surface transition"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-danger text-danger bg-white hover:bg-danger hover:text-white transition"
                     title="הקורפוס יודע את התשובה — המערכת פשוט לא מצאה. יופיע בתור הבאגים של המנהל."
                   >
-                    ✗ התשובה קיימת במסמכים — דווח למנהל
+                    <span>התשובה קיימת במסמכים</span>
+                    <span aria-hidden>✗</span>
                   </button>
                   <ReportSupportButton queryId={turn.query_id} />
                 </div>
@@ -711,16 +748,18 @@ function TurnView({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => onFeedback("positive")}
-                    className="px-4 py-2 text-sm font-semibold border-2 border-ink bg-surface hover:bg-ink hover:text-surface transition"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-success text-success bg-white hover:bg-success hover:text-white transition"
                   >
-                    ✓ תשובה טובה
+                    <span>תשובה טובה</span>
+                    <span aria-hidden>✓</span>
                   </button>
                   <button
                     onClick={() => onFeedback("negative")}
-                    className="px-4 py-2 text-sm font-semibold border-2 border-accent text-accent bg-surface hover:bg-accent hover:text-surface transition"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-danger text-danger bg-white hover:bg-danger hover:text-white transition"
                     title="הקורפוס יודע את התשובה — המערכת פשוט לא מצאה. יופיע בתור הבאגים של המנהל."
                   >
-                    ✗ התשובה שגויה — הקורפוס יודע
+                    <span>תשובה שגויה</span>
+                    <span aria-hidden>✗</span>
                   </button>
                   <ReportSupportButton queryId={turn.query_id} />
                 </div>
@@ -1130,35 +1169,35 @@ function ShareActions({
     `mailto:?subject=${encodeURIComponent(`תשובה לשאלה: ${question}`)}` +
     `&body=${encodeURIComponent(plain)}`;
 
+  // Share row — light pills, no divider rule, per the chat redesign.
   return (
-    <div className="pt-2 border-t border-line">
+    <div className="pt-1">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-ink-soft ml-2">שלח / העתק:</span>
         <a
           href={whatsappUrl}
           target="_blank"
           rel="noreferrer noopener"
-          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+          className="px-3 py-1.5 rounded-md text-xs bg-line/50 text-ink-soft hover:bg-line hover:text-ink transition"
         >
-          WhatsApp
+          Whatsapp
         </a>
         <a
           href={mailtoUrl}
-          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+          className="px-3 py-1.5 rounded-md text-xs bg-line/50 text-ink-soft hover:bg-line hover:text-ink transition"
         >
           אימייל
         </a>
         <button
           type="button"
           onClick={() => copyToClipboard("markdown")}
-          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+          className="px-3 py-1.5 rounded-md text-xs bg-line/50 text-ink-soft hover:bg-line hover:text-ink transition"
         >
           {copied === "markdown" ? "הועתק ✓" : "העתק Markdown"}
         </button>
         <button
           type="button"
           onClick={() => copyToClipboard("plain")}
-          className="px-3 py-1.5 text-sm border border-line-strong hover:border-ink hover:bg-surface text-ink-soft hover:text-ink transition"
+          className="px-3 py-1.5 rounded-md text-xs bg-line/50 text-ink-soft hover:bg-line hover:text-ink transition"
         >
           {copied === "plain" ? "הועתק ✓" : "העתק טקסט"}
         </button>

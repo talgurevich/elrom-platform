@@ -119,7 +119,7 @@ const ALL_TABS: TabDef[] = [
 function InitialAvatar({ name }: { name: string }) {
   const initial = (name || "?").trim().charAt(0).toUpperCase();
   return (
-    <div className="w-8 h-8 bg-ink text-surface text-sm font-bold flex items-center justify-center">
+    <div className="w-8 h-8 rounded-full bg-white/20 text-white text-sm font-bold flex items-center justify-center">
       {initial}
     </div>
   );
@@ -190,7 +190,7 @@ function SideNav({
   return (
     <nav className="flex flex-col text-sm" aria-label="ניווט ראשי">
       <div
-        className={`border-b border-line ${
+        className={`${
           collapsed ? "px-2 py-3 flex justify-center" : "px-5 py-4"
         }`}
       >
@@ -227,13 +227,10 @@ function SideNav({
                     : "gap-3 pr-3 pl-2 py-2.5 rounded-md"
                 } ${
                   active
-                    ? "bg-ink text-surface"
-                    : "text-ink-soft hover:text-ink hover:bg-line/50"
+                    ? "bg-turquoise/10 text-turquoise font-semibold"
+                    : "text-ink hover:bg-line/50"
                 }`}
               >
-                {active && !collapsed && (
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-accent rounded-l" />
-                )}
                 <span
                   className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-[18px] h-[18px]"}`}
                   aria-hidden="true"
@@ -362,7 +359,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col text-ink font-sans bg-line/10">
-      <header className="bg-surface border-b border-ink sticky top-0 z-30">
+      {/* Header — solid DS teal with white type (Klaser DS). */}
+      <header className="bg-turquoise text-white sticky top-0 z-30">
         <div className="w-full px-4 md:px-6 h-16 flex items-center justify-between gap-4">
           {/* Wordmark — driven by the current tenant's name. For super-admins,
               it becomes a dropdown that lists every tenant. */}
@@ -378,15 +376,15 @@ export default function App() {
             >
               <span
                 className={`font-display font-black text-2xl leading-none tracking-tight ${
-                  isViewingOther ? "text-accent" : "text-ink"
+                  isViewingOther ? "text-warning" : "text-white"
                 }`}
               >
                 {user.tenant_name || "—"}
               </span>
               {isSuper && (
-                <span className="text-ink-soft text-xs leading-none">▾</span>
+                <span className="text-white/70 text-xs leading-none">▾</span>
               )}
-              <span className="hidden sm:inline text-[10px] tracking-[0.2em] uppercase text-ink-soft border-r border-line-strong pr-3">
+              <span className="hidden sm:inline text-[10px] tracking-[0.2em] uppercase text-white/80 border-r border-white/30 pr-3">
                 Organizational Memory
               </span>
             </button>
@@ -436,10 +434,10 @@ export default function App() {
               <button
                 onClick={() => setMenuOpen((o) => !o)}
                 onBlur={() => setTimeout(() => setMenuOpen(false), 120)}
-                className="flex items-center gap-2 px-2 py-1 hover:bg-line/60 transition"
+                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-white/10 transition"
               >
                 <InitialAvatar name={user.display_name || user.email} />
-                <span className="hidden md:block text-sm text-ink-soft max-w-[140px] truncate">
+                <span className="hidden md:block text-sm text-white/90 max-w-[140px] truncate">
                   {user.display_name || user.email}
                 </span>
               </button>
@@ -505,7 +503,7 @@ export default function App() {
             {/* Hamburger — mobile only. Opens the right-side drawer. */}
             <button
               onClick={() => setSidebarOpen((o) => !o)}
-              className="lg:hidden p-2 hover:bg-line/60 transition text-ink"
+              className="lg:hidden p-2 rounded-md hover:bg-white/10 transition text-white"
               aria-label={sidebarOpen ? "סגור תפריט" : "פתח תפריט"}
               aria-expanded={sidebarOpen}
             >
@@ -544,7 +542,7 @@ export default function App() {
           rectangle in the middle of a long page. Main content gets a
           matching right padding on lg+ so it doesn't slide under the aside. */}
       <aside
-        className={`hidden lg:flex lg:flex-col fixed top-16 bottom-0 right-0 z-20 bg-surface border-l border-ink shadow-[inset_1px_0_0_rgba(0,0,0,0.02)] transition-[width] duration-200 ease-out ${
+        className={`hidden lg:flex lg:flex-col fixed top-16 bottom-0 right-0 z-20 bg-surface border-l border-line transition-[width] duration-200 ease-out ${
           sidebarCollapsed ? "w-16" : "w-60"
         }`}
       >
@@ -597,7 +595,7 @@ export default function App() {
             aria-hidden="true"
           />
           <aside
-            className="lg:hidden fixed top-16 bottom-0 right-0 w-64 bg-surface border-l border-ink z-40 overflow-y-auto animate-fade-up"
+            className="lg:hidden fixed top-16 bottom-0 right-0 w-64 bg-surface border-l border-line z-40 overflow-y-auto animate-fade-up"
             role="dialog"
             aria-label="תפריט ניווט"
           >
@@ -612,7 +610,7 @@ export default function App() {
       )}
 
       <footer
-        className={`mt-20 border-t border-ink bg-surface transition-[padding] duration-200 ease-out ${
+        className={`mt-20 bg-surface transition-[padding] duration-200 ease-out ${
           sidebarCollapsed ? "lg:pr-16" : "lg:pr-60"
         }`}
       >

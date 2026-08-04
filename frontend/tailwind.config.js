@@ -42,6 +42,17 @@ export default {
           DEFAULT: "#ff7c2a",
           dark: "#c2410c",
         },
+        // Feedback semantics. The Klaser DS proper is teal + orange only, so
+        // these are app-level additions — registered here so success/danger
+        // stop being ad-hoc Tailwind palette picks. Both clear AA on white.
+        success: {
+          DEFAULT: "#15803d",
+          soft: "#dcfce7",
+        },
+        danger: {
+          DEFAULT: "#b91c1c",
+          soft: "#fee2e2",
+        },
       },
       backgroundImage: {
         // Solid wash — kept the token name for compat but it's no longer a
