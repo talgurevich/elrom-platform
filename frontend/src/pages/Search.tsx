@@ -82,6 +82,9 @@ export default function Search() {
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<SearchPipelineStage | null>(null);
   const [stageDetail, setStageDetail] = useState<string | null>(null);
+  // Drives the submit button's fill: solid teal while the composer has focus,
+  // faded when it doesn't.
+  const [composerFocused, setComposerFocused] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
   // When the user opened this page from the Eval panel with ?golden=&q=,
   // we tag the *first* auto-run with that golden_id so 👍/👎 rolls into the
@@ -333,7 +336,7 @@ export default function Search() {
           thread starts, the composer goes back to a compact padded bar. */}
       <form
         onSubmit={submit}
-        className={`mt-6 sticky bottom-4 bg-surface border-2 border-ink shadow-soft rounded-[8px] flex flex-col gap-2 ${
+        className={`mt-6 sticky bottom-4 bg-surface border border-line shadow-soft rounded-[8px] flex flex-col gap-2 ${
           turns.length === 0
             ? "justify-center items-start w-full max-w-[722px] h-[180px] p-0"
             : "p-3"
@@ -342,6 +345,8 @@ export default function Search() {
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          onFocus={() => setComposerFocused(true)}
+          onBlur={() => setComposerFocused(false)}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
               e.preventDefault();
@@ -357,15 +362,22 @@ export default function Search() {
           disabled={loading}
           className="w-full px-3 py-2 bg-surface outline-none text-base resize-none placeholder:text-ink-soft/70 disabled:opacity-60"
         />
+        {/* justify-end puts this group on the LEFT under RTL. The shortcut hint
+            comes first in the DOM so the button ends up furthest left. */}
         <div
-          className={`flex items-center gap-3 flex-wrap ${
+          className={`w-full flex items-center justify-end gap-3 flex-wrap ${
             turns.length === 0 ? "px-3" : ""
           }`}
         >
+          <span className="text-xs text-ink-soft">Cmd/Ctrl + Enter</span>
           <button
             type="submit"
             disabled={loading || !question.trim()}
-            className="px-6 py-2 bg-accent hover:bg-accent-dark text-surface font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed transition"
+            className={`px-6 py-2 rounded-md text-surface font-bold tracking-wide transition disabled:cursor-not-allowed ${
+              composerFocused || question.trim()
+                ? "bg-turquoise hover:bg-turquoise-dark"
+                : "bg-turquoise/50"
+            }`}
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
@@ -378,9 +390,13 @@ export default function Search() {
               "שלח"
             )}
           </button>
-          <span className="text-xs text-ink-soft">Cmd/Ctrl + Enter</span>
         </div>
       </form>
+
+      {/* Disclaimer — sits under the box, matching the ChatGPT/Claude pattern. */}
+      <p className="mt-2 w-full max-w-[722px] text-center text-xs text-ink-soft">
+        בינה מלאכותית עלולה לטעות. מומלץ לאמת מול המקור.
+      </p>
 
       {turns.length === 0 && !loading && !error && (
         <>
