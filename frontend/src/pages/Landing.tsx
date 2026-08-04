@@ -328,13 +328,26 @@ export default function Landing({ onLogin }: Props) {
                 </h3>
                 {/* Body */}
                 <p className="mt-4 text-lg leading-relaxed text-[#525252] max-w-xl">
-                  שיחה חכמה עם התקנון של הארגון שלכם. תקנון קורא, מבין וממפה את המסמכים המחייבים — ומחזיר תשובות מדויקות עם ציטוט מהמקור, כולל מעקב אחר תיקונים ואישורי ועדה.
+                  שיחה חכמה עם מסמכי הארגון. תקנון סורק ומבין את מסמכי הקיבוץ ומחזיר תשובות מדויקות עם ציטוט מהמקור.
                 </p>
-                <ul className="mt-8 grid sm:grid-cols-2 gap-x-8 gap-y-4">
-                  {TAKANON_FEATURES.map((f) => (
-                    <li key={f} className="flex items-center gap-2 font-rubik text-sm text-[#191919]">
-                      <CheckIcon />
-                      {f}
+                {/* Numbered value props — Caption numeral, H5-weight title, Body copy */}
+                <ul className="mt-8 space-y-8">
+                  {TAKANON_POINTS.map((p) => (
+                    <li key={p.num} className="flex items-start gap-4">
+                      <span
+                        aria-hidden="true"
+                        className="shrink-0 font-rubik font-bold text-base tracking-[0.15em] text-turquoise leading-snug"
+                      >
+                        {p.num}
+                      </span>
+                      <div>
+                        <h4 className="font-rubik font-bold text-lg text-[#191919] leading-snug">
+                          {p.title}
+                        </h4>
+                        <p className="mt-2 text-base leading-relaxed text-[#525252] max-w-lg">
+                          {p.body}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -359,13 +372,23 @@ export default function Landing({ onLogin }: Props) {
                 </h3>
                 {/* Body */}
                 <p className="mt-4 text-lg leading-relaxed text-[#525252]">
-                  ניהול ישיבות ופרוטוקולים מקצה לקצה. אוגדן מקליט, מתמלל ומסכם ישיבות בעברית, והופך כל החלטה למשימה עם אחראי ויעד.
+                  ניהול אגודה
                 </p>
-                <ul className="mt-8 space-y-4">
-                  {OGDAN_FEATURES.map((f) => (
-                    <li key={f} className="flex items-center gap-2 font-rubik text-sm text-[#525252]">
-                      <CheckIcon />
-                      {f}
+                {/* Titled feature list — check + bold title, body underneath */}
+                <ul className="mt-8 space-y-6">
+                  {OGDAN_POINTS.map((p) => (
+                    <li key={p.title} className="flex items-start gap-2">
+                      <span className="mt-1 shrink-0 flex" aria-hidden="true">
+                        <CheckIcon />
+                      </span>
+                      <div>
+                        <h4 className="font-rubik font-bold text-base text-[#191919] leading-snug">
+                          {p.title}
+                        </h4>
+                        <p className="mt-1 text-base leading-relaxed text-[#525252]">
+                          {p.body}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -387,18 +410,25 @@ export default function Landing({ onLogin }: Props) {
                 id="about-title"
                 className="font-rubik font-bold text-4xl md:text-5xl md:leading-[60px] text-turquoise"
               >
-                נבנה עם ארגונים,
-                <br />
-                לא עבורם.
+                חיים בקיבוץ, מכירים את הצרכים, יוצרים פתרונות
               </h2>
             </div>
             {/* Copy — DOM last → left in RTL */}
             <div className="md:col-span-7">
               <p className="text-lg leading-relaxed text-[#525252]">
-                קלסר נולד מתוך עבודה משותפת עם קיבוצים, מושבים וארגונים שבהם המסמכים המחייבים — התקנון, הפרוטוקולים, ההחלטות — הם ליבת ההתנהלות היומיומית.
+                אולפני אלרום הם מותג קיבוצי עם ותק של חמישה עשורים בתחום של הפקת שלל מוצרים משפה ומילים.
               </p>
               <p className="mt-4 text-lg leading-relaxed text-[#525252]">
-                במקום להציע פלטפורמת AI גנרית, אנחנו בונים כלים ממוקדים לבעיות אמיתיות: להביא את התשובה הנכונה, מהמקור הנכון, בזמן שצריך אותה.
+                קלסר נולד בקיבוץ, מתוך חיי היום יום שלנו, ומהיכרות עמוקה עם קיבוצים ומושבים שבהם המסמכים הם ליבת ההתנהלות היומיומית.
+              </p>
+              <p className="mt-4 text-lg leading-relaxed text-[#525252]">
+                המטרה היא לרתום בינה מלאכותית מתקדמת כדי למנוע את אובדן הזיכרון הארגוני בחילופי תפקידים, ולהפוך את ההיסטוריה, התקנונים ושרשרת ההחלטות לנכס דיגיטלי נגיש ומאובטח.
+              </p>
+              <p className="mt-4 text-lg leading-relaxed text-[#525252]">
+                קלסר מצעיד את ניהול הקהילה והאגודה לעידן החכם, ומייעל את הניהול השוטף וחיי היום-יום ביישוב.
+              </p>
+              <p className="mt-4 text-lg leading-relaxed text-[#525252]">
+                במקום להציע פלטפורמת AI גנרית, בנינו כלים ממוקדים לבעיות אמיתיות.
               </p>
               {/* Body 2 bold closer */}
               <p className="mt-8 font-sans font-bold text-xl leading-relaxed text-[#191919]">
@@ -730,20 +760,41 @@ const BENEFITS: { icon: "activity" | "language" | "quote"; title: string; body: 
   },
 ];
 
-const TAKANON_FEATURES = [
-  "חיפוש סמנטי בעברית",
-  "ציטוטים ישירים מהתקנון",
-  "מעקב תיקונים ואמנדמנטים",
-  "מילון מונחים ארגוני",
-  "תור בדיקה לאיכות תשובות",
-  "תשובות מאושרות ע\"י ועדה",
+const TAKANON_POINTS: { num: string; title: string; body: string }[] = [
+  {
+    num: "01",
+    title: "חוסך זמן",
+    body: "חוסך שעות של חיפוש במסמכים",
+  },
+  {
+    num: "02",
+    title: "בשפה שלך",
+    body: "מדבר בשפה הקיבוצית - מכיר את הטיות השורש, את הניואנסים ואת המונחים הארגוניים הייחודיים.",
+  },
+  {
+    num: "03",
+    title: "מקור מהימן לכל תשובה",
+    body: "כל תשובה מגיעה עם ציטוט ישיר וקישור למסמך המקור. לא ניחושים, לא הזיות, רק מה שכתוב.",
+  },
 ];
 
-const OGDAN_FEATURES = [
-  "ניהול ישיבות דיגיטלי",
-  "תמלול בינה מלאכותית בעברית",
-  "מעקב ביצוע החלטות",
-  "מעורבות הקהילה",
+const OGDAN_POINTS: { title: string; body: string }[] = [
+  {
+    title: "ניהול ישיבות דיגיטלי",
+    body: "נהלו ישיבות ואסיפות מקצה לקצה. שלבו זימונים לזום ושעון עצר לדיונים.",
+  },
+  {
+    title: "תמלול בינה מלאכותית",
+    body: "המערכת מקליטה, מתמללת ומסכמת ישיבות אוטומטית. סוף לפרוטוקול הידני.",
+  },
+  {
+    title: "מעקב ביצוע שקוף",
+    body: "הפכו החלטות למשימות עם אחראי ויעד. מובטחת שקיפות לקהילה.",
+  },
+  {
+    title: "מעורבות הקהילה",
+    body: "אפשרו לציבור להציע נושאים לדיונים בקלות.",
+  },
 ];
 
 /* Interactive grid: mouse repel + scroll-velocity-driven ripple.
