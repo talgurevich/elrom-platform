@@ -604,7 +604,7 @@ function TurnView({
                 turn.confidence === "confident"
                   ? "text-accent"
                   : turn.confidence === "uncertain"
-                  ? "text-amber-700"
+                  ? "text-warning-dark"
                   : turn.mode === "clarify"
                   ? "text-accent"
                   : "text-ink-soft"

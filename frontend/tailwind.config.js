@@ -33,6 +33,15 @@ export default {
           DEFAULT: "#19819a",
           dark: "#166b80",
         },
+        // Klaser DS orange — the one non-teal accent in the DS (the "מוצר דגל"
+        // badge on the marketing site). Semantic warning tone for states that
+        // need attention without alarm: partial answers, pending review.
+        // DEFAULT is a fill color; on white it only reaches 2.6:1, so small
+        // text uses `dark` (5.1:1, AA).
+        warning: {
+          DEFAULT: "#ff7c2a",
+          dark: "#c2410c",
+        },
       },
       backgroundImage: {
         // Solid wash — kept the token name for compat but it's no longer a
