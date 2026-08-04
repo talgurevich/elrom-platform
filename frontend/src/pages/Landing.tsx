@@ -163,7 +163,7 @@ export default function Landing({ onLogin }: Props) {
 
               {/* Body 2 — Heebo Regular 20 */}
               <p className="mt-8 font-sans text-xl leading-relaxed text-[#525252] max-w-xl">
-                קלסר בונה כלים לארגונים שמנהלים ידע מסמכי — תקנונים, פרוטוקולים, נהלים ותקדימים. במקום לחפש שעות בקבצים, שואלים שאלה ומקבלים תשובה מבוססת מקור.
+                קלסר בונה כלים עבור ארגונים בהם יש ידע רב של שנים רבות, מבוסס מסמכים - תקנונים, פרוטוקולים, נהלים ותקדימים. במקום לחפש שעות בקבצים, שואלים שאלה ומקבלים תשובה מבוססת מקור.
               </p>
 
               {/* CTAs — Rubik Bold 16, 4px radius per DS */}
@@ -273,8 +273,12 @@ export default function Landing({ onLogin }: Props) {
               id="benefits-title"
               className="font-rubik font-bold text-4xl md:text-5xl md:leading-[60px] text-[#191919] text-right"
             >
-              מהיר יותר. מדויק יותר. עם מקור.
+              יעיל יותר. נוח יותר. מדויק יותר.
             </h2>
+            {/* Body — section intro under the H2 */}
+            <p className="mt-4 text-lg leading-relaxed text-[#525252] max-w-2xl text-right">
+              קלסר: פלטפורמה חכמה לניהול הקהילה והאגודה, המשלבת בינה מלאכותית, מגבירה שקיפות ומשמרת את הזיכרון הארגוני שלכם
+            </p>
 
             <div className="mt-16 grid md:grid-cols-3 gap-8">
               {BENEFITS.map((b) => (
