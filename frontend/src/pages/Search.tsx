@@ -849,9 +849,6 @@ function TurnView({
                       key={`${r.title}-${r.section_number}-${i}`}
                       className="flex items-start gap-3 p-3 bg-white border border-line rounded-md"
                     >
-                      {openable && r.document_id && (
-                        <OpenSourceButton documentId={r.document_id} />
-                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-2 justify-end">
                           {r.section_number && <TagPill>{r.section_number}</TagPill>}
@@ -864,6 +861,9 @@ function TurnView({
                           </blockquote>
                         )}
                       </div>
+                      {openable && r.document_id && (
+                        <OpenSourceButton documentId={r.document_id} />
+                      )}
                     </div>
                   );
                 })}
@@ -889,25 +889,27 @@ function TurnView({
                 {turn.sources.map((s, i) => (
                   <details key={s.chunk_id} className="bg-white border border-line rounded-md">
                     <summary className="cursor-pointer flex items-start gap-3 p-3 hover:bg-line/20 transition rounded-md">
-                      {s.has_file && s.document_id && (
+                      <div className="flex-1 min-w-0">
+                        {/* Tags row — ABOVE the title, right-aligned */}
+                        {s.section_path && (
+                          <div className="mb-2 flex flex-wrap gap-2 justify-end">
+                            <TagPill>{s.section_path}</TagPill>
+                          </div>
+                        )}
+                        {/* Title row — number badge + doc title, right-aligned */}
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="font-semibold text-ink text-right">{s.document_filename}</span>
+                          <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-turquoise/10 text-turquoise font-rubik font-bold text-xs">
+                            {i + 1}
+                          </span>
+                        </div>
+                      </div>
+                      {s.document_id && (
                         <OpenSourceButton
                           documentId={s.document_id}
                           onClick={(e) => e.stopPropagation()}
                         />
                       )}
-                      <div className="flex-1 min-w-0 text-right">
-                        <div className="flex items-center gap-2 justify-end">
-                          <span className="font-semibold text-ink">{s.document_filename}</span>
-                          <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-turquoise/10 text-turquoise font-rubik font-bold text-xs">
-                            {i + 1}
-                          </span>
-                        </div>
-                        {s.section_path && (
-                          <div className="mt-1 flex justify-end">
-                            <TagPill>{s.section_path}</TagPill>
-                          </div>
-                        )}
-                      </div>
                     </summary>
                     <div className="px-4 py-3 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft text-right">
                       {s.text}
