@@ -850,7 +850,7 @@ function TurnView({
                       className="flex items-start gap-3 p-3 bg-white border border-line rounded-md"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-2 justify-end">
+                        <div className="flex flex-wrap items-center gap-2 mb-2 justify-start">
                           {r.section_number && <TagPill>{r.section_number}</TagPill>}
                           {r.source_type && <TagPill>{r.source_type}</TagPill>}
                         </div>
@@ -890,14 +890,14 @@ function TurnView({
                   <details key={s.chunk_id} className="bg-white border border-line rounded-md">
                     <summary className="cursor-pointer flex items-start gap-3 p-3 hover:bg-line/20 transition rounded-md">
                       <div className="flex-1 min-w-0">
-                        {/* Tags row — ABOVE the title, right-aligned */}
+                        {/* Tags row — ABOVE the title, RTL start (right) */}
                         {s.section_path && (
-                          <div className="mb-2 flex flex-wrap gap-2 justify-end">
+                          <div className="mb-2 flex flex-wrap gap-2 justify-start">
                             <TagPill>{s.section_path}</TagPill>
                           </div>
                         )}
-                        {/* Title row — number badge + doc title, right-aligned */}
-                        <div className="flex items-center gap-2 justify-end">
+                        {/* Title row — DOM: title first (right edge), badge next to it */}
+                        <div className="flex items-center gap-2 justify-start">
                           <span className="font-semibold text-ink text-right">{s.document_filename}</span>
                           <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-turquoise/10 text-turquoise font-rubik font-bold text-xs">
                             {i + 1}
@@ -1090,8 +1090,8 @@ function ThinkingProgress({
           style={{ width: `${Math.min(pct, FINAL_PCT)}%` }}
         />
       </div>
-      {/* Stage labels — H5 (Rubik Bold 16, tracking 25%) */}
-      <div className="grid grid-cols-4 gap-2 font-rubik font-bold text-base uppercase tracking-[0.25em]">
+      {/* Stage labels — small tracked-out uppercase (11px) */}
+      <div className="grid grid-cols-4 gap-2 font-rubik font-bold text-[11px] uppercase tracking-[0.15em]">
         {THINKING_STAGES.map((s, i) => {
           const state = i < currentIdx ? "done" : i === currentIdx ? "active" : "pending";
           const cls =
