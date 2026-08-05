@@ -896,12 +896,12 @@ function TurnView({
                             <TagPill>{s.section_path}</TagPill>
                           </div>
                         )}
-                        {/* Title row — DOM: title first (right edge), badge next to it */}
+                        {/* Title row — DOM: badge first (right edge), title next to it */}
                         <div className="flex items-center gap-2 justify-start">
-                          <span className="font-semibold text-ink text-right">{s.document_filename}</span>
                           <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-turquoise/10 text-turquoise font-rubik font-bold text-xs">
                             {i + 1}
                           </span>
+                          <span className="font-semibold text-ink text-right">{s.document_filename}</span>
                         </div>
                       </div>
                       {s.document_id && (
