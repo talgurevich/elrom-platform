@@ -42,15 +42,16 @@ export default {
           DEFAULT: "#ff7c2a",
           dark: "#c2410c",
         },
-        // Feedback semantics. The Klaser DS proper is teal + orange only, so
-        // these are app-level additions — registered here so success/danger
-        // stop being ad-hoc Tailwind palette picks. Both clear AA on white.
+        // Feedback semantics — matched to the Klaser DS palette exactly:
+        // Red #FF4848 and Green #20B86B. Note: these DS values are fills, so
+        // they don't clear AA for small text on white; use with fills or paired
+        // with dark ink text on the colored surface, not for standalone text.
         success: {
-          DEFAULT: "#15803d",
+          DEFAULT: "#20B86B",
           soft: "#dcfce7",
         },
         danger: {
-          DEFAULT: "#b91c1c",
+          DEFAULT: "#FF4848",
           soft: "#fee2e2",
         },
       },

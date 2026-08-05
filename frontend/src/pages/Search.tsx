@@ -556,7 +556,7 @@ function ReportSupportButton({ queryId }: { queryId: string }) {
       onClick={send}
       disabled={sending}
       title="שולח מייל לצוות עם השאלה, התשובה, וקישור לשיחה"
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-warning-dark text-warning-dark bg-white hover:bg-warning-dark hover:text-white transition disabled:opacity-50"
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border border-warning text-warning bg-white hover:bg-warning hover:text-white transition disabled:opacity-50"
     >
       {sending ? "שולח…" : <><span>דווח בעיה</span><span aria-hidden>⚑</span></>}
     </button>
@@ -594,6 +594,54 @@ function PlusCircle() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
       <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* Grey pill used for doc-type / section-number tags in references. */
+function TagPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-2 py-1 rounded-md bg-line text-ink-soft font-rubik text-xs">
+      {children}
+    </span>
+  );
+}
+
+/* Small teal-outlined "פתח מקור" button — DS Teal Primary. */
+function OpenSourceButton({
+  documentId,
+  onClick,
+}: {
+  documentId: string;
+  onClick?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <a
+      href={documentFileUrl(documentId)}
+      target="_blank"
+      rel="noreferrer noopener"
+      onClick={onClick}
+      title="פתח את קובץ המקור"
+      className="shrink-0 inline-flex items-center gap-1.5 border border-turquoise text-turquoise bg-white px-3 py-1.5 rounded-md font-rubik font-semibold text-xs hover:bg-turquoise hover:text-white transition"
+    >
+      <ExternalLinkIcon />
+      <span>פתח מקור</span>
+    </a>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M14 4h6v6M20 4L10 14M20 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -789,64 +837,33 @@ function TurnView({
 
           {turn.mode === "answer" && turn.references && turn.references.length > 0 && (
             <div>
-              <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-2 flex items-center gap-3">
+              <div className="font-rubik font-bold text-base tracking-[0.15em] text-turquoise mb-3 flex items-center gap-3">
                 <span>סימוכין</span>
                 <span className="flex-1 h-px bg-line" />
               </div>
-              <div className="grid gap-px bg-line border border-line">
+              <div className="space-y-2">
                 {turn.references.map((r, i) => {
-                  // The backend binds each reference to a real document and
-                  // returns its canonical filename as the title, so there is
-                  // nothing to match here. The previous version compared
-                  // r.title === s.document_filename, which broke for the 38%
-                  // of filenames containing double spaces — the model
-                  // collapses them when echoing the name.
                   const openable = r.document_id && r.has_file;
                   return (
                     <div
                       key={`${r.title}-${r.section_number}-${i}`}
-                      className="p-3 bg-surface"
+                      className="flex items-start gap-3 p-3 bg-white border border-line rounded-md"
                     >
-                      <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
-                        {openable && r.document_id ? (
-                          <a
-                            href={documentFileUrl(r.document_id)}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="font-semibold text-ink hover:text-accent underline underline-offset-4 decoration-line-strong hover:decoration-accent"
-                            title="פתח את קובץ המקור"
-                          >
-                            {r.title}
-                          </a>
-                        ) : (
-                          <span className="font-semibold text-ink">{r.title}</span>
-                        )}
-                        {r.section_number && (
-                          <span className="text-xs text-accent font-mono tracking-tight">
-                            {r.section_number}
-                          </span>
-                        )}
-                        {r.source_type && (
-                          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-soft mr-auto">
-                            {r.source_type}
-                          </span>
-                        )}
-                        {openable && r.document_id && (
-                          <a
-                            href={documentFileUrl(r.document_id)}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="text-[10px] tracking-[0.2em] uppercase text-accent font-bold hover:underline"
-                          >
-                            פתח מקור ↗
-                          </a>
+                      {openable && r.document_id && (
+                        <OpenSourceButton documentId={r.document_id} />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2 justify-end">
+                          {r.section_number && <TagPill>{r.section_number}</TagPill>}
+                          {r.source_type && <TagPill>{r.source_type}</TagPill>}
+                        </div>
+                        <div className="font-semibold text-ink text-right">{r.title}</div>
+                        {r.excerpt && (
+                          <blockquote className="mt-2 text-sm text-ink-soft leading-relaxed text-right">
+                            {r.excerpt}
+                          </blockquote>
                         )}
                       </div>
-                      {r.excerpt && (
-                        <blockquote className="text-sm text-ink-soft leading-relaxed">
-                          {r.excerpt}
-                        </blockquote>
-                      )}
                     </div>
                   );
                 })}
@@ -862,35 +879,37 @@ function TurnView({
           )}
 
           {turn.mode === "answer" && turn.sources.length > 0 && (
-            <details className="border border-line">
-              <summary className="px-3 py-2 cursor-pointer hover:bg-line/40 text-[11px] tracking-[0.25em] uppercase font-bold text-ink-soft">
-                קטעי טקסט שנשלפו ({turn.sources.length})
+            <details className="mt-2">
+              <summary className="px-1 py-2 cursor-pointer text-turquoise font-rubik font-bold text-base tracking-[0.15em] hover:text-turquoise-dark transition flex items-center gap-3">
+                <span>קטעי טקסט שנשלפו ({turn.sources.length})</span>
+                <span className="flex-1 h-px bg-line" />
+                <ChevronDownIcon />
               </summary>
-              <div className="border-t border-line grid gap-px bg-line">
+              <div className="mt-3 space-y-2">
                 {turn.sources.map((s, i) => (
-                  <details key={s.chunk_id} className="bg-surface">
-                    <summary className="px-3 py-2 cursor-pointer hover:bg-line/40 text-sm flex items-baseline gap-3">
-                      <span className="font-mono text-accent">[{i + 1}]</span>
-                      <span className="text-ink">{s.document_filename}</span>
-                      {s.section_path && (
-                        <span className="text-ink-soft font-mono text-xs">
-                          {s.section_path}
-                        </span>
-                      )}
+                  <details key={s.chunk_id} className="bg-white border border-line rounded-md">
+                    <summary className="cursor-pointer flex items-start gap-3 p-3 hover:bg-line/20 transition rounded-md">
                       {s.has_file && s.document_id && (
-                        <a
-                          href={documentFileUrl(s.document_id)}
-                          target="_blank"
-                          rel="noreferrer noopener"
+                        <OpenSourceButton
+                          documentId={s.document_id}
                           onClick={(e) => e.stopPropagation()}
-                          className="mr-auto text-[10px] tracking-[0.2em] uppercase text-accent font-bold hover:underline"
-                          title="פתח את קובץ המקור"
-                        >
-                          פתח מקור ↗
-                        </a>
+                        />
                       )}
+                      <div className="flex-1 min-w-0 text-right">
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="font-semibold text-ink">{s.document_filename}</span>
+                          <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-turquoise/10 text-turquoise font-rubik font-bold text-xs">
+                            {i + 1}
+                          </span>
+                        </div>
+                        {s.section_path && (
+                          <div className="mt-1 flex justify-end">
+                            <TagPill>{s.section_path}</TagPill>
+                          </div>
+                        )}
+                      </div>
                     </summary>
-                    <div className="px-3 py-2 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft">
+                    <div className="px-4 py-3 border-t border-line text-xs leading-relaxed whitespace-pre-wrap text-ink-soft text-right">
                       {s.text}
                     </div>
                   </details>
