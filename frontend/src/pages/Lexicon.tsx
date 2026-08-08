@@ -283,8 +283,8 @@ export default function Lexicon() {
               onClick={() => setEditor(emptyEditor())}
               className="inline-flex items-center gap-2 bg-turquoise text-white h-10 px-5 rounded-md font-rubik font-bold text-sm hover:bg-turquoise-dark transition"
             >
-              <PlusIcon />
               <span>הוסף מונח</span>
+              <PlusIcon />
             </button>
           )}
         </div>
