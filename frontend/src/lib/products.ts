@@ -14,7 +14,7 @@ export type Product = {
 
 export const PRODUCTS: Product[] = [
   { id: "takanon", label: "תקנון", url: "https://takanon.klaser.co.il" },
-  { id: "meetings", label: "ישיבות", url: "https://meetings.klaser.co.il" },
+  { id: "meetings", label: "אוגדן", url: "https://meetings.klaser.co.il" },
 ];
 
 // The product this frontend is. Used to mark the current row in the switcher.

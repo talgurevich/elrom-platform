@@ -16,7 +16,7 @@ import {
 // frontend/src/lib/products.ts and backend VALID_PRODUCTS.
 const PRODUCT_CATALOG: { id: string; label: string }[] = [
   { id: "takanon", label: "תקנון" },
-  { id: "meetings", label: "ישיבות" },
+  { id: "meetings", label: "אוגדן" },
 ];
 
 const SEGMENT_LABELS: Record<TenantSegment, string> = {
