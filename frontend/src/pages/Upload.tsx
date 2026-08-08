@@ -34,15 +34,6 @@ const DOC_STATUS_LABELS: Record<string, string> = {
   invitation: "הזמנה",
 };
 
-const DOC_STATUS_STYLES: Record<string, string> = {
-  adopted: "text-emerald-900 bg-emerald-100 border-emerald-300",
-  proposal: "text-amber-900 bg-amber-100 border-amber-300",
-  draft: "text-slate-700 bg-slate-100 border-slate-300",
-  discussion: "text-sky-900 bg-sky-100 border-sky-300",
-  background: "text-violet-900 bg-violet-100 border-violet-300",
-  invitation: "text-teal-900 bg-teal-100 border-teal-300",
-};
-
 type FileStatus =
   | { kind: "queued" }
   | { kind: "uploading" }
@@ -578,7 +569,7 @@ export default function Upload() {
         </p>
       </header>
 
-      {/* Dropzone */}
+      {/* Dropzone — dashed teal border, teal upload icon centered */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -591,10 +582,10 @@ export default function Upload() {
           if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
         }}
         onClick={() => fileInputRef.current?.click()}
-        className={`mb-4 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+        className={`mb-5 border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
           dragOver
-            ? "border-accent bg-accent/10"
-            : "border-line-strong bg-white hover:border-accent/50 hover:bg-line"
+            ? "border-turquoise bg-turquoise/5"
+            : "border-turquoise/40 bg-white hover:border-turquoise hover:bg-turquoise/5"
         }`}
       >
         <input
@@ -608,30 +599,44 @@ export default function Upload() {
           }}
           className="hidden"
         />
-        <div className="text-ink-soft text-sm">
-          גרור קבצים לכאן, או לחץ כדי לבחור
+        <div className="flex flex-col items-center gap-3">
+          <UploadCloudIcon />
+          <div className="font-rubik font-medium text-base text-ink">
+            גרור קבצים לכאן, או לחץ כדי לבחור
+          </div>
+          <div className="font-rubik text-xs text-ink-soft">PDF · Word · טקסט</div>
         </div>
-        <div className="text-xs text-ink-soft mt-1">PDF · Word · טקסט</div>
       </div>
 
-      <div className="mb-6 flex items-center gap-3 text-sm">
-        <label className="text-ink-soft">סוג מסמך (ברירת מחדל):</label>
-        <select
-          value={defaultDocType}
-          onChange={(e) => setDefaultDocType(e.target.value)}
-          className="px-2 py-1 border border-line-strong rounded"
-        >
-          {docTypes.map((dt) => (
-            <option key={dt.value} value={dt.value}>
-              {dt.label}
-            </option>
-          ))}
-        </select>
+      {/* Default doc-type + upload-all + clear-done row */}
+      <div className="mb-6 flex items-center gap-4 flex-wrap">
+        {/* Right in RTL: label + select */}
+        <label className="flex items-center gap-3 flex-1">
+          <span className="font-rubik text-sm text-ink-soft whitespace-nowrap">
+            סוג מסמך (ברירת מחדל):
+          </span>
+          <div className="relative min-w-[180px]">
+            <select
+              value={defaultDocType}
+              onChange={(e) => setDefaultDocType(e.target.value)}
+              className="w-full appearance-none bg-white border border-line rounded-md py-2.5 px-3 pl-8 text-sm text-ink font-rubik font-medium outline-none cursor-pointer hover:border-turquoise transition"
+            >
+              {docTypes.map((dt) => (
+                <option key={dt.value} value={dt.value}>
+                  {dt.label}
+                </option>
+              ))}
+            </select>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink-soft">
+              <DsChevronDown />
+            </span>
+          </div>
+        </label>
         {queuedCount > 0 && (
           <button
             onClick={uploadAll}
             disabled={uploading}
-            className="mr-auto px-3 py-1.5 bg-accent text-white rounded disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 bg-turquoise text-white h-11 px-6 rounded-md font-rubik font-bold text-sm hover:bg-turquoise-dark transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {uploading && batchProgress
               ? `מעלה ${batchProgress.done}/${batchProgress.total}…`
@@ -639,17 +644,15 @@ export default function Upload() {
           </button>
         )}
         {!uploading && batchProgress && batchProgress.done === batchProgress.total && batchProgress.total > 0 && (
-          <span className="text-sm text-emerald-700 font-bold">
-            ✓ הועלו {batchProgress.total} קבצים
-          </span>
+          <StatusPill variant="success">
+            <DsCheckMark />
+            <span>הועלו {batchProgress.total} קבצים</span>
+          </StatusPill>
         )}
         {queue.some((e) => e.status.kind === "done") && (
-          <button
-            onClick={clearDone}
-            className="px-3 py-1.5 bg-line hover:bg-stone-200 rounded"
-          >
+          <Chip variant="grey" onClick={clearDone}>
             נקה גמורים
-          </button>
+          </Chip>
         )}
       </div>
 
@@ -772,66 +775,79 @@ export default function Upload() {
       {/* Queue */}
       {queue.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-sm font-bold text-accent uppercase tracking-wider mb-2">תור</h2>
-          <div className="space-y-2">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="font-rubik font-bold text-base tracking-[0.15em] text-turquoise">תור</span>
+            <span className="flex-1 h-px bg-line" />
+          </div>
+          <div className="space-y-3">
             {queue.map((entry) => (
               <div
                 key={entry.id}
-                className="flex items-center gap-3 p-3 bg-white border border-line rounded text-sm"
+                className="flex items-center gap-4 p-4 bg-white border border-line rounded-lg"
               >
+                {/* Right: filename + size + status */}
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink truncate">{entry.file.name}</div>
-                  <div className="text-xs text-ink-soft">
+                  <div className="font-rubik font-bold text-sm text-ink truncate text-right">
+                    {entry.file.name}
+                  </div>
+                  <div className="text-xs text-ink-soft mt-1 text-right font-rubik">
                     {(entry.file.size / 1024).toFixed(1)} KB
                   </div>
                   {entry.status.kind === "error" && (
-                    <div className="text-xs text-red-700 mt-1">{entry.status.message}</div>
+                    <div className="text-xs text-danger mt-1 text-right">{entry.status.message}</div>
                   )}
                   {entry.status.kind === "done" && (
-                    <div className="text-xs mt-1 text-emerald-700">
+                    <div className="text-xs mt-1 text-success text-right">
                       ✓ נקלט
                       {entry.status.chunks != null && ` · ${entry.status.chunks} קטעים`}
                     </div>
                   )}
                 </div>
-                <select
-                  value={entry.docType}
-                  onChange={(e) =>
-                    setQueue((q) =>
-                      q.map((x) => (x.id === entry.id ? { ...x, docType: e.target.value } : x))
-                    )
-                  }
-                  disabled={entry.status.kind !== "queued"}
-                  className="px-2 py-1 border border-line-strong rounded text-xs"
-                >
-                  {docTypes.map((dt) => (
-                    <option key={dt.value} value={dt.value}>
-                      {dt.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="w-32 text-left">
+                {/* Doc-type select — with chevron */}
+                <div className="relative min-w-[140px]">
+                  <select
+                    value={entry.docType}
+                    onChange={(e) =>
+                      setQueue((q) =>
+                        q.map((x) => (x.id === entry.id ? { ...x, docType: e.target.value } : x))
+                      )
+                    }
+                    disabled={entry.status.kind !== "queued"}
+                    className="w-full appearance-none bg-white border border-line rounded-md py-2 px-3 pl-8 text-sm text-ink font-rubik font-medium outline-none cursor-pointer hover:border-turquoise transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {docTypes.map((dt) => (
+                      <option key={dt.value} value={dt.value}>
+                        {dt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink-soft">
+                    <DsChevronDown />
+                  </span>
+                </div>
+                {/* Left: action button */}
+                <div className="w-24 flex justify-end">
                   {entry.status.kind === "queued" && (
                     <button
                       onClick={() => upload(entry)}
                       disabled={uploading}
-                      className="px-3 py-1 bg-accent text-white rounded text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-2 bg-turquoise text-white h-9 px-4 rounded-md font-rubik font-bold text-xs hover:bg-turquoise-dark transition disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       העלה
                     </button>
                   )}
                   {entry.status.kind === "uploading" && (
-                    <span className="text-xs text-ink-soft">מעלה...</span>
+                    <span className="text-xs text-ink-soft font-rubik">מעלה...</span>
                   )}
                   {entry.status.kind === "processing" && (
-                    <span className="text-xs text-ink-soft">
+                    <span className="text-xs text-ink-soft font-rubik text-left">
                       {(entry.status.stage && STAGE_LABELS[entry.status.stage]) || "בתור..."}
                     </span>
                   )}
                   {(entry.status.kind === "done" || entry.status.kind === "error") && (
                     <button
                       onClick={() => removeFromQueue(entry.id)}
-                      className="text-xs text-ink-soft hover:text-red-700"
+                      className="text-xs text-ink-soft hover:text-danger font-rubik"
                     >
                       הסר
                     </button>
@@ -845,42 +861,43 @@ export default function Upload() {
 
       {/* Existing documents */}
       <section>
-        <div className="text-[11px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-4 flex items-center gap-3">
-          <span>מסמכים במאגר</span>
+        <div className="mb-6 flex items-center gap-4 flex-wrap justify-between">
+          {/* Right in RTL: title + count */}
+          <div className="font-rubik font-bold text-base tracking-[0.15em] text-turquoise">
+            מסמכים במאגר{docs.length > 0 && ` (${docs.length})`}
+          </div>
           {docs.length > 0 && (
-            <span className="font-mono text-ink-soft normal-case tracking-normal">
-              ({docs.length})
-            </span>
-          )}
-          <span className="flex-1 h-px bg-line" />
-          {docs.length > 0 && (
-            <div className="flex gap-1 normal-case tracking-normal">
-              <button
+            <div className="flex items-center gap-2">
+              <Chip
+                variant="active"
                 onClick={() => classify(false)}
                 disabled={classifying}
-                className="px-3 py-1.5 border border-line-strong hover:border-accent text-xs text-ink-soft hover:text-accent transition disabled:opacity-50"
                 title="קרא את תוכן כל מסמך עם Claude, תן לו כותרת ותקציר"
               >
                 {classifying ? "מסווג..." : "סווג חדשים"}
-              </button>
-              <button
+              </Chip>
+              <Chip
+                variant="grey"
                 onClick={() => classify(true)}
                 disabled={classifying}
-                className="px-3 py-1.5 text-xs text-ink-soft hover:text-ink disabled:opacity-50"
                 title="סווג מחדש את כל המסמכים, כולל כאלה שכבר סווגו"
               >
                 סווג הכל מחדש
-              </button>
+              </Chip>
+              <span className="w-px h-6 bg-line mx-1" />
               <button
+                type="button"
                 onClick={deleteAllDocs}
-                className="px-3 py-1.5 text-xs text-accent hover:bg-surface border border-transparent hover:border-accent transition"
                 title="מחיקת כל המסמכים מהמאגר"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-danger text-danger bg-white hover:bg-danger hover:text-white transition font-rubik font-medium text-xs"
               >
-                מחק הכל
+                <TrashIcon />
+                <span>מחק הכל</span>
               </button>
             </div>
           )}
         </div>
+        <div className="h-px bg-line mb-5" />
 
         {classifyMsg && (
           <div className="mb-4 px-4 py-3 bg-surface border-r-4 border-accent text-sm text-ink">
@@ -888,44 +905,49 @@ export default function Upload() {
           </div>
         )}
 
-        {/* Library toolbar — search + sort + group. Filters live in the
-            faceted sidebar below. */}
+        {/* Library toolbar — search + sort + group. */}
         {docs.length > 0 && (
-          <div className="mb-5 border border-line bg-surface">
+          <div className="mb-6 border border-line bg-white rounded-lg">
             <div className="flex items-stretch flex-wrap">
-              <input
-                type="text"
-                placeholder="חיפוש בשם או בתקציר…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 min-w-[200px] px-4 py-2.5 bg-transparent text-sm placeholder:text-ink-soft outline-none border-l border-line"
-              />
-              <label className="flex items-center px-3 border-l border-line text-xs text-ink-soft">
-                <span className="ml-2">מיון:</span>
+              {/* Search — DOM first → right in RTL */}
+              <div className="flex-1 min-w-[200px] flex items-center gap-2 px-4 border-l border-line">
+                <input
+                  type="text"
+                  placeholder="חיפוש בשם או בתקציר…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flex-1 py-3 bg-transparent text-sm text-ink placeholder:text-ink-soft outline-none text-right"
+                />
+                <span className="text-ink-soft"><SearchIcon /></span>
+              </div>
+              <label className="flex items-center gap-2 px-4 border-l border-line text-sm text-ink-soft font-rubik">
+                <span>מיון:</span>
                 <select
                   value={sortKey}
                   onChange={(e) => setSortKey(e.target.value as SortKey)}
-                  className="bg-transparent py-2.5 text-sm text-ink outline-none cursor-pointer"
+                  className="bg-transparent py-3 pl-6 text-sm text-ink font-rubik font-medium outline-none cursor-pointer appearance-none"
                 >
                   <option value="recent">אחרון שעודכן</option>
                   <option value="alpha">א–ת</option>
                   <option value="chunks">מספר קטעים</option>
                 </select>
+                <span className="text-ink-soft -mr-4"><DsChevronDown /></span>
               </label>
-              <label className="flex items-center px-3 text-xs text-ink-soft">
-                <span className="ml-2">קיבוץ:</span>
+              <label className="flex items-center gap-2 px-4 border-l border-line text-sm text-ink-soft font-rubik">
+                <span>קיבוץ:</span>
                 <select
                   value={groupKey}
                   onChange={(e) => setGroupKey(e.target.value as GroupKey)}
-                  className="bg-transparent py-2.5 text-sm text-ink outline-none cursor-pointer"
+                  className="bg-transparent py-3 pl-6 text-sm text-ink font-rubik font-medium outline-none cursor-pointer appearance-none"
                 >
                   <option value="none">ללא</option>
                   <option value="type">לפי סוג מסמך</option>
                   <option value="folder">לפי תיקייה</option>
                 </select>
+                <span className="text-ink-soft -mr-4"><DsChevronDown /></span>
               </label>
-              <div className="flex items-center px-3 border-r border-line text-xs text-ink-soft">
-                <span className="font-mono">
+              <div className="flex items-center px-4 text-sm text-ink-soft font-rubik">
+                <span>
                   {filteredSortedDocs.length}/{docs.length}
                 </span>
               </div>
@@ -1063,15 +1085,15 @@ function FilterSidebar({
   onClear: () => void;
 }) {
   return (
-    <aside className="lg:sticky lg:top-24 self-start border border-line bg-surface p-4 text-sm lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto overscroll-contain">
-      <div className="flex items-center justify-between border-b border-line pb-2 mb-3">
-        <span className="text-[10px] tracking-[0.25em] uppercase font-bold text-ink-soft">
+    <aside className="lg:sticky lg:top-24 self-start bg-white rounded-lg border border-line p-5 text-sm lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto overscroll-contain">
+      <div className="flex items-center justify-between pb-3 mb-4 border-b border-line">
+        <span className="font-rubik font-bold text-base tracking-[0.15em] text-turquoise">
           סינון
         </span>
         {activeCount > 0 && (
           <button
             onClick={onClear}
-            className="text-[11px] text-accent hover:underline underline-offset-4"
+            className="text-xs text-turquoise font-rubik font-medium hover:underline underline-offset-4"
             title="נקה את כל הפילטרים"
           >
             נקה ({activeCount})
@@ -1156,11 +1178,11 @@ function FacetGroup({
   children: ReactNode;
 }) {
   return (
-    <div className="mb-4 last:mb-0">
-      <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-2">
+    <div className="mb-5 last:mb-0 pb-5 last:pb-0 border-b border-line last:border-b-0">
+      <div className="font-rubik font-bold text-sm text-turquoise mb-3">
         {title}
       </div>
-      <div className="space-y-1.5">{children}</div>
+      <div className="space-y-3">{children}</div>
     </div>
   );
 }
@@ -1179,24 +1201,22 @@ function FacetCheckbox({
   italic?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer group">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="w-3.5 h-3.5 accent-accent shrink-0"
-      />
+    <div
+      onClick={onChange}
+      className="flex items-center gap-3 cursor-pointer group"
+    >
+      <DsCheckbox checked={checked} onChange={onChange} ariaLabel={label} />
       <span
-        className={`flex-1 text-[13px] leading-tight ${
-          checked ? "text-ink font-semibold" : "text-ink group-hover:text-accent"
+        className={`flex-1 text-sm leading-tight text-right ${
+          checked ? "text-ink font-medium" : "text-ink group-hover:text-turquoise"
         } ${italic ? "italic text-ink-soft" : ""}`}
       >
         {label}
       </span>
       {count !== undefined && (
-        <span className="font-mono text-[10px] text-ink-soft">{count}</span>
+        <span className="text-xs text-ink-soft font-rubik">{count}</span>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -1210,21 +1230,19 @@ function FacetRadio({
   label: string;
 }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer group">
-      <input
-        type="radio"
-        checked={checked}
-        onChange={onChange}
-        className="w-3.5 h-3.5 accent-accent shrink-0"
-      />
+    <div
+      onClick={onChange}
+      className="flex items-center gap-3 cursor-pointer group"
+    >
+      <DsRadio checked={checked} onChange={onChange} ariaLabel={label} />
       <span
-        className={`flex-1 text-[13px] leading-tight ${
-          checked ? "text-ink font-semibold" : "text-ink group-hover:text-accent"
+        className={`flex-1 text-sm leading-tight text-right ${
+          checked ? "text-ink font-medium" : "text-ink group-hover:text-turquoise"
         }`}
       >
         {label}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -1240,6 +1258,19 @@ function DocumentRow({
   onOpen: () => void;
 }) {
   const needsReview = !!doc.ai_classified && !doc.metadata_reviewed;
+  // Doc-status resolves for the bottom-right status pill.
+  const statusVariant: "success" | "warning" | "danger" | "neutral" =
+    doc.superseded_by_id
+      ? "neutral"
+      : doc.doc_status && doc.doc_status !== "adopted"
+      ? "warning"
+      : "success";
+  const statusLabel = doc.superseded_by_id
+    ? "גרסה ישנה"
+    : doc.doc_status && doc.doc_status !== "adopted"
+    ? DOC_STATUS_LABELS[doc.doc_status] || doc.doc_status
+    : "פעיל";
+
   return (
     <div
       onClick={onOpen}
@@ -1251,114 +1282,99 @@ function DocumentRow({
           onOpen();
         }
       }}
-      className="p-4 bg-surface border border-line hover:border-accent hover:bg-line/30 transition cursor-pointer"
+      className="p-5 bg-white rounded-lg border border-line hover:border-turquoise/40 shadow-[0px_1px_0_rgba(0,0,0,0.03),0px_4px_16px_-4px_rgba(0,0,0,0.06)] transition cursor-pointer"
     >
+      {/* ── Top row: metadata tags (right in RTL) + delete (left) ─────── */}
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-ink text-base">{doc.filename}</span>
-            {doc.ai_classified && (
-              <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent border border-accent px-1.5 py-0.5">
-                AI
-              </span>
-            )}
+          <div className="flex flex-wrap items-center gap-2 mb-2 justify-start">
+            {doc.ai_classified && <StatusPill variant="teal">AI</StatusPill>}
             {needsReview && (
-              <span
-                className="text-[10px] tracking-[0.2em] uppercase font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5"
-                title="המערכת מילאה מטא־דאטה אוטומטית — כדאי לאשר"
-              >
-                בדיקה
-              </span>
+              <StatusPill variant="warning">בדיקה</StatusPill>
             )}
             {duplicateSiblingCount > 0 && (
-              <span
-                className="text-[10px] tracking-[0.2em] uppercase font-bold text-red-900 bg-red-100 border border-red-300 px-1.5 py-0.5"
-                title={`מסמך זה חולק אורך טקסט, מס' עמודים ומס' קטעים עם ${duplicateSiblingCount} מסמכ${duplicateSiblingCount === 1 ? "" : "ים"} אחר${duplicateSiblingCount === 1 ? "" : "ים"} — כנראה כפילות`}
-              >
-                כפילות אפשרית
-              </span>
-            )}
-            {doc.doc_type && (
-              <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-ink-soft border border-line-strong px-1.5 py-0.5">
-                {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
-              </span>
-            )}
-            {doc.superseded_by_id && (
-              <span
-                className="text-[10px] tracking-[0.2em] uppercase font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 line-through"
-                title="קושר כגרסה ישנה של מסמך אחר — לא משתתף בתשובות על המצב הנוכחי"
-              >
-                גרסה ישנה
-              </span>
-            )}
-            {doc.doc_status && doc.doc_status !== "adopted" && (
-              <span
-                className={`text-[10px] tracking-[0.2em] uppercase font-bold border px-1.5 py-0.5 ${DOC_STATUS_STYLES[doc.doc_status] || "text-ink-soft border-line-strong"}`}
-                title="מעמד המסמך — מסמך שאינו 'בתוקף' לא יצוטט כהכלל המחייב"
-              >
-                {DOC_STATUS_LABELS[doc.doc_status] || doc.doc_status}
-              </span>
-            )}
-            {doc.folder && (
-              <span className="text-[10px] tracking-[0.2em] uppercase font-bold bg-ink text-surface px-1.5 py-0.5">
-                {doc.folder}
-              </span>
-            )}
-            {doc.effective_date && (
-              <span
-                className="text-[10px] font-mono text-ink-soft border border-line-strong px-1.5 py-0.5"
-                title="תאריך תוקף"
-              >
-                {doc.effective_date}
-              </span>
-            )}
-            {doc.has_file && (
-              <a
-                href={documentFileUrl(doc.id)}
-                target="_blank"
-                rel="noreferrer noopener"
-                onClick={(e) => e.stopPropagation()}
-                className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent border border-accent px-1.5 py-0.5 hover:bg-accent hover:text-surface transition"
-                title="פתח את קובץ המקור בכרטיסייה חדשה"
-              >
-                פתח מקור ↗
-              </a>
+              <StatusPill variant="danger">כפילות אפשרית</StatusPill>
             )}
           </div>
-          {doc.summary && (
-            <div className="text-sm text-ink-soft mt-1.5 leading-relaxed">
-              {doc.summary}
-            </div>
-          )}
-          <div className="text-xs text-ink-soft mt-2 flex gap-3 flex-wrap items-center">
-            <QualityBadge doc={doc} />
-            <span>{doc.chunks} קטעים</span>
-            <span>{formatChars(doc.chars)}</span>
-            {doc.pages != null && <span>{doc.pages} עמודים</span>}
-            {doc.extractor && (
-              <span title="מנוע חילוץ הטקסט">
-                {doc.extractor === "azure_ocr"
-                  ? "OCR"
-                  : doc.extractor === "pdfplumber"
-                  ? "PDF native"
-                  : doc.extractor}
-              </span>
-            )}
-            <span>{new Date(doc.ingested_at).toLocaleString("he-IL")}</span>
+          <div className="font-rubik font-bold text-lg text-ink text-right leading-snug">
+            {doc.filename}
           </div>
-          {doc.extraction_note && (
-            <div className="text-xs text-amber-700 mt-1">⚠ {doc.extraction_note}</div>
-          )}
         </div>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          className="text-xs px-3 py-1.5 text-ink-soft hover:text-accent hover:border-accent border border-transparent transition shrink-0"
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-danger text-danger bg-white hover:bg-danger hover:text-white transition font-rubik font-medium text-xs"
+          title="מחק את המסמך הזה"
         >
-          מחק
+          <TrashIcon />
+          <span>מחק</span>
         </button>
+      </div>
+
+      <div className="h-px bg-line my-4" />
+
+      {/* ── Middle row: doc-type / folder / date chips (right) + open button (left) ── */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 justify-start">
+            {doc.doc_type && (
+              <DsTag>{DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}</DsTag>
+            )}
+            {doc.folder && <DsTag>{doc.folder}</DsTag>}
+            {doc.effective_date && <DsTag>{doc.effective_date}</DsTag>}
+          </div>
+          {doc.summary && (
+            <p className="mt-3 text-sm text-ink leading-relaxed text-right">
+              {doc.summary}
+            </p>
+          )}
+          {doc.extraction_note && (
+            <div className="mt-2 text-xs text-warning-dark text-right">
+              ⚠ {doc.extraction_note}
+            </div>
+          )}
+        </div>
+        {doc.has_file && (
+          <a
+            href={documentFileUrl(doc.id)}
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={(e) => e.stopPropagation()}
+            title="פתח את קובץ המקור בכרטיסייה חדשה"
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-turquoise text-turquoise bg-white hover:bg-turquoise hover:text-white transition font-rubik font-medium text-xs"
+          >
+            <DsExternalLink />
+            <span>פתח מקור</span>
+          </a>
+        )}
+      </div>
+
+      <div className="h-px bg-line my-4" />
+
+      {/* ── Bottom row: metadata (right) + status pill (left) ─────────── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-soft font-rubik">
+          <QualityBadge doc={doc} />
+          <span>{doc.chunks} קטעים</span>
+          <span>{formatChars(doc.chars)}</span>
+          {doc.pages != null && <span>{doc.pages} עמודים</span>}
+          {doc.extractor && (
+            <span title="מנוע חילוץ הטקסט">
+              {doc.extractor === "azure_ocr"
+                ? "OCR"
+                : doc.extractor === "pdfplumber"
+                ? "PDF native"
+                : doc.extractor}
+            </span>
+          )}
+          <span>{new Date(doc.ingested_at).toLocaleString("he-IL")}</span>
+        </div>
+        <StatusPill variant={statusVariant}>
+          {statusVariant === "success" && <DsCheckMark />}
+          <span>{statusLabel}</span>
+        </StatusPill>
       </div>
     </div>
   );
@@ -1491,56 +1507,59 @@ function DocumentDrawer({
       <aside
         role="dialog"
         aria-label={`מסמך: ${doc.filename}`}
-        className="fixed top-0 bottom-0 left-0 w-full max-w-[560px] bg-surface z-50 border-l border-ink flex flex-col animate-fade-up shadow-2xl"
+        className="fixed top-0 bottom-0 left-0 w-full max-w-[560px] bg-white z-50 flex flex-col animate-fade-up shadow-2xl font-sans"
       >
-        <header className="border-b border-line px-5 py-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] tracking-[0.25em] uppercase text-ink-soft font-bold mb-1">
+        {/* Header — close on LEFT, breadcrumb + title on RIGHT */}
+        <header className="border-b border-line px-6 py-5 flex items-start gap-3">
+          <button
+            onClick={onClose}
+            className="shrink-0 text-ink-soft hover:text-ink w-8 h-8 flex items-center justify-center rounded-md hover:bg-line/60 transition"
+            aria-label="סגור"
+          >
+            <CloseIcon />
+          </button>
+          <div className="flex-1 min-w-0 text-right">
+            <div className="font-rubik font-bold text-xs tracking-[0.15em] text-turquoise mb-2">
               {DOC_TYPE_LABELS[doc.doc_type || "unclassified"]}
               {doc.folder && ` · ${doc.folder}`}
             </div>
-            <div className="font-display font-black text-lg text-ink leading-tight truncate">
+            <div className="font-rubik font-bold text-lg text-ink leading-tight truncate">
               {doc.has_file ? (
                 <a
                   href={documentFileUrl(doc.id)}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="hover:text-accent"
+                  className="hover:text-turquoise inline-flex items-center gap-1.5"
                   title="פתח את קובץ המקור בכרטיסייה חדשה"
                 >
-                  {doc.filename} ↗
+                  <span>{doc.filename}</span>
+                  <DsExternalLink />
                 </a>
               ) : (
                 doc.filename
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-ink-soft hover:text-ink text-xl leading-none px-2"
-            aria-label="סגור"
-          >
-            ×
-          </button>
         </header>
 
-        <div className="flex border-b border-line">
+        {/* Tab switcher — teal filled active, grey inactive */}
+        <div className="flex gap-0 border-b border-line px-6 pt-4">
           <button
             onClick={() => setTab("details")}
-            className={`flex-1 py-2.5 text-sm font-semibold ${
+            className={`flex-1 py-3 rounded-t-md font-rubik font-medium text-sm transition ${
               tab === "details"
-                ? "bg-ink text-surface"
-                : "text-ink-soft hover:text-ink"
+                ? "bg-turquoise text-white"
+                : "bg-line/50 text-ink-soft hover:text-ink hover:bg-line"
             }`}
           >
             פרטים
           </button>
           <button
             onClick={() => setTab("content")}
-            className={`flex-1 py-2.5 text-sm font-semibold ${
+            className={`flex-1 py-3 rounded-t-md font-rubik font-medium text-sm transition ${
               tab === "content"
-                ? "bg-ink text-surface"
-                : "text-ink-soft hover:text-ink"
+                ? "bg-turquoise text-white"
+                : "bg-line/50 text-ink-soft hover:text-ink hover:bg-line"
             }`}
           >
             תוכן ({doc.chunks} קטעים)
@@ -1549,21 +1568,18 @@ function DocumentDrawer({
 
         <div className="flex-1 overflow-y-auto">
           {tab === "details" ? (
-            <div className="p-5 space-y-4 text-sm">
+            <div className="p-6 space-y-4 text-sm">
               {doc.ai_classified && !doc.metadata_reviewed && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                <div className="p-3 bg-warning/10 border border-warning/30 rounded-md text-ink text-xs font-rubik">
                   המערכת מילאה את השדות אוטומטית מקריאת המסמך. אנא ודא ותקן
                   לפני שמירה.
                 </div>
               )}
 
               <Field label="סוג מסמך">
-                <select
+                <DsSelect
                   value={form.doc_type || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, doc_type: e.target.value }))
-                  }
-                  className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  onChange={(v) => setForm((f) => ({ ...f, doc_type: v }))}
                 >
                   <option value="">—</option>
                   {docTypes.map((dt) => (
@@ -1571,16 +1587,13 @@ function DocumentDrawer({
                       {dt.label}
                     </option>
                   ))}
-                </select>
+                </DsSelect>
               </Field>
 
               <Field label="מעמד" hint="הצעה/טיוטה לא יצוטטו כהכלל המחייב">
-                <select
+                <DsSelect
                   value={form.doc_status ?? doc.doc_status ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, doc_status: e.target.value }))
-                  }
-                  className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                  onChange={(v) => setForm((f) => ({ ...f, doc_status: v }))}
                 >
                   <option value="">—</option>
                   {Object.entries(DOC_STATUS_LABELS).map(([k, v]) => (
@@ -1588,86 +1601,58 @@ function DocumentDrawer({
                       {v}
                     </option>
                   ))}
-                </select>
+                </DsSelect>
               </Field>
 
               <Field label="תיקייה">
-                <input
-                  type="text"
+                <DsInput
                   value={form.folder || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, folder: e.target.value }))
-                  }
+                  onChange={(v) => setForm((f) => ({ ...f, folder: v }))}
                   placeholder="למשל: פנסיה, שיוך דירות"
-                  className="w-full px-2 py-1.5 border border-line-strong bg-white"
                 />
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="תאריך המסמך" hint="מופיע במסמך">
-                  <input
+                  <DsInput
                     type="date"
                     value={form.document_date || ""}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, document_date: e.target.value }))
-                    }
-                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                    onChange={(v) => setForm((f) => ({ ...f, document_date: v }))}
                   />
                 </Field>
                 <Field label="תאריך תוקף" hint="נכנס לתוקף">
-                  <input
+                  <DsInput
                     type="date"
                     value={form.effective_date || ""}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, effective_date: e.target.value }))
-                    }
-                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
+                    onChange={(v) => setForm((f) => ({ ...f, effective_date: v }))}
                   />
                 </Field>
               </div>
 
               {showMeeting && (
                 <Field label="מספר ישיבה">
-                  <input
-                    type="text"
+                  <DsInput
                     value={form.meeting_number || ""}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meeting_number: e.target.value }))
-                    }
+                    onChange={(v) => setForm((f) => ({ ...f, meeting_number: v }))}
                     placeholder="למשל: 234"
-                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
                   />
                 </Field>
               )}
               {showDecision && (
                 <Field label="מספר החלטה">
-                  <input
-                    type="text"
+                  <DsInput
                     value={form.decision_number || ""}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        decision_number: e.target.value,
-                      }))
-                    }
+                    onChange={(v) => setForm((f) => ({ ...f, decision_number: v }))}
                     placeholder="למשל: 47/22"
-                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
                   />
                 </Field>
               )}
               {showBylawRange && (
                 <Field label="טווח סעיפים">
-                  <input
-                    type="text"
+                  <DsInput
                     value={form.bylaw_section_range || ""}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        bylaw_section_range: e.target.value,
-                      }))
-                    }
+                    onChange={(v) => setForm((f) => ({ ...f, bylaw_section_range: v }))}
                     placeholder="למשל: סעיפים 12-18"
-                    className="w-full px-2 py-1.5 border border-line-strong bg-white"
                   />
                 </Field>
               )}
@@ -1685,7 +1670,7 @@ function DocumentDrawer({
                       }))
                     }
                     rows={3}
-                    className="w-full px-2 py-1.5 border border-line-strong bg-white font-mono text-xs"
+                    className="w-full px-3 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
                   />
                 </Field>
               )}
@@ -1693,72 +1678,77 @@ function DocumentDrawer({
               <Field label="תקציר">
                 <textarea
                   value={form.summary || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, summary: e.target.value }))
-                  }
-                  rows={3}
-                  className="w-full px-2 py-1.5 border border-line-strong bg-white leading-relaxed"
+                  onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
+                  rows={4}
+                  className="w-full px-3 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik leading-relaxed outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
                 />
               </Field>
 
               {saveErr && (
-                <div className="p-2 bg-red-50 border border-red-200 text-red-800 text-xs">
+                <div className="p-3 bg-danger/10 border border-danger/30 rounded-md text-danger text-xs font-rubik">
                   {saveErr}
                 </div>
               )}
 
-              <div className="flex gap-2 pt-2">
+              {/* Actions row — DOM order: save first (LEFT in RTL), cancel second */}
+              <div className="flex items-center gap-3 pt-2 flex-row-reverse">
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="px-4 py-2 bg-accent text-white text-sm font-semibold disabled:opacity-50"
+                  className="inline-flex items-center gap-2 bg-turquoise text-white h-10 px-6 rounded-md font-rubik font-bold text-sm hover:bg-turquoise-dark transition disabled:opacity-50"
                 >
                   {saving ? "שומר..." : "שמור ואשר"}
                 </button>
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 text-sm text-ink-soft hover:text-ink"
+                  className="inline-flex items-center h-10 px-4 rounded-md text-sm text-ink-soft font-rubik font-medium hover:text-ink hover:bg-line/60 transition"
                 >
                   ביטול
                 </button>
                 {doc.metadata_reviewed && (
-                  <span className="mr-auto text-[10px] tracking-[0.2em] uppercase text-emerald-700 self-center">
-                    ✓ אושר
-                  </span>
+                  <StatusPill variant="success">
+                    <DsCheckMark />
+                    <span>אושר</span>
+                  </StatusPill>
                 )}
               </div>
             </div>
           ) : (
             <div className="flex flex-col h-full">
-              <div className="p-3 border-b border-line bg-surface sticky top-0">
-                <input
-                  type="text"
-                  placeholder="חיפוש בטקסט המסמך…"
-                  value={chunkQuery}
-                  onChange={(e) => setChunkQuery(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-line-strong bg-white text-sm"
-                />
+              <div className="p-4 border-b border-line bg-white sticky top-0">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="חיפוש בטקסט המסמך…"
+                    value={chunkQuery}
+                    onChange={(e) => setChunkQuery(e.target.value)}
+                    className="w-full pr-4 pl-10 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik text-right outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft">
+                    <SearchIcon />
+                  </span>
+                </div>
               </div>
               {chunksLoading ? (
-                <div className="p-5 text-sm text-ink-soft">טוען קטעים...</div>
+                <div className="p-5 text-sm text-ink-soft font-rubik">טוען קטעים...</div>
               ) : chunksErr ? (
-                <div className="p-5 text-sm text-red-700">{chunksErr}</div>
+                <div className="p-5 text-sm text-danger font-rubik">{chunksErr}</div>
               ) : filteredChunks.length === 0 ? (
-                <div className="p-5 text-sm text-ink-soft">
+                <div className="p-5 text-sm text-ink-soft font-rubik">
                   {chunks && chunks.length === 0
                     ? "אין קטעים במסמך."
                     : "לא נמצא טקסט תואם."}
                 </div>
               ) : (
-                <div className="divide-y divide-line">
+                <div className="p-4 space-y-3">
                   {filteredChunks.map((c) => (
-                    <div key={c.position} className="p-4">
-                      <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-2 flex gap-3">
-                        <span>#{c.position + 1}</span>
-                        {c.section_path && <span>{c.section_path}</span>}
-                        <span className="font-mono">{c.chars} תווים</span>
+                    <div key={c.position} className="p-4 bg-white rounded-lg border border-line">
+                      <div className="mb-3 flex flex-wrap gap-2 justify-start">
+                        <DsTag>#{c.position + 1}</DsTag>
+                        {c.section_path && <DsTag>{c.section_path}</DsTag>}
+                        <DsTag>{c.chars} תווים</DsTag>
                       </div>
-                      <div className="text-sm text-ink leading-relaxed whitespace-pre-wrap">
+                      <div className="text-sm text-ink leading-relaxed whitespace-pre-wrap text-right">
                         {c.text}
                       </div>
                     </div>
@@ -1784,15 +1774,250 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="text-[10px] tracking-[0.2em] uppercase text-ink-soft font-bold mb-1 flex items-baseline gap-2">
+      <div className="font-rubik font-medium text-xs text-turquoise mb-2 flex items-baseline gap-2 justify-start">
         <span>{label}</span>
         {hint && (
-          <span className="normal-case tracking-normal text-ink-soft/70 font-normal">
-            {hint}
-          </span>
+          <span className="text-ink-soft font-normal">{hint}</span>
         )}
       </div>
       {children}
     </label>
+  );
+}
+
+/* DS-styled text input — full-width, rounded, teal focus ring. */
+function DsInput({
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full px-3 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik text-right outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
+    />
+  );
+}
+
+/* DS-styled select — same visual as DsInput + chevron on the left. */
+function DsSelect({
+  value,
+  onChange,
+  children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full appearance-none px-3 py-2.5 pl-9 border border-line rounded-md bg-white text-sm text-ink font-rubik text-right outline-none cursor-pointer focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
+      >
+        {children}
+      </select>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink-soft">
+        <DsChevronDown />
+      </span>
+    </div>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ─── DS helper components for Documents page ────────────────────────── */
+
+function UploadCloudIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="text-turquoise">
+      <path d="M16 20V8m0 0l-5 5m5-5l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 20a2 2 0 002 2h12a2 2 0 002-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DsChevronDown() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DsExternalLink() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M14 4h6v6M20 4L10 14M20 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DsCheckMark() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* Grey / colored / active chip — used for classification buttons and filter chips. */
+function Chip({
+  children,
+  variant = "grey",
+  onClick,
+  disabled,
+  title,
+}: {
+  children: ReactNode;
+  variant?: "grey" | "active" | "teal-outline";
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  const styles =
+    variant === "active"
+      ? "bg-turquoise/10 text-turquoise hover:bg-turquoise/15"
+      : variant === "teal-outline"
+      ? "bg-white border border-turquoise text-turquoise hover:bg-turquoise/5"
+      : "bg-line text-ink-soft hover:bg-line-strong";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`inline-flex items-center px-3 py-1.5 rounded-md font-rubik font-medium text-xs transition disabled:opacity-50 disabled:cursor-not-allowed ${styles}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* Small rounded pill for doc-type / category tags — read-only. */
+function DsTag({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-line text-ink-soft font-rubik text-xs">
+      {children}
+    </span>
+  );
+}
+
+/* Status pill — green (active), grey (superseded), etc. */
+function StatusPill({
+  variant,
+  children,
+}: {
+  variant: "success" | "warning" | "danger" | "neutral" | "teal";
+  children: ReactNode;
+}) {
+  const styles: Record<typeof variant, string> = {
+    success: "bg-success/10 text-success",
+    warning: "bg-warning/10 text-warning-dark",
+    danger: "bg-danger/10 text-danger",
+    neutral: "bg-line text-ink-soft",
+    teal: "bg-turquoise/10 text-turquoise",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-rubik font-medium text-xs ${styles[variant]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/* DS-styled checkbox — teal filled + white check when checked; rounded square. */
+function DsCheckbox({
+  checked,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      className={`w-5 h-5 rounded-md flex items-center justify-center transition shrink-0 ${
+        checked
+          ? "bg-turquoise text-white"
+          : "bg-white border border-line-strong hover:border-turquoise"
+      }`}
+    >
+      {checked && <DsCheckMark />}
+    </button>
+  );
+}
+
+/* DS-styled radio — teal filled circle when selected. */
+function DsRadio({
+  checked,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      className={`w-5 h-5 rounded-full flex items-center justify-center transition shrink-0 ${
+        checked
+          ? "border-2 border-turquoise"
+          : "border border-line-strong hover:border-turquoise"
+      }`}
+    >
+      {checked && <span className="w-2.5 h-2.5 rounded-full bg-turquoise" />}
+    </button>
   );
 }
