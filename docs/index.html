@@ -97,10 +97,10 @@
     background: var(--line-strong);
   }
   .tl-track::after {
-    /* Filled portion runs past July (2/5 of the line) halfway toward August
-       to signal we're mid-transition into the go-live sprint. */
+    /* Filled portion reaches the August · Go live dot (3/5). We're right at
+       the launch point — not past it. */
     left: 12px;
-    width: calc((100% - 24px) * 2.5 / 5);
+    width: calc((100% - 24px) * 3 / 5);
     background: var(--ink);
   }
   .tl-step {
@@ -244,7 +244,7 @@
     <span>Days remaining<strong id="days">—</strong></span>
     <span>Model<strong>Assisted sale, manual onboarding</strong></span>
     <span>Team<strong>Tal · Gil · Talia</strong></span>
-    <span>Updated<strong>2026-07-22</strong></span>
+    <span>Updated<strong>2026-08-08</strong></span>
   </div>
 </section>
 
@@ -260,17 +260,17 @@
       <div class="tl-when">June</div>
       <div class="tl-what">MVP</div>
     </div>
-    <div class="tl-step now">
+    <div class="tl-step done">
       <div class="tl-dot"></div>
-      <div class="tl-when">July · now</div>
+      <div class="tl-when">July</div>
       <div class="tl-what">Portfolio infra</div>
     </div>
-    <div class="tl-step next">
+    <div class="tl-step now">
       <div class="tl-dot"></div>
-      <div class="tl-when">August</div>
+      <div class="tl-when">August · now</div>
       <div class="tl-what">Go live</div>
     </div>
-    <div class="tl-step">
+    <div class="tl-step next">
       <div class="tl-dot"></div>
       <div class="tl-when">Q4</div>
       <div class="tl-what">v2</div>
@@ -285,7 +285,7 @@
 
 <section>
   <h2>The tracks</h2>
-  <div class="section-sub">Seven tracks between now and 2026-08-09. Each has a single accountable owner; some items are jointly executed.</div>
+  <div class="section-sub">Six tracks between now and 2026-08-09. Each has a single accountable owner; some items are jointly executed. Reliability and a handful of product bets moved to <a href="#v2">V2 · Q4</a>.</div>
 
   <div class="tracks">
 
@@ -299,30 +299,6 @@
       </div>
       <p class="focus">Every P0 gap that would embarrass in a live demo. Feature bar: a fresh customer with a real corpus can ask questions and get cited, honest answers on day one.</p>
       <ul class="items">
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">Original document viewer v2 — page-jump + passage highlight</div>
-            <div class="item-desc">Click a citation → open PDF at the exact page, highlight the cited passage. v1 (open at page 1) already shipped; v2 lands the "wow" moment.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">"No confident answer" state — clear, distinct UI</div>
-            <div class="item-desc">Refused already looks right. Uncertain answers need their own visual language so users don't confuse them with confident ones. Pairs with cite-or-refuse.</div>
-          </div>
-          <span class="pill talia">Talia</span>
-        </li>
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">Bulk import — integration platform TBD</div>
-            <div class="item-desc">One-shot ingest of a tenant's existing archive tree — no manual reupload per file. Blocks the "we already have 200 documents somewhere" objection. Source platform (Google Drive, Dropbox, direct upload, etc.) to be decided based on where customers actually keep their archives.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
         <li>
           <div class="check"></div>
           <div class="item-body">
@@ -352,7 +328,7 @@
       </div>
       <p class="focus">Same bar as Takanon. Placeholder — Gil to confirm his own P0 list. Below is Tal's outside-in guess; needs Gil's review before it's real.</p>
       <ul class="items">
-        <li>
+        <li class="done">
           <div class="check"></div>
           <div class="item-body">
             <div class="item-title">Golden path E2E — draft → invite → live → approve → publish</div>
@@ -493,59 +469,6 @@
       </ul>
     </article>
 
-    <article class="track" data-color="coral">
-      <div class="track-head">
-        <div>
-          <div class="track-tag">Track 5 · Reliability</div>
-          <h3>Uptime floor for real customers</h3>
-        </div>
-        <div class="owner">Owner<strong>Tal</strong></div>
-      </div>
-      <p class="focus">Not "enterprise SRE" — just enough that we hear about breakage before customers do, and can respond during business hours.</p>
-      <ul class="items">
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">Error alerting to a real inbox / phone</div>
-            <div class="item-desc">Sentry-lite or Slack webhook from structlog. Every 500 in production notifies Tal within a minute.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">Uptime monitoring + public status page</div>
-            <div class="item-desc">Better Uptime or equivalent. All three services (identity, takanon backend, meetings backend). Status page linked from landing.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">P50 / P95 latency dashboard</div>
-            <div class="item-desc">Answer latency is the customer-visible metric. Alert on spikes — the debug-queue already covers wrong answers.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">Ingest failure alerts</div>
-            <div class="item-desc">Bulk-import silently dropping files would be catastrophic post-go-live. Explicit alert on any ingestion exception.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
-        <li>
-          <div class="check"></div>
-          <div class="item-body">
-            <div class="item-title">One-week soak on El-Rom, no P0 incidents</div>
-            <div class="item-desc">Aug 2–9 as the freeze week: no new features, only fixes. If El-Rom has a bad week, we don't go live.</div>
-          </div>
-          <span class="pill tal">Tal</span>
-        </li>
-      </ul>
-    </article>
-
     <article class="track" data-color="rose">
       <div class="track-head">
         <div>
@@ -601,7 +524,7 @@
       </div>
       <p class="focus">Two products, one Klaser. Anything a customer sees on both surfaces must feel like the same company built them — colors, spacing, buttons, empty states, error copy.</p>
       <ul class="items">
-        <li>
+        <li class="done">
           <div class="check"></div>
           <div class="item-body">
             <div class="item-title">Design token audit — colors, type, spacing, radii</div>
@@ -609,7 +532,7 @@
           </div>
           <span class="pill talia">Talia</span>
         </li>
-        <li>
+        <li class="done">
           <div class="check"></div>
           <div class="item-body">
             <div class="item-title">Shared component patterns — buttons, modals, tables, empty states</div>
@@ -617,7 +540,7 @@
           </div>
           <span class="pill talia">Talia</span>
         </li>
-        <li>
+        <li class="done">
           <div class="check"></div>
           <div class="item-body">
             <div class="item-title">Hebrew RTL polish audit — both products</div>
@@ -640,6 +563,113 @@
             <div class="item-desc">The mesh animation on the landing was a first taste. Talia decides where in the products a similar move earns its keep.</div>
           </div>
           <span class="pill talia">Talia</span>
+        </li>
+      </ul>
+    </article>
+
+  </div>
+</section>
+
+<section id="v2">
+  <h2>V2 · Q4 (Oct–Dec)</h2>
+  <div class="section-sub">Everything below deliberately doesn't ship for 2026-08-09. These are the bets that turn "usable" into "great" — a bigger product jump plus the reliability floor that only makes sense once we have real customer traffic to protect.</div>
+
+  <div class="tracks-grid">
+
+    <article class="track" data-color="teal">
+      <div class="track-head">
+        <div>
+          <div class="track-tag">V2 · Product</div>
+          <h3>Bigger product bets</h3>
+        </div>
+        <div class="owner">Owner<strong>Tal + Talia</strong></div>
+      </div>
+      <p class="focus">Features that would blow the go-live timeline but each earns its slot in the next release. Prioritized here — dates set once launch stabilizes.</p>
+      <ul class="items">
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">New RAG system v2 — enlarged metadata extraction + reranking</div>
+            <div class="item-desc">Second-generation retrieval: deeper per-chunk metadata (section headings, dates, decision numbers, party names) captured at ingest, plus a reranker pass between hybrid retrieval and answer generation. Aim: raise golden-set pass rate above 95% on the hard bucket.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">Original document viewer v2 — page-jump + passage highlight</div>
+            <div class="item-desc">Click a citation → open PDF at the exact page, highlight the cited passage. v1 (open at page 1) already shipped; v2 lands the "wow" moment.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">"No confident answer" state — clear, distinct UI</div>
+            <div class="item-desc">Refused already looks right. Uncertain answers need their own visual language so users don't confuse them with confident ones. Pairs with cite-or-refuse.</div>
+          </div>
+          <span class="pill talia">Talia</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">Bulk import — integration platform TBD</div>
+            <div class="item-desc">One-shot ingest of a tenant's existing archive tree — no manual reupload per file. Blocks the "we already have 200 documents somewhere" objection. Source platform (Google Drive, Dropbox, direct upload, etc.) to be decided based on where customers actually keep their archives.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+      </ul>
+    </article>
+
+    <article class="track" data-color="coral">
+      <div class="track-head">
+        <div>
+          <div class="track-tag">V2 · Reliability</div>
+          <h3>Uptime floor for real customers</h3>
+        </div>
+        <div class="owner">Owner<strong>Tal</strong></div>
+      </div>
+      <p class="focus">Not "enterprise SRE" — just enough that we hear about breakage before customers do, and can respond during business hours. Held for V2 because it only earns its price once we have real traffic to protect.</p>
+      <ul class="items">
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">Error alerting to a real inbox / phone</div>
+            <div class="item-desc">Sentry-lite or Slack webhook from structlog. Every 500 in production notifies Tal within a minute.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">Uptime monitoring + public status page</div>
+            <div class="item-desc">Better Uptime or equivalent. All three services (identity, takanon backend, meetings backend). Status page linked from landing.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">P50 / P95 latency dashboard</div>
+            <div class="item-desc">Answer latency is the customer-visible metric. Alert on spikes — the debug-queue already covers wrong answers.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">Ingest failure alerts</div>
+            <div class="item-desc">Bulk-import silently dropping files would be catastrophic post-go-live. Explicit alert on any ingestion exception.</div>
+          </div>
+          <span class="pill tal">Tal</span>
+        </li>
+        <li>
+          <div class="check"></div>
+          <div class="item-body">
+            <div class="item-title">Soak week before V2 release — no P0 incidents</div>
+            <div class="item-desc">Freeze the release candidate for one full week on real customer traffic before the V2 cut. Same discipline as the pre-launch freeze, applied continuously.</div>
+          </div>
+          <span class="pill tal">Tal</span>
         </li>
       </ul>
     </article>
