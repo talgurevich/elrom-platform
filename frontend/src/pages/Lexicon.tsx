@@ -1,10 +1,43 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   api,
   type LexiconEntryType,
   type LexiconItem,
   type LexiconSuggestion,
 } from "../lib/api";
+import {
+  Chip,
+  DsTag,
+  DsInput,
+  DsSelect,
+  StatusPill,
+  TrashIcon,
+  PencilIcon,
+  PlusIcon,
+  CheckMarkIcon,
+} from "../components/klaser-ds";
+
+/* Field wrapper — teal Rubik label above a DS control. */
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="font-rubik font-medium text-xs text-turquoise mb-2 flex items-baseline gap-2 justify-start">
+        <span>{label}</span>
+        {hint && <span className="text-ink-soft font-normal">{hint}</span>}
+      </div>
+      {children}
+    </label>
+  );
+}
 
 type EditorState = {
   id: string | "new";
@@ -76,51 +109,47 @@ function SurfaceFormsEditor({
     onChange(forms.filter((_, idx) => idx !== i));
   };
   return (
-    <div>
-      <label className="text-[10px] uppercase tracking-wider text-ink-soft block mb-1">
-        צורות שטח ({forms.length}) — כל וריאציה תיתפס במטצ'ר
-      </label>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {forms.map((f, i) => (
-          <span
-            key={`${f}-${i}`}
-            className="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 border border-line-strong rounded-full text-xs"
-          >
-            <span className={i === 0 ? "font-bold" : ""}>{f}</span>
-            <button
-              type="button"
-              onClick={() => removeAt(i)}
-              className="text-ink-soft hover:text-red-700"
-              aria-label="הסר צורה"
+    <Field label={`צורות שטח (${forms.length})`} hint="כל וריאציה תיתפס במטצ'ר">
+      {forms.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {forms.map((f, i) => (
+            <span
+              key={`${f}-${i}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-line text-ink-soft font-rubik text-xs"
             >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
+              <span className={i === 0 ? "font-bold text-ink" : ""}>{f}</span>
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                className="text-ink-soft hover:text-danger transition"
+                aria-label="הסר צורה"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="צורה נוספת (למשל: השיוכים)"
-          className="flex-1 px-3 py-1.5 border border-line-strong rounded text-sm"
-        />
-        <button
-          type="button"
-          onClick={add}
-          disabled={!draft.trim()}
-          className="px-3 py-1.5 bg-stone-100 border border-line-strong rounded text-sm disabled:opacity-50"
-        >
+        <div className="flex-1">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder="למשל: השיוכים"
+            className="w-full px-3 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik text-right outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
+          />
+        </div>
+        <Chip variant="teal-outline" onClick={add} disabled={!draft.trim()}>
           הוסף
-        </button>
+        </Chip>
       </div>
-    </div>
+    </Field>
   );
 }
 
@@ -227,68 +256,69 @@ export default function Lexicon() {
 
   return (
     <>
-      <header className="mb-10 flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <div className="text-[11px] tracking-[0.25em] uppercase text-accent font-bold mb-3">
+      <header className="mb-10 flex items-end justify-between flex-wrap gap-4">
+        <div className="text-right">
+          <div className="font-rubik font-bold text-base uppercase tracking-[0.25em] text-turquoise mb-4">
             לקסיקון
           </div>
-          <h1 className="font-display text-4xl md:text-5xl font-black text-ink leading-[0.95]">
+          <h1 className="font-rubik font-bold text-4xl md:text-5xl md:leading-[60px] text-ink">
             מילון מונחים
           </h1>
-          <p className="text-ink-soft mt-4 text-sm max-w-xl leading-relaxed">
+          <p className="mt-4 text-lg text-ink-soft max-w-2xl leading-relaxed">
             מונחים תחומיים שהארגון מסביר ל-AI לפני שהוא עונה — כדי שמילים
             ייחודיות לא תפורשנה לא נכון. כל מונח נמדד לפי מספר הפעמים שהופעל
             ב-30 הימים האחרונים כדי לזהות רשומות מתות.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
+        <div className="flex items-center gap-3">
+          <Chip
+            variant="grey"
             onClick={generateSuggestions}
             disabled={suggesting}
-            className="px-3 py-1.5 bg-white border border-line-strong hover:border-accent text-sm rounded-full text-ink-soft hover:text-accent transition disabled:opacity-50"
           >
             {suggesting ? "מנתח..." : "הצע מתוך שאלות שנכשלו"}
-          </button>
+          </Chip>
           {editor === null && (
             <button
               onClick={() => setEditor(emptyEditor())}
-              className="px-3 py-1.5 bg-accent text-white text-sm rounded-full"
+              className="inline-flex items-center gap-2 bg-turquoise text-white h-10 px-5 rounded-md font-rubik font-bold text-sm hover:bg-turquoise-dark transition"
             >
-              + הוסף מונח
+              <PlusIcon />
+              <span>הוסף מונח</span>
             </button>
           )}
         </div>
       </header>
 
       {suggestions !== null && (
-        <div className="mb-6 p-4 bg-white border border-amber-300">
-          <div className="text-xs font-bold text-amber-900 tracking-wide mb-3">
+        <div className="mb-6 p-6 bg-white border border-line rounded-lg">
+          <div className="font-rubik font-bold text-sm text-turquoise mb-4">
             הצעות מתוך {suggestions.length} שאלות שנכשלו לאחרונה
           </div>
           {suggestions.length === 0 ? (
-            <div className="text-sm text-ink-soft">
+            <div className="text-sm text-ink-soft leading-relaxed">
               לא נמצאו מועמדים חדשים. יש גם קציר אוטומטי לילי מציטוטים ומראשי תיבות
               בתשובות — הרשומות המוצעות יופיעו כרשומות "נלמד · ממתין" למטה.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {suggestions.map((s) => (
                 <div
                   key={s.term}
-                  className="flex items-start justify-between gap-3 p-3 bg-amber-50 rounded-lg"
+                  className="flex items-start justify-between gap-3 p-4 bg-turquoise/5 rounded-md"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-ink">{s.term}</div>
+                    <div className="font-rubik font-bold text-sm text-ink">{s.term}</div>
                     <div className="text-sm text-ink mt-1">{s.expansion}</div>
                     <div className="text-xs text-ink-soft mt-1 italic">
                       מתוך: "{s.source_question}"
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => acceptSuggestion(s)}
                       disabled={busy}
-                      className="text-xs px-2 py-1 bg-emerald-600 text-white hover:bg-emerald-700 rounded disabled:opacity-50"
+                      className="inline-flex items-center bg-turquoise text-white h-9 px-4 rounded-md font-rubik font-bold text-xs hover:bg-turquoise-dark transition disabled:opacity-50"
                     >
                       קבל
                     </button>
@@ -298,7 +328,7 @@ export default function Lexicon() {
                           cur ? cur.filter((x) => x.term !== s.term) : cur,
                         )
                       }
-                      className="text-xs px-2 py-1 text-ink-soft hover:bg-line rounded"
+                      className="inline-flex items-center px-3 py-1.5 rounded-md bg-line text-ink-soft hover:bg-line-strong font-rubik font-medium text-xs transition"
                     >
                       דחה
                     </button>
@@ -311,41 +341,33 @@ export default function Lexicon() {
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-900 text-sm">
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/30 rounded-md text-danger text-sm font-rubik">
           {error}
         </div>
       )}
 
       {editor && (
-        <div className="mb-6 p-4 bg-white border border-accent/30 rounded-md">
-          <div className="grid gap-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="mb-6 p-8 bg-white border border-line rounded-lg shadow-[0px_1px_0_rgba(0,0,0,0.03),0px_4px_16px_-4px_rgba(0,0,0,0.06)]">
+          <div className="grid gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <label className="text-[10px] uppercase tracking-wider text-ink-soft block mb-1">
-                  מונח קנוני
-                </label>
-                <input
-                  value={editor.term}
-                  onChange={(e) =>
-                    setEditor({ ...editor, term: e.target.value })
-                  }
-                  placeholder='למשל: "שיוך"'
-                  className="w-full px-3 py-2 border border-line-strong rounded text-sm"
-                />
+                <Field label="מונח קנוני">
+                  <DsInput
+                    value={editor.term}
+                    onChange={(v) => setEditor({ ...editor, term: v })}
+                    placeholder='למשל: "שיוך"'
+                  />
+                </Field>
               </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-ink-soft block mb-1">
-                  סוג רשומה
-                </label>
-                <select
+              <Field label="סוג רשומה">
+                <DsSelect
                   value={editor.entryType}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     setEditor({
                       ...editor,
-                      entryType: e.target.value as LexiconEntryType,
+                      entryType: v as LexiconEntryType,
                     })
                   }
-                  className="w-full px-3 py-2 border border-line-strong rounded text-sm bg-white"
                 >
                   {(Object.keys(ENTRY_TYPE_LABELS) as LexiconEntryType[]).map(
                     (k) => (
@@ -354,53 +376,42 @@ export default function Lexicon() {
                       </option>
                     ),
                   )}
-                </select>
-              </div>
+                </DsSelect>
+              </Field>
             </div>
             <SurfaceFormsEditor
               forms={editor.surfaceForms}
               onChange={(next) => setEditor({ ...editor, surfaceForms: next })}
             />
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-ink-soft block mb-1">
-                הסבר קצר (לתצוגה על ריחוף בתשובה)
-              </label>
-              <input
+            <Field label="הסבר קצר" hint="לתצוגה על ריחוף בתשובה">
+              <DsInput
                 value={editor.shortGloss}
-                onChange={(e) =>
-                  setEditor({ ...editor, shortGloss: e.target.value })
-                }
+                onChange={(v) => setEditor({ ...editor, shortGloss: v })}
                 placeholder="משפט אחד קצר להסבר על ריחוף"
-                className="w-full px-3 py-2 border border-line-strong rounded text-sm"
               />
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-ink-soft block mb-1">
-                הרחבה למענה (יוטמע ב-prompt ל-AI)
-              </label>
+            </Field>
+            <Field label="הרחבה למענה" hint="יוטמע ב-PROMPT ל-AI">
               <textarea
                 value={editor.answererExpansion}
                 onChange={(e) =>
                   setEditor({ ...editor, answererExpansion: e.target.value })
                 }
-                rows={3}
+                rows={4}
                 placeholder="למשל: המעבר מקיבוץ שיתופי לקיבוץ מתחדש; ראה תקנון שיוך פירות נכסים..."
-                className="w-full px-3 py-2 border border-line-strong rounded text-sm"
+                className="w-full px-3 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik text-right leading-relaxed outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
               />
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-ink-soft block mb-1">
-                הערות פנימיות
-              </label>
-              <input
+            </Field>
+            <Field label="הערות פנימיות">
+              <textarea
                 value={editor.notes}
                 onChange={(e) =>
                   setEditor({ ...editor, notes: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-line-strong rounded text-sm"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-line rounded-md bg-white text-sm text-ink font-rubik text-right outline-none focus:border-turquoise focus:ring-2 focus:ring-turquoise/20 transition"
               />
-            </div>
-            <div className="flex gap-2 text-sm">
+            </Field>
+            <div className="flex items-center gap-3 pt-2 flex-row-reverse justify-end">
               <button
                 onClick={save}
                 disabled={
@@ -408,13 +419,13 @@ export default function Lexicon() {
                   !editor.term.trim() ||
                   (!editor.answererExpansion.trim() && !editor.shortGloss.trim())
                 }
-                className="px-3 py-1.5 bg-accent text-white rounded disabled:opacity-50"
+                className="inline-flex items-center bg-turquoise text-white h-10 px-6 rounded-md font-rubik font-bold text-sm hover:bg-turquoise-dark transition disabled:opacity-50"
               >
                 שמור
               </button>
               <button
                 onClick={cancel}
-                className="px-3 py-1.5 bg-line hover:bg-stone-200 rounded"
+                className="inline-flex items-center h-10 px-4 rounded-md text-sm text-ink-soft font-rubik font-medium hover:text-ink hover:bg-line/60 transition"
               >
                 ביטול
               </button>
@@ -459,24 +470,28 @@ export default function Lexicon() {
             return (
               <div
                 key={it.id}
-                className={`bg-white border rounded-md p-4 ${
-                  isLearnedPending ? "border-accent" : "border-line"
+                className={`bg-white rounded-lg p-5 border shadow-[0px_1px_0_rgba(0,0,0,0.03),0px_4px_16px_-4px_rgba(0,0,0,0.06)] transition ${
+                  isLearnedPending ? "border-turquoise/40" : "border-line"
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-ink">{it.term}</span>
-                      <span className="text-[10px] tracking-widest uppercase text-ink-soft">
-                        {ENTRY_TYPE_LABELS[it.entry_type] || "הגדרה"}
-                      </span>
+                    {/* Title row — term + status text on the right, meta chips on the left */}
+                    <div className="flex items-center gap-3 flex-wrap justify-start">
+                      <span className="font-rubik font-bold text-lg text-ink">{it.term}</span>
+                      {it.status === "active" && (
+                        <span className="font-rubik text-sm text-turquoise">
+                          פעיל · {it.match_count_30d} התאמות ב-30 יום
+                        </span>
+                      )}
+                      {it.status === "active" &&
+                        it.match_count_30d === 0 && (
+                          <StatusPill variant="warning">רשומה מתה?</StatusPill>
+                        )}
+                      <DsTag>{ENTRY_TYPE_LABELS[it.entry_type] || "הגדרה"}</DsTag>
                       {it.source === "learned" && (
-                        <span
-                          className={`text-[10px] tracking-[0.2em] uppercase font-bold ${
-                            it.status === "pending"
-                              ? "text-accent"
-                              : "text-ink-soft"
-                          }`}
+                        <StatusPill
+                          variant={it.status === "pending" ? "teal" : "neutral"}
                         >
                           {it.status === "pending"
                             ? "נלמד · ממתין"
@@ -489,46 +504,30 @@ export default function Lexicon() {
                           {evidence.signal_type
                             ? ` · ${evidence.signal_type}`
                             : ""}
-                        </span>
+                        </StatusPill>
                       )}
-                      {it.status === "active" && (
-                        <span className="text-[10px] tracking-widest uppercase text-emerald-700 font-bold">
-                          פעיל · {it.match_count_30d} התאמות ב-30 יום
-                        </span>
-                      )}
-                      {it.status === "active" &&
-                        it.match_count_30d === 0 && (
-                          <span className="text-[10px] tracking-widest uppercase text-amber-700 font-bold">
-                            רשומה מתה?
-                          </span>
-                        )}
                     </div>
                     {it.short_gloss && (
-                      <div className="text-sm text-ink mt-1">
+                      <div className="text-base text-ink mt-3 leading-relaxed">
                         {it.short_gloss}
                       </div>
                     )}
-                    <div className="text-xs text-ink-soft mt-1 whitespace-pre-wrap">
+                    <div className="text-sm text-ink-soft mt-2 whitespace-pre-wrap leading-relaxed">
                       {it.answerer_expansion || it.expansion}
                     </div>
                     {it.surface_forms && it.surface_forms.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
+                      <div className="mt-4 flex flex-wrap gap-2">
                         {it.surface_forms.slice(0, 8).map((f, i) => (
-                          <span
-                            key={`${f}-${i}`}
-                            className="text-[10px] px-1.5 py-0.5 bg-stone-50 border border-line rounded text-ink-soft"
-                          >
-                            {f}
-                          </span>
+                          <DsTag key={`${f}-${i}`}>{f}</DsTag>
                         ))}
                         {it.surface_forms.length > 8 && (
-                          <span className="text-[10px] text-ink-soft self-center">
+                          <span className="font-rubik text-xs text-ink-soft self-center">
                             +{it.surface_forms.length - 8}
                           </span>
                         )}
                       </div>
                     )}
-                    <div className="text-[10px] text-ink-soft mt-2">
+                    <div className="text-xs text-ink-soft mt-4 font-rubik">
                       התאמה אחרונה: {formatRelativeDate(it.last_matched_at)}
                     </div>
                     {it.notes && (
@@ -588,44 +587,48 @@ export default function Lexicon() {
                         </details>
                       )}
                   </div>
-                  <div className="flex flex-col gap-1 shrink-0">
+                  <div className="flex gap-2 shrink-0">
                     {isLearnedPending ? (
                       <>
                         <button
                           onClick={() => void approveLearned("active")}
                           disabled={busy}
-                          className="text-xs px-2 py-1 text-accent hover:bg-accent/10 rounded font-bold"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-turquoise text-turquoise bg-white hover:bg-turquoise hover:text-white transition font-rubik font-medium text-xs disabled:opacity-50"
                         >
-                          ✓ אשר
+                          <CheckMarkIcon />
+                          <span>אשר</span>
                         </button>
                         <button
                           onClick={() => void approveLearned("rejected")}
                           disabled={busy}
-                          className="text-xs px-2 py-1 text-ink-soft hover:bg-stone-100 rounded"
+                          className="inline-flex items-center px-3 py-1.5 rounded-md bg-line text-ink-soft hover:bg-line-strong font-rubik font-medium text-xs transition disabled:opacity-50"
                         >
                           דחה
                         </button>
                         <button
                           onClick={() => setEditor(editorFromItem(it))}
-                          className="text-xs px-2 py-1 text-ink-soft hover:bg-accent/10 rounded"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line-strong text-ink-soft bg-white hover:border-turquoise hover:text-turquoise transition font-rubik font-medium text-xs"
                         >
-                          ערוך
+                          <PencilIcon />
+                          <span>ערוך</span>
                         </button>
                       </>
                     ) : (
                       <>
                         <button
-                          onClick={() => setEditor(editorFromItem(it))}
-                          className="text-xs px-2 py-1 text-accent hover:bg-accent/10 rounded"
-                        >
-                          ערוך
-                        </button>
-                        <button
                           onClick={() => remove(it)}
                           disabled={busy}
-                          className="text-xs px-2 py-1 text-red-700 hover:bg-red-50 rounded"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-danger text-danger bg-white hover:bg-danger hover:text-white transition font-rubik font-medium text-xs disabled:opacity-50"
                         >
-                          מחק
+                          <TrashIcon />
+                          <span>מחק</span>
+                        </button>
+                        <button
+                          onClick={() => setEditor(editorFromItem(it))}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line-strong text-ink-soft bg-white hover:border-turquoise hover:text-turquoise transition font-rubik font-medium text-xs"
+                        >
+                          <PencilIcon />
+                          <span>ערוך</span>
                         </button>
                       </>
                     )}
